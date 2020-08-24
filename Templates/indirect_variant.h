@@ -161,8 +161,8 @@ public:
     heap_variant<Types...> const* get() const{ return val.get(); }
     heap_variant<Types...>& operator*(){ return *get(); }
     heap_variant<Types...> const& operator*() const{ return *get(); }
-    heap_variant<Types...>& operator->(){ return *get(); }
-    heap_variant<Types...> const& operator->() const{ return *get(); }
+    heap_variant<Types...>* operator->(){ return get(); }
+    heap_variant<Types...> const* operator->() const{ return get(); }
     operator bool() const{ return val != nullptr; }
 };
 template<class... Types>

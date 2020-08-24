@@ -18,6 +18,7 @@ namespace coro{
     class unique_coro_handle{
     public:
         unique_coro_handle():handle(nullptr){}
+        unique_coro_handle(std::nullptr_t):handle(nullptr){}
         unique_coro_handle(std::coroutine_handle<promise_type> handle):handle(handle){}
         unique_coro_handle(unique_coro_handle const&) = delete;
         unique_coro_handle(unique_coro_handle&& other):handle(other.handle){ other.handle = nullptr; }
@@ -37,6 +38,9 @@ namespace coro{
             handle = nullptr;
             local.resume();
         }
+        void resume_keep_ownership(){
+          handle.resume();
+        }
         void destroy(){
             auto local = handle;
             handle = nullptr;
@@ -50,7 +54,7 @@ namespace coro{
             handle = nullptr;
             return ret;
         }
-        promise_type& promise(){
+        promise_type& promise() const{
             return handle.promise();
         }
     private:

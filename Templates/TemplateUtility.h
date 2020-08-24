@@ -235,6 +235,19 @@ namespace utility{
     };
     constexpr ignore_undefined_t ignore_undefined;
 
+    template<class... Ts> struct precedence_overloaded;
+    template<> struct precedence_overloaded<>{};
+    template<class T, class... Ts> struct precedence_overloaded<T, Ts...> : T, precedence_overloaded<Ts...>{
+      template<class... Args> requires (std::is_invocable_v<T, Args&&...> || ... || std::is_invocable_v<Ts, Args&&...>)
+      decltype(auto) operator()(Args&&... args){
+        if constexpr(std::is_invocable_v<T, Args&&...>){
+          return T::operator()(std::forward<Args>(args)...);
+        }else{
+          return precedence_overloaded<Ts...>::operator()(std::forward<Args>(args)...);
+        }
+      }
+    };
+
 
     /* Constexpr-friendly range manipulations */
 
@@ -311,6 +324,11 @@ namespace utility{
         auto it = std::find(vec.begin(), vec.end(), val);
         assert(it != vec.end());
         vec.erase(it);
+    }
+    template<class T, class Predicate>
+    void erase_if(std::vector<T>& vec, Predicate&& p){
+      auto it = std::remove_if(vec.begin(), vec.end(), std::forward<Predicate>(p));
+      vec.erase(it, vec.end());
     }
     template<class T>
     void transfer_elements(std::vector<T>& target, std::vector<T>&& source){
