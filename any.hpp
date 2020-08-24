@@ -13,7 +13,6 @@ namespace utility{
     };
     template<class T>
     concept printable_regular = std::regular<T> && can_insert_to_ostream<T>;
-
     class printable_any{
         struct __impl_base{
             static std::size_t get_next_type_index();
@@ -49,10 +48,10 @@ namespace utility{
         std::unique_ptr<__impl_base> data;
     public:
         printable_any(){}
-        template<printable_regular T>
-        explicit printable_any(T const& value):data(new __impl_specific<T>(value)){}
-        template<printable_regular T>
-        explicit printable_any(T&& value):data(new __impl_specific<T>(std::move(value))){}
+        template<class T> requires (!std::is_same_v<T, printable_any> && printable_regular<T>)
+        printable_any(T const& value):data(new __impl_specific<T>(value)){}
+        template<class T> requires (!std::is_same_v<T, printable_any> && printable_regular<T>)
+        printable_any(T&& value):data(new __impl_specific<T>(std::move(value))){}
         printable_any(printable_any const&);
         printable_any(printable_any&&) = default;
         printable_any(std::nullptr_t){}
@@ -65,18 +64,18 @@ namespace utility{
         }
         template<printable_regular T>
         T& as(){
-            if(!contains_type<T>) throw std::runtime_error("bad any cast");
-            return ((__impl_specific<T>*)data)->value;
+            if(!contains_type<T>()) throw std::runtime_error("bad any cast");
+            return ((__impl_specific<T>*)data.get())->value;
         }
         template<printable_regular T>
         T const& as() const{
             if(!contains_type<T>) throw std::runtime_error("bad any cast");
-            return ((__impl_specific<T>*)data)->value;
+            return ((__impl_specific<T>*)data.get())->value;
         }
         friend bool operator==(printable_any const& a, printable_any const& b);
         friend std::ostream& operator<<(std::ostream&, printable_any const& b);
     };
-    bool operator==(printable_any const& a, printable_any const& b);
-    std::ostream& operator<<(std::ostream&, printable_any const& b);
+    //bool operator==(printable_any const& a, printable_any const& b);
+    //std::ostream& operator<<(std::ostream&, printable_any const& b);
 }
 #endif

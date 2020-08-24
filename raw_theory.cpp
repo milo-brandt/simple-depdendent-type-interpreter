@@ -1,278 +1,325 @@
-/*#include "raw_theory.hpp"
-#include <unordered_map>
-#include <optional>
-#include <stdlib.h> //for rand
-#include "Templates/memoized_map.hpp"
-
+#include "raw_theory.hpp"
 
 namespace type_theory::raw{
+  term make_lambda(term body, std::size_t arg_index){
+      return make_term(lambda_base{body, arg_index});
+  }
+  term make_argument(std::size_t arg_index){
+      return make_term(argument{arg_index});
+  }
+  term make_primitive(utility::printable_any value){
+      return make_term(primitive{std::move(value)});
+  }
+  term make_application(term f, term x){
+      return make_term(application{f, x});
+  }
+  term make_application(term base, std::deque<term> const& arguments){
+      for(term arg : arguments){
+          base = make_application(base, arg);
+      }
+      return base;
+  }
+  term make_builtin(built_in::evaluator f, std::string name){
+      return make_term(built_in{std::move(f), std::move(name)});
+  }
+  term make_formal(std::string name){
+    return make_builtin([](auto const&){ return built_in::nothing_to_do; }, std::move(name));
+  }
 
+  bool name_scope::contains(std::size_t name) const{ return used_names.contains(name); }
+  void name_scope::add_name(std::size_t name){ used_names.insert(name); }
+  void name_scope::erase_name(std::size_t name){ used_names.erase(name); }
+  void name_scope::ensure_name(std::size_t name){ if(!contains(name)) add_name(name); }
 
   namespace{
-    template<class callback>
-    void for_each_reachable(value_ptr v, callback&& c){
-      std::unordered_set<value_ptr, value_ptr::strict_hasher, value_ptr::strict_equality> seen;
-      std::vector<value_ptr> stack;
-      auto add_to_seen = [&](value_ptr v){
-        if(seen.contains(v)) return;
-        stack.push_back(v);
-        seen.insert(v);
-      };
-      add_to_seen(v);
-      while(!stack.empty()){
-        value_ptr t = stack.back();
-        stack.pop_back();
-        std::visit(utility::overloaded{
-          [&](auto const& p){ c(p); },
-          [&](pair const& p){
-            add_to_seen(p.first);
-            add_to_seen(p.second);
-            c(p);
-          },
-          [&](application const& e){
-            add_to_seen(e.f);
-            add_to_seen(e.x);
-            c(e);
-          },
-          [&](lambda const& p){
-            add_to_seen(p.body);
-            c(p);
-          },
-          [&](placeholder const& p){
-            c(p);
+      void collect_dependent_names_of(term base, name_scope& v){
+          std::unordered_set<term> terms_examined;
+          std::vector<term> terms_waiting;
+          auto enqueue_term = [&terms_examined,&terms_waiting](term const& x){
+              if(!terms_examined.contains(x)){
+                  terms_examined.insert(x);
+                  terms_waiting.push_back(x);
+              }
+          };
+          enqueue_term(base);
+          while(!terms_waiting.empty()){
+              term current = terms_waiting.back();
+              terms_waiting.pop_back();
+              std::visit(utility::overloaded{
+                  [&](lambda_base const& l){
+                      enqueue_term(l.body);
+                      v.ensure_name(l.arg_index);
+                  },
+                  [&](application const& a){
+                      enqueue_term(a.f);
+                      enqueue_term(a.x);
+                  },
+                  [&](auto const&){}
+              }, *current);
           }
-        }, t->data);
       }
-    }
-    template<class callback>
-    auto make_replacer(callback handler){
-      return make_memoized_map<value_ptr, value_ptr, value_ptr::strict_hasher>([handler = std::move(handler)](auto& replace, value_ptr v) mutable{
-        auto basic_visitor = utility::overloaded{
-          [&](auto const&){ return v; },
-          [&](pair const& p){
-            auto n_first = replace(p.first);
-            auto n_second = replace(p.second);
-            if(n_first.get() == p.first.get() && n_second.get() == p.second.get()) return v;
-            else return make_value(pair{n_first, n_second});
-          },
-          [&](application const& e){
-            auto n_f = replace(e.f);
-            auto n_x = replace(e.x);
-            if(n_f.get() == e.f.get() && n_x.get() == e.x.get()) return v;
-            else return make_value(application{n_f, n_x});
-          },
-          [&](placeholder const& p){ return v; },
-          [&](lambda const& l){
-            auto n_body = replace(l.body);
-            if(n_body.get() == l.body.get()) return v;
-            else return make_lambda(l.arg_index, n_body);
+      struct renaming_data{
+          name_scope used_names;
+          std::unordered_map<std::size_t, std::size_t> renamings;
+          std::size_t add_name(std::size_t original, std::size_t transformed){
+              used_names.add_name(transformed);
+              renamings.insert(std::make_pair(original, transformed));
+              return transformed;
           }
-        };
-        auto full_visitor = [&](auto const& value) -> value_ptr{
-          if constexpr(std::is_invocable_v<callback, decltype(replace), decltype(value)>){
-            value_ptr ret = handler(replace, value);
-            if(ret) return ret;
-            else return v;
-          }else{
-            return basic_visitor(value);
+          std::size_t add_name(std::size_t original){
+              std::size_t candidate = original;
+              while(true){
+                  if(!used_names.contains(candidate)) return add_name(original, candidate);
+                  candidate = rand();
+              }
           }
-        };
-        return std::visit(full_visitor, v->data);
-      });
-    }
-    namespace{
-      template<class index_mapper_t>
-      struct untyped_scope_fixer_visitor{
-        index_mapper_t mapper;
-        value_ptr operator()(auto& replace, lambda const& l){
-          auto replacement = mapper(l.arg_index);
-          auto body_replacement = replace(l.body);
-          if(body_replacement.get() == l.body.get() && replacement == l.arg_index) return nullptr;
-          else return make_lambda(replacement, body_replacement);
-        }
-        value_ptr operator()(auto&, placeholder const& p){
-          auto replacement = mapper(p.index);
-          if(replacement == p.index) return nullptr;
-          else return make_placeholder(replacement);
-        }
+          std::size_t rename_argument(std::size_t c){
+              if(renamings.contains(c)) return renamings[c];
+              else return add_name(c, c); //free variable - encountered before lambda abstraction
+          }
+          std::size_t rename_lambda(std::size_t c){
+              if(renamings.contains(c)) return renamings[c];
+              else return add_name(c);
+          }
       };
-      template<class index_mapper_t>
-      untyped_scope_fixer_visitor(index_mapper_t) -> untyped_scope_fixer_visitor<index_mapper_t>;
-    };
-    auto untyped_scope_fixer(untyped_scope s, untyped_scope inner){
-      s.used_names.insert(0);
-      for(auto name : s.used_names) inner.used_names.insert(name);
-      auto index_mapper = make_memoized_map<std::size_t, std::size_t>([s = std::move(s), inner = std::move(inner)](auto&, std::size_t index) mutable -> std::size_t{
-        if(s.used_names.contains(index)) return index; //index belongs to out of untyped_scope.
-        if(!inner.used_names.contains(index)){
-          inner.used_names.insert(index);
-          return index;
-        }
-        while(true){
-          std::size_t ret = rand();
-          if(inner.used_names.contains(ret)) continue;
-          inner.used_names.insert(ret);
-          return ret;
-        }
-      });
-      return untyped_scope_fixer_visitor(std::move(index_mapper));
-    }
-    auto replacing_handler(std::size_t index, value_ptr replacement){
-      return [index, replacement](auto& replacer, placeholder const& p) -> value_ptr{
-        if(p.index == index) return replacement;
-        else return nullptr;
+      struct sanitizing_data{
+          renaming_data renamings;
+          std::unordered_map<term, term> computed_values;
+          term sanitize(term input){
+              if(computed_values.contains(input)) return computed_values[input];
+              return computed_values[input] = std::visit<term>(utility::overloaded{
+                  [&](lambda_base const& l){
+                      auto new_index = renamings.rename_lambda(l.arg_index);
+                      return make_term(lambda_base{sanitize(l.body), new_index});
+                  },
+                  [&](application const& a){
+                      return make_term(application{sanitize(a.f), sanitize(a.x)});
+                  },
+                  [&](argument const& a){
+                      return make_term(argument{renamings.rename_argument(a.arg_index)});
+                  },
+                  [&](auto const&){
+                      return input;
+                  }
+              }, *input);
+          }
       };
-    }
-    value_ptr sanitize_argument(untyped_scope s, untyped_scope inner, value_ptr arg){
-      return make_replacer(untyped_scope_fixer(std::move(s), std::move(inner)))(arg);
-    }
-    value_ptr perform_replacement(std::size_t index, value_ptr body, value_ptr sanitized_arg){
-      return make_replacer(replacing_handler(index, sanitized_arg))(body);
-    }
+      struct substituting_data{
+          std::size_t index;
+          term replacement;
+          std::unordered_map<term, term> computed_values;
+          term substitute(term input){
+              if(computed_values.contains(input)) return computed_values[input];
+              return computed_values[input] = std::visit<term>(utility::overloaded{
+                  [&](lambda_base const& l){
+                      return make_term(lambda_base{substitute(l.body), l.arg_index});
+                  },
+                  [&](application const& a){
+                      return make_term(application{substitute(a.f), substitute(a.x)});
+                  },
+                  [&](argument const& a){
+                      return a.arg_index == index ? replacement : input;
+                  },
+                  [&](auto const&){
+                      return input;
+                  }
+              }, *input);
+          }
+      };
+      term literal_substitution(term base, std::size_t index, term replacement){
+          return substituting_data{
+              .index = index,
+              .replacement = replacement
+          }.substitute(base);
+      }
   }
-  value_ptr apply_lambda(value_ptr f, value_ptr x, untyped_scope s){
-    auto const& def = f->as_lambda();
-    assert(def.arg_index);
-    untyped_scope inner;
-    for_each_reachable(def.body, utility::overloaded{
-      [](auto const&){},
-      [&](lambda const& l){
-        inner.used_names.insert(l.arg_index);
+
+  std::pair<term, std::deque<term> > extract_applications(term t){
+    term pos = t;
+    std::deque<term> args;
+    while(std::holds_alternative<application>(*pos)){
+      auto const& a = std::get<application>(*pos);
+      args.push_front(a.x);
+      pos = a.f;
+    }
+    return {pos, std::move(args)};
+  }
+
+  //base and arg are both individually valid, and no free term in either is bound in the other.
+  term sanitize_term(term base, name_scope used_names){
+      return sanitizing_data{
+          .renamings = {
+              .used_names = std::move(used_names)
+          }
+      }.sanitize(base);
+  }
+  term apply_lambda(lambda_base const& f, term arg, name_scope const& s){
+      name_scope used = s;
+      collect_dependent_names_of(f.body, used);
+      return literal_substitution(f.body, f.arg_index, sanitize_term(arg, std::move(used)));
+  }
+  std::pair<term, bool> try_simplify_at_top(term t, name_scope const& scope){
+      std::deque<term> arguments;
+      term pos = t;
+      //Invariant: t equals the application of arguments to pos.
+      while(true){
+          while(std::holds_alternative<application>(*pos)){
+              application const& a = std::get<application>(*pos);
+              arguments.push_front(a.x);
+              pos = a.f;
+          }
+          if(arguments.empty()) return {pos, !std::holds_alternative<argument>(*pos)};
+          if(std::holds_alternative<lambda_base>(*pos)){
+              lambda_base const& b = std::get<lambda_base>(*pos);
+              pos = apply_lambda(b, arguments.front(), scope);
+              arguments.pop_front();
+          }else if(std::holds_alternative<built_in>(*pos)){
+              built_in const& b = std::get<built_in>(*pos);
+              built_in::evaluator last_evaluator = b.eval;
+              built_in::evaluation_result result = last_evaluator(arguments);
+              while(std::holds_alternative<built_in::require_values>(result)){
+                  auto const& r = std::get<built_in::require_values>(result);
+                  //1. evaluate everything.
+                  //Check if more arguments are needed
+                  for(std::size_t index : r.arguments_needed){
+                      if(index >= arguments.size()){
+                          return {make_application(make_builtin(std::move(last_evaluator), b.name), arguments), true};
+                      }
+                  }
+                  for(std::size_t index : r.arguments_needed){
+                      auto [simplification, success] = try_simplify_at_top(arguments[index], scope);
+                      arguments[index] = simplification;
+                      if(!success)
+                          return {make_application(make_builtin(std::move(last_evaluator), b.name), arguments), false};
+                  }
+                  last_evaluator = r.eval;
+                  result = last_evaluator(arguments);
+              }
+              if(std::holds_alternative<built_in::nothing_to_do_t>(result)){
+                  return {make_application(make_builtin([](auto&&){ return built_in::nothing_to_do; }, b.name), arguments), true};
+              }else{
+                  assert(std::holds_alternative<built_in::simplified>(result));
+                  auto const& simplification = std::get<built_in::simplified>(result);
+                  arguments.erase(arguments.begin(), arguments.begin() + simplification.arguments_read);
+                  pos = sanitize_term(simplification.result, scope);
+              }
+          }else if(std::holds_alternative<argument>(*pos)){
+              return {make_application(pos, arguments), false};
+          }else{
+              std::terminate(); //??? not good
+          }
       }
-    });
-    return perform_replacement(def.arg_index, def.body, sanitize_argument(std::move(s), std::move(inner), x));
   }
   namespace{
-    std::pair<value_ptr, std::size_t> dive_through_evals(value_ptr start, std::size_t start_depth = 0){
-      std::pair<value_ptr, std::size_t> ret(std::move(start), start_depth);
-      while(ret.first->is_application()){
-        ++ret.second;
-        ret.first = ret.first->as_application().f;
-      }
-      return ret;
-    }
-    value_ptr dive_n_evals(value_ptr start, std::size_t dives){
-      for(std::size_t i = 0; i < dives; ++i) start = start->as_application().f;
-      return start;
-    }
-  }
-  evaluation_result step_evaluation(value_ptr v, untyped_scope s){
-    return std::visit(utility::overloaded{
-      [&](auto const&) -> evaluation_result{ return evaluation_result::nothing_to_do; },
-      [&](pair const& p) -> evaluation_result{ return evaluation_result::nothing_to_do; },
-      [&](application const& e) -> evaluation_result{
-        std::size_t arg_ct = 1;
-        auto [inner, depth] = dive_through_evals(e.f, 1);
-        if(inner->is_placeholder()) return evaluation_result::need_values({inner});
-        assert(inner->is_lambda());
-        auto sub_index = inner->as_lambda().arg_index;
-        if(sub_index){
-          if(depth == 1){
-            return evaluation_result::simplified(apply_lambda(e.f, e.x, std::move(s)));
-          }else{
-            return evaluation_result::need_values({dive_n_evals(e.f, depth - 2)});
+      void advance_id(std::string& current){ //current must be non-empty
+          std::size_t pos = current.size() - 1;
+          while(current[pos] == 'z'){
+              current[pos] = 'a';
+              if(pos == 0){
+                  current = 'a' + current;
+                  return;
+              }else{
+                  --pos;
+              }
           }
-        }else{
-          assert(inner->as_lambda().body->is_primitive<built_in>());
-          auto const& fn_def = inner->as_lambda().body->as_primitive<built_in>();
-          if(depth < fn_def.args_required) return evaluation_result::nothing_to_do;
-          else if(depth == fn_def.args_required){
-            std::vector<value_ptr> v;
-            v.reserve(depth);
-            v.push_back(e.x);
-            value_ptr pos = e.f;
-            for(int i = 1; i < depth; ++i){
-              auto const& l = pos->as_application();
-              v.push_back(l.x);
-              pos = l.f;
-            }
-            auto ret = fn_def.func(std::move(v));
-            if(std::holds_alternative<evaluation_result::simplified>(ret.status)){
-              auto& simplification = std::get<evaluation_result::simplified>(ret.status);
-              simplification.value = sanitize_argument({}, std::move(s), simplification.value);
-            }
+          ++current[pos];
+      }
+      struct verbose_printing_data{
+          std::ostream& o;
+          std::string next_var_name = "a";
+          std::unordered_map<std::size_t, std::string> var_names;
+          std::string const& get_var_name(std::size_t index){
+              if(!var_names.contains(index)){
+                  var_names[index] = next_var_name;
+                  advance_id(next_var_name);
+              }
+              return var_names[index];/*
+              std::stringstream s;
+              s << "$" << index;
+              return var_names[index] = s.str();*/
+          }
+          void print(term t, bool parenthesize_application = false, bool parenthesize_lambda = false){
+              std::visit(utility::overloaded{
+                  [&](built_in const& b){
+                      o << b.name;
+                  },
+                  [&](lambda_base const& l){
+                      if(parenthesize_lambda) o << "(";
+                      o << get_var_name(l.arg_index) << " -> ";
+                      print(l.body);
+                      if(parenthesize_lambda) o << ")";
+                  },
+                  [&](application const& a){
+                      if(parenthesize_application) o << "(";
+                      print(a.f, false, true);
+                      o << " ";
+                      print(a.x, true, !parenthesize_application);
+                      if(parenthesize_application) o << ")";
+                  },
+                  [&](argument const& a){
+                      o << get_var_name(a.arg_index);
+                  },
+                  [&](primitive const& a){
+                      o << a.value;
+                  }
+              }, *t);
+          }
+      };
+  };
+  std::ostream& operator<<(std::ostream& o, term t){
+      verbose_printing_data{o}.print(t);
+      return o;
+  }
+  term full_simplify(term t, name_scope const& names){
+      auto [pos, _] = try_simplify_at_top(t, names);
+      std::deque<term> arguments;
+      while(std::holds_alternative<application>(*pos)){
+          application const& a = std::get<application>(*pos);
+          arguments.push_front(full_simplify(a.x, names));
+          pos = a.f;
+      }
+      if(std::holds_alternative<lambda_base>(*pos)){
+          auto const& b = std::get<lambda_base>(*pos);
+          name_scope names_inner = names;
+          names_inner.add_name(b.arg_index);
+          pos = make_lambda(full_simplify(b.body, names_inner), b.arg_index);
+      }
+      return make_application(pos, arguments);
+  }
+  namespace{
+    bool compare_literal_impl(term a, term b, name_scope const& names, std::unordered_map<std::size_t, std::size_t>& renamings){
+      if(a->index() != b->index()) return false;
+      return std::visit(utility::overloaded{
+          [&](built_in const& ab){
+            return ab.name == std::get<built_in>(*b).name;
+          },
+          [&](lambda_base const& al){
+            auto const& bl = std::get<lambda_base>(*b);
+            renamings.insert(std::make_pair(al.arg_index, bl.arg_index));
+            auto ret = compare_literal_impl(al.body, bl.body, names, renamings);
+            renamings.erase(al.arg_index);
             return ret;
-          }else{
-            return evaluation_result::need_values({dive_n_evals(e.f, depth - 1 - fn_def.args_required)});
+          },
+          [&](application const& aa){
+            auto const& ba = std::get<application>(*b);
+            return compare_literal_impl(aa.f, ba.f, names, renamings) && compare_literal_impl(aa.x, ba.x, names, renamings);
+          },
+          [&](argument const& aa){
+            auto const& ba = std::get<argument>(*b);
+            if(renamings.contains(aa.arg_index)) return ba.arg_index == renamings.at(aa.arg_index);
+            else return ba.arg_index == aa.arg_index;
+          },
+          [&](primitive const& ap){
+            auto const& bp = std::get<primitive>(*b);
+            return ap.value == bp.value;
           }
-        }
-      },
-      [&](placeholder const& p) -> evaluation_result{ return evaluation_result::value_not_available; }
-    }, v->data);
-  }
-  value_ptr top_eval(value_ptr input, untyped_scope s){
-    while(true){
-      auto result = step_evaluation(input, s);
-      if(std::holds_alternative<evaluation_result::nothing_to_do_t>(result.status)) return input;
-      if(std::holds_alternative<evaluation_result::value_not_available_t>(result.status)) throw "Cannot evaluate.";
-      if(std::holds_alternative<evaluation_result::need_values>(result.status)){
-        for(auto const& val : std::get<evaluation_result::need_values>(result.status).desired){
-          top_eval(val, s);
-        }
-      }
-      if(std::holds_alternative<evaluation_result::simplified>(result.status)){
-        input.forward_to(std::get<evaluation_result::simplified>(result.status).value);
-      }
+      }, *a);
     }
   }
-  value_ptr deep_eval(value_ptr input, untyped_scope s){
-    try{
-      top_eval(input, s);
-    }catch(...){}
-    std::visit(utility::overloaded{
-      [](primitive auto const&){},
-      [](placeholder const&){},
-      [&](application const& e){
-        deep_eval(e.f, s);
-        deep_eval(e.x, s);
-      },
-      [&](pair const& p){
-        deep_eval(p.first, s);
-        deep_eval(p.second, s);
-      },
-      [&](lambda const& l){
-        s.used_names.insert(l.arg_index);
-        deep_eval(l.body, s);
-      },
-    }, input->data);
-    return input;
+  bool compare_literal(term a, term b, name_scope const& names){
+    std::unordered_map<std::size_t, std::size_t> renamings;
+    return compare_literal_impl(full_simplify(a, names), full_simplify(b, names), names, renamings);
   }
-  std::ostream& operator<<(std::ostream& o, built_in const& b){
-    return o << b.name;
-  }
-  std::ostream& operator<<(std::ostream& o, empty){
-    return o << "*";
-  }
-  std::ostream& operator<<(std::ostream& o, type_head h){
-    /*switch(h){
-      case type_head::c_type: o << "type";
-      case type_head::c_empty: o << "empty";
-      case type_head::c_size_t: o << "size_t";
-      case type_head::function: o << "function";
-  }*//*
-  o << "type head";
-    std::terminate();
-  }
-  std::ostream& operator<<(std::ostream& o, value_ptr v){
-    std::visit(utility::overloaded{
-      [&](auto const& v){ o << v; },
-      [&](lambda const& l){
-        if(l.arg_index){
-          o << "(\\" << l.arg_index << " -> " << l.body << ")";
-        }else{
-          o << l.body->as_primitive<built_in>();
-        }
-      },
-      [&](pair const& p){
-        o << "(" << p.first << " , " << p.second << ")";
-      },
-      [&](application const& e){
-        o << "(" << e.f << " " << e.x << ")";
-      },
-      [&](placeholder const& p){
-        o << "$" << p.index;
-      }
-    }, v->data);
-    return o;
-  }
-}*/
+
+
+}

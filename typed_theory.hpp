@@ -1,29 +1,21 @@
-#define typed_theory_h
-#ifndef typed_theory_h
+#ifndef typed_theory_hpp
+#define typed_theory_hpp
 
 #include "raw_theory.hpp"
-#include <exception>
 
-namespace type_theory::typed{
-  struct type_error : std::exception{
-    const char* what() const noexcept override{ return "type error."; }
+namespace type_theory{
+  struct typed_term{
+    raw::term type;
+    raw::term value;
   };
-  struct typed_value{
-    raw::value_ptr type;
-    raw::value_ptr value;
-    typed_value get_type();
-  };
-  typed_value apply(typed_value f, typed_value x);
+  typed_term safe_apply(typed_term f, typed_term x, raw::name_scope const& names = {});
+  template<class... Args>
+  typed_term safe_apply(typed_term f, typed_term x, Args&&... args){
+    return safe_apply(safe_apply(f, x), std::forward<Args>(args)...);
+  }
+  std::ostream& operator<<(std::ostream& o, typed_term const& t);
+  typed_term full_simplify(typed_term in);
 
-
-  /*
-  enum class tristate_bool : unsigned char{
-    no = 0, maybe = 1, yes = 2
-  };
-  tristate_bool operator&&(tristate_bool, tristate_bool);
-  tristate_bool operator||(tristate_bool, tristate_bool);
-  tristate_bool operator!(tristate_bool);
-  */
 };
 
 #endif

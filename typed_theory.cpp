@@ -1,59 +1,32 @@
-/*#include "typed_theory.hpp"
+#include "typed_theory.hpp"
+#include <sstream>
+#include <string>
 
-namespace type_theory::typed{
-
-    /*
-    using primitive_types = utility::class_list<empty, std::size_t, bool, type_head, built_in>;
-    template<class T>
-    concept primitive = primitive_types::contains<T>;
-
-    struct pair{
-      value_ptr first;
-      value_ptr second;
-    };
-    struct application{
-      value_ptr f;
-      value_ptr x;
-    };
-    struct lambda{
-      std::size_t arg_index;
-      value_ptr body;
-    };
-
-    struct value{
-      using any_types = primitive_types::append<pair, application, placeholder, lambda>;
-    */
-    /*bool match_types(raw::value_ptr a, raw::value_ptr b){
-        /*std::visit(utility::overloaded{
-            [&]<primitive T>(T const& a_data){
-                if(!std::holds_alternative<T>(b->data)) throw type_error{};
-                T const& b_data = std::get<T>(b);
-                return a_data == b_data;
-            }
-        }, a->data);*/
-        /*return true;
-    }
-
-
-    typed_value apply(typed_value f, typed_value x){
-std::terminate();
-    }
-  /*
-  tristate_bool operator&&(tristate_bool a, tristate_bool b){
-    return (tristate_bool)std::min((unsigned char)(a), (unsigned char)(b));
+namespace{
+  template<class... Args>
+  std::string convert_and_concatenate(Args&&... args){
+    std::stringstream s;
+    (s << ... << std::forward<Args>(args));
+    return s.str();
   }
-  tristate_bool operator||(tristate_bool a, tristate_bool b){
-    return (tristate_bool)std::max((unsigned char)(a), (unsigned char)(b));
+}
+
+namespace type_theory{
+  typed_term safe_apply(typed_term f, typed_term x, raw::name_scope const& names){
+    auto ftype_base = try_simplify_at_top(f.type);
+    if(!ftype_base.second)
+      throw std::runtime_error(convert_and_concatenate("left hand side's type could not be normalized. type was ",full_simplify(f.type)));
+    auto ftype = raw::extract_applications(ftype_base.first);
+    if(ftype.second.size() != 2 || !std::holds_alternative<raw::built_in>(*ftype.first) || std::get<raw::built_in>(*ftype.first).name != "function")
+      throw std::runtime_error(convert_and_concatenate("left hand side is not a function. type was ",full_simplify(f.type)," instead"));
+    if(!raw::compare_literal(ftype.second[0],x.type,names))
+      throw std::runtime_error(convert_and_concatenate("function expected type ",full_simplify(ftype.second[0])," got ",full_simplify(x.type)));
+    return {make_application(ftype.second[1], x.value), make_application(f.value, x.value)};
   }
-  tristate_bool operator!(tristate_bool a){
-    return (tristate_bool)(2 - (unsigned char)a);
+  std::ostream& operator<<(std::ostream& o, typed_term const& t){
+    return o << make_application(t.value,raw::make_formal(":"),t.type);
   }
-
-
-  //only called if types compare equal
-  tristate_bool compare_functions(typed_value a, typed_value b);
-  tristate_bool compare_types(raw::value_ptr a, raw::value_ptr b){
-
-  }*/
-
-//}
+  typed_term full_simplify(typed_term in){
+    return {full_simplify(in.type), full_simplify(in.value)};
+  }
+}

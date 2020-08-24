@@ -17,6 +17,10 @@
 #include <utility>
 
 namespace utility{
+    struct init_required_t {
+      template <class T>
+      operator T() const; // Left undefined
+    } static const init_required;
     //From cppreference
     namespace detail {
         template <class>
