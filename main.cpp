@@ -45,6 +45,8 @@ namespace helpers{
     expression operator()(expression a) const{
       return expression(*this)(a);
     }
+    template<class... T> requires (sizeof...(T) > 0)
+    expression operator()(expression b, T... vals){ return (*this)(std::move(b))(std::forward<T>(vals)...); }
   };
   struct lambda_expression{
     std::string arg_name;
@@ -53,6 +55,8 @@ namespace helpers{
     expression operator()(expression a) const{
       return expression(*this)(a);
     }
+    template<class... T> requires (sizeof...(T) > 0)
+    expression operator()(expression b, T... vals){ return (*this)(std::move(b))(std::forward<T>(vals)...); }
   };
   struct application{
     expression f;
@@ -60,6 +64,8 @@ namespace helpers{
     expression operator()(expression a) const{
       return expression(*this)(a);
     }
+    template<class... T> requires (sizeof...(T) > 0)
+    expression operator()(expression b, T... vals){ return (*this)(std::move(b))(std::forward<T>(vals)...); }
   };
   struct named{
     std::string name;
@@ -230,6 +236,19 @@ type_theory::raw::built_in::evaluation_result bool_inductor(std::deque<type_theo
     };
   }};
 }
+type_theory::raw::built_in::evaluation_result path_inductor(std::deque<type_theory::raw::term> const& vals){
+  //f, x, y, id(x,y)
+  return type_theory::raw::built_in::require_values{{3}, [](std::deque<type_theory::raw::term> const& vals) -> type_theory::raw::built_in::evaluation_result{
+    if(std::holds_alternative<type_theory::raw::built_in>(*vals[3]) && std::get<type_theory::raw::built_in>(*vals[3]).name == "refl"){
+      return type_theory::raw::built_in::simplified{
+        4,
+        type_theory::raw::make_application(vals[0], vals[1])
+      };
+    }else{
+      return type_theory::raw::built_in::nothing_to_do;
+    }
+  }};
+}
 
 int main(){
   using namespace helpers;
@@ -248,6 +267,12 @@ int main(){
   expression nat = {raw_type, raw::make_formal("nat")};
   expression zero = {nat, raw::make_formal("zero")};
   expression succ = {func_type(nat, nat), raw::make_formal("succ")};
+  expression induct = {func_type(
+    named{"P",func_type(nat,type)},
+    func_type(named{"n",nat},func_type(argument{"P"}(argument{"n"}),argument{"P"}(succ(argument{"n"})))),
+    argument{"P"}(zero),
+    func_type(named{"n",nat},argument{"P"}(argument{"n"}))
+  ), raw::make_lambda(raw::make_builtin(&inductor, "induct"), 0)};
 
   expression sum = {func_type(named{"a",type},func_type(argument{"a"},type),type), raw::make_formal("sum")};
   expression pair = {func_type(
@@ -270,90 +295,59 @@ int main(){
     argument{"P"}(argument{"p"})
   ), raw::make_lambda(raw::make_lambda(raw::make_lambda(raw::make_builtin(&pair_inductor,"pair_induct"),2),1),0)};
 
+  expression id = {func_type(named{"T",type},argument{"T"},argument{"T"},type), raw::make_formal("id")};
+  expression refl = {func_type(named{"T",type},named{"x",argument{"T"}},id(argument{"T"},argument{"x"},argument{"x"})),raw::make_lambda(raw::make_lambda(raw::make_formal("refl"),1),0)};
+  expression path_induct = {func_type(
+    named{"T",type},
+    named{"P",func_type(
+      named{"x",argument{"T"}},
+      named{"y",argument{"T"}},
+      id(argument{"T"},argument{"x"},argument{"y"}),
+      type
+    )},
+    named{"f",func_type(named{"x",argument{"T"}},argument{"P"}(argument{"x"},argument{"x"},refl(argument{"T"},argument{"x"})))},
+    named{"x",argument{"T"}},
+    named{"y",argument{"T"}},
+    named{"p",id(argument{"T"},argument{"x"},argument{"y"})},
+    argument{"P"}(argument{"x"},argument{"y"},argument{"p"})
+  ), raw::make_lambda(raw::make_lambda(raw::make_builtin(&path_inductor,"path_induct"), 1), 0)};
 
-  auto encode = [&](std::size_t i){
-    expression ret = zero;
-    for(std::size_t j = 0; j < i; ++j)
-      ret = succ(ret);
-    return ret;
-  };
-  auto encode_var = [&](std::size_t i, expression t){
-    expression ret = t;
-    for(std::size_t j = 0; j < i; ++j)
-      ret = succ(ret);
-    return ret;
-  };
 
-  expression induct = {func_type(
-    named{"P",func_type(nat,type)},
-    func_type(named{"n",nat},func_type(argument{"P"}(argument{"n"}),argument{"P"}(succ(argument{"n"})))),
-    argument{"P"}(zero),
-    func_type(named{"n",nat},argument{"P"}(argument{"n"}))
-  ), raw::make_lambda(raw::make_builtin(&inductor, "induct"), 0)};
-
-  auto add = induct(
-    lambda_expression{"", nat, func_type(nat, nat)},
-    lambda_expression{"",nat,lambda_expression{"f",func_type(nat, nat), lambda_expression{"x",nat,succ(argument{"f"}(argument{"x"}))}}},
-    lambda_expression{"x",nat, argument{"x"}}
+  expression nat_id = induct(
+    lambda_expression{"",nat,nat},
+    lambda_expression{"",nat,succ},
+    zero
   );
-  auto cmp = induct(
-    lambda_expression{"", nat, func_type(nat, boole)},
-    lambda_expression{"",nat,lambda_expression{"f",func_type(nat, boole),
-      induct(
-        lambda_expression{"", nat, boole},
-        lambda_expression{"n",nat,lambda_expression{"",boole,argument{"f"}(argument{"n"})}},
-        no
-      )
-    }},
-    induct(
-      lambda_expression{"", nat, boole},
-      lambda_expression{"n",nat,lambda_expression{"",boole,no}},
-      yes
-    )
+
+  std::cout << full_simplify(nat_id(succ(succ(zero)))) << "\n";
+
+  expression succ_eq = path_induct(
+    nat,
+    lambda_expression{"x",nat,lambda_expression{"y",nat,lambda_expression{"p",id(nat,argument{"x"},argument{"y"}),
+      id(nat,succ(argument{"x"}),succ(argument{"y"}))
+    }}},
+    lambda_expression{"x",nat,refl(nat,succ(argument{"x"}))}
   );
-  expression mod_by = lambda_expression{"m", nat,
-    induct(
-      lambda_expression{"", nat, nat},
-      lambda_expression{"", nat, lambda_expression{"n", nat,
-        bool_induct(
-          lambda_expression{"", boole, nat},
-          zero,
-          succ(argument{"n"}),
-          cmp(argument{"m"}, succ(argument{"n"}))
-        )
-      }},
-      zero
-    )
-  };
-  expression mod = lambda_expression{"p", nat, lambda_expression{"q", nat, mod_by(argument{"q"},argument{"p"})}};
+  expression nat_id_eq_id = induct(
+    lambda_expression{"n",nat,id(nat,argument{"n"},nat_id(argument{"n"}))},
+    lambda_expression{"n",nat,lambda_expression{"p",id(nat,argument{"n"},nat_id(argument{"n"})),succ_eq(argument{"n"},nat_id(argument{"n"}),argument{"p"})}},
+    refl(nat, zero)
+  );
 
-  std::cout << full_simplify(succ(succ(zero)).compile()) << "\n";
+  std::cout << succ_eq(zero, zero, refl(nat, zero)) << "\n";
 
-  std::cout << full_simplify(add(encode(5), encode(12))) << "\n";
-  std::cout << full_simplify(cmp(encode(5), encode_var(5,{nat, raw::make_argument(1)}))) << "\n";
+  expression var_nat = {nat, raw::make_argument(1245)};
 
-  std::cout << full_simplify(sum(nat, lambda_expression{"",nat,nat})) << "\n";
-
-  auto nat_sum = sum(nat, lambda_expression{"",nat,nat});
-  auto nat_pair = pair(nat, lambda_expression{"",nat,nat});
-  auto nat_pair_induct = pair_induct(nat, lambda_expression{"",nat,nat});
-
-  expression first_in_pair = full_simplify(nat_pair_induct(lambda_expression{"", nat_sum, nat}, lambda_expression{"x", nat, lambda_expression{"y", nat, argument{"x"}}}));
-  expression zeroone = full_simplify(nat_pair(zero, encode(1)));
-
-  expression next_fib = nat_pair_induct(lambda_expression{"", nat_sum, nat_sum}, lambda_expression{"x", nat, lambda_expression{"y", nat,
-    nat_pair(add(argument{"x"}, argument{"y"}), argument{"x"})
-  }});
-  expression fib_n = lambda_expression{"n",nat,first_in_pair(induct(
-    lambda_expression{"", nat, nat_sum},
-    lambda_expression{"", nat, next_fib},
-    zeroone,
-    argument{"n"}
-  ))};
+  std::cout << full_simplify(nat_id_eq_id) << "\n";
+  std::cout << full_simplify(nat_id_eq_id(succ(var_nat))) << "\n";
 
 
-  std::cout << full_simplify(fib_n(encode(6))) << "\n";
+  //std::cout << full_simplify(countint_vec(encode(5))) << "\n";
 
-  std::cout << full_simplify(mod(fib_n(encode(7)), encode(5))) << "\n";
+  //std::cout << full_simplify(vec_n(encode(2))) << "\n";
+
+//  std::cout << full_simplify(fib_n(encode(8))) << "\n";
+
+  //std::cout << full_simplify(mod(fib_n(encode(7)), encode(5))) << "\n";
   return 0;
 }
