@@ -1,5 +1,5 @@
 #include "any.hpp"
-
+/*
 namespace utility{
     printable_any::printable_any(printable_any const& o):data(o.data?nullptr:o.data->copy()){}
     std::size_t printable_any::__impl_base::get_next_type_index(){
@@ -20,3 +20,4 @@ namespace utility{
         }
     }
 }
+*/

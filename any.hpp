@@ -1,7 +1,7 @@
 #ifndef any_h
 #define any_h
-
-#include <concepts>
+/*
+//#include <concepts>
 #include <iostream>
 #include <memory>
 #include <exception>
@@ -12,7 +12,7 @@ namespace utility{
         o << a;
     };
     template<class T>
-    concept printable_regular = std::regular<T> && can_insert_to_ostream<T>;
+    concept printable_regular = true;//std::regular<T> && can_insert_to_ostream<T>;
     class printable_any{
         struct __impl_base{
             static std::size_t get_next_type_index();
@@ -69,7 +69,7 @@ namespace utility{
         }
         template<printable_regular T>
         T const& as() const{
-            if(!contains_type<T>) throw std::runtime_error("bad any cast");
+            if(!contains_type<T>()) throw std::runtime_error("bad any cast");
             return ((__impl_specific<T>*)data.get())->value;
         }
         friend bool operator==(printable_any const& a, printable_any const& b);
@@ -77,5 +77,5 @@ namespace utility{
     };
     //bool operator==(printable_any const& a, printable_any const& b);
     //std::ostream& operator<<(std::ostream&, printable_any const& b);
-}
+}*/
 #endif

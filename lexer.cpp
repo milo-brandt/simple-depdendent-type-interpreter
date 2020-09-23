@@ -56,31 +56,31 @@ namespace lexer{
         {
           const char* start = pos;
           do{ ++pos; } while(pos != in.end() && detail::can_be_part_of_identifier(*pos));
-          std::string_view str = {start, pos};
-          if(keywords.contains(detail::to_string(str))) data_stack.back().push_back(output_parts::symbol{{start, pos}});
-          else data_stack.back().push_back(output_parts::identifier{{start, pos}});
+          std::string_view str = {start, std::size_t(pos - start)};
+          if(keywords.find(detail::to_string(str)) != keywords.end()) data_stack.back().push_back(output_parts::symbol{{start, std::size_t(pos - start)}});
+          else data_stack.back().push_back(output_parts::identifier{{start, std::size_t(pos - start)}});
           break;
         }
         case detail::symbol_kind::numeric:
         {
           const char* start = pos;
           do{ ++pos; } while(pos != in.end() && detail::can_be_part_of_numeric(*pos));
-          data_stack.back().push_back(output_parts::identifier{{start, pos}});
+          data_stack.back().push_back(output_parts::identifier{{start, std::size_t(pos - start)}});
           break;
         }
         case detail::symbol_kind::symbol:
         {
           const char* start = pos;
           do{ ++pos; } while(pos != in.end() && detail::can_be_part_of_symbol(*pos));
-          std::string_view str = {start, pos};
+          std::string_view str = {start, std::size_t(pos - start)};
           auto symbol_pos = symbols.lower_bound(detail::to_string(str));
           if(symbol_pos == symbols.end() || symbol_pos->first != str){
-            if(symbol_pos == symbols.begin()) throw std::runtime_error("unrecognized symbol \"" + detail::to_string(str) + "\"");
+            if(symbol_pos == symbols.begin()) std::terminate(); //throw std::runtime_error("unrecognized symbol \"" + detail::to_string(str) + "\"");
             --symbol_pos;
           }
-          if(!str.starts_with(symbol_pos->first)) throw std::runtime_error("unrecognized symbol \"" + detail::to_string(str) + "\"");
+          //if(!str.starts_with(symbol_pos->first)) std::terminate(); //throw std::runtime_error("unrecognized symbol \"" + detail::to_string(str) + "\"");
           pos = start + symbol_pos->first.size();
-          str = std::string_view{start, pos};
+          str = std::string_view{start, std::size_t(pos - start)};
           std::visit(utility::overloaded{
             [&](pure_symbol){
               data_stack.back().push_back(output_parts::symbol{str});
@@ -90,8 +90,8 @@ namespace lexer{
               data_stack.emplace_back();
             },
             [&](close_delim){
-              if(stack.empty()) throw std::runtime_error("nothing to close");
-              if(str != stack.back().close_delim) throw std::runtime_error("mismatched delimeters");
+              if(stack.empty()) std::terminate(); //throw std::runtime_error("nothing to close");
+              if(str != stack.back().close_delim) std::terminate(); //throw std::runtime_error("mismatched delimeters");
               output inner = std::move(data_stack.back());
               data_stack.pop_back();
               data_stack.back().push_back(output_parts::delimeter_expression{stack.back().open, std::move(inner), str});
@@ -99,10 +99,10 @@ namespace lexer{
             },
             [&](open_str_delim const& str_delim){
               std::size_t end = in.find(str_delim.close, pos - in.begin());
-              if(end == std::string::npos) throw std::runtime_error("unterminated string literal");
+              if(end == std::string::npos) std::terminate(); //throw std::runtime_error("unterminated string literal");
               const char* end_pos = in.begin();
               const char* final_pos = end_pos + str_delim.close.size();
-              data_stack.back().push_back(output_parts::string_literal{str, {pos, end_pos}, {end_pos, final_pos}});
+              data_stack.back().push_back(output_parts::string_literal{str, {pos, std::size_t(end_pos-pos)}, {end_pos, std::size_t(final_pos-end_pos)}});
             }
           }, symbol_pos->second);
           break;
@@ -110,7 +110,7 @@ namespace lexer{
         case detail::symbol_kind::whitespace: break;
       }
     }
-    if(!stack.empty()) throw std::runtime_error("unclosed delimeter");
+    if(!stack.empty()) std::terminate(); //throw std::runtime_error("unclosed delimeter");
     return std::move(data_stack.back());
   }
 

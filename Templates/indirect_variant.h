@@ -28,11 +28,11 @@ constexpr tuple_construct_t tuple_construct;
 template<class... Types>
 class heap_variant{
     static constexpr std::size_t type_count = sizeof...(Types);
-    template<std::size_t index> requires (index < type_count)
+    template<std::size_t index> //requires (index < type_count)
     using nth_type = utility::nth_parameter_in_pack<index, Types...>;
     template<class Type>
     static constexpr bool appears_once = utility::pack_includes_unique<Type, Types...>;
-    template<class Type> requires appears_once<Type>
+    template<class Type> //requires appears_once<Type>
     static constexpr std::size_t index_of = utility::last_index_in_pack<Type, Types...>;
 
     heap_variant(std::size_t index):index(index){}
@@ -67,11 +67,11 @@ public:
     heap_variant(heap_variant const&) = delete;
     heap_variant& operator=(heap_variant&&) = delete;
     heap_variant& operator=(heap_variant const&) = delete;
-    template<std::size_t index, class... Args> requires (0 <= index && index < type_count/* && std::is_constructible_v<nth_type<index>, Args&&...>*/)
+    template<std::size_t index, class... Args> //requires (0 <= index && index < type_count/* && std::is_constructible_v<nth_type<index>, Args&&...>*/)
     static heap_variant* make(std::in_place_index_t<index>, Args&&... args){
         return new derived<index>(std::forward<Args>(args)...);
     }
-    template<class T, class... Args> requires (appears_once<T>/* && std::is_constructible_v<T, Args&&...>*/)
+    template<class T, class... Args> //requires (appears_once<T>/* && std::is_constructible_v<T, Args&&...>*/)
     static heap_variant* make(std::in_place_type_t<T>, Args&&... args){
         return make(std::in_place_index<index_of<T> >, std::forward<Args>(args)...);
     }
@@ -94,26 +94,26 @@ public:
             return visitor(d->u.value);
         });
     }
-    template<class T> requires appears_once<T>
+    template<class T> //requires appears_once<T>
     bool holds_alternative() const{
         return index == index_of<T>;
     }
-    template<class T> requires appears_once<T>
+    template<class T> //requires appears_once<T>
     T& get(){
         assert(holds_alternative<T>());
         return ((derived<index_of<T> >*)this)->u.value;
     }
-    template<std::size_t i> requires (0 <= i && i < type_count)
+    template<std::size_t i> //requires (0 <= i && i < type_count)
     nth_type<i>& get(){
         assert(index == i);
         return ((derived<i>*)this)->u.value;
     }
-    template<class T> requires appears_once<T>
+    template<class T> //requires appears_once<T>
     T const& get() const{
         assert(holds_alternative<T>());
         return ((derived<index_of<T> > const*)this)->u.value;
     }
-    template<std::size_t i> requires (0 <= i && i < type_count)
+    template<std::size_t i> //requires (0 <= i && i < type_count)
     nth_type<i> const& get() const{
         assert(index == i);
         return ((derived<i>*)this)->u.value;
@@ -148,7 +148,7 @@ class indirect_variant{
 public:
     indirect_variant() = default;
     indirect_variant(std::nullptr_t){}
-    template<class... Args> requires requires(Args&&... args){ heap_variant<Types...>::make(std::forward<Args>(args)...); }
+    template<class... Args> //requires requires(Args&&... args){ heap_variant<Types...>::make(std::forward<Args>(args)...); }
     indirect_variant(Args&&... args):val(heap_variant<Types...>::make(std::forward<Args>(args)...)){}
     indirect_variant(indirect_variant&&) = default;
     indirect_variant(indirect_variant const& o):val(o.val ? o.val->clone() : nullptr){}
@@ -171,7 +171,7 @@ class shared_variant{
 public:
     shared_variant() = default;
     shared_variant(std::nullptr_t){}
-    template<class... Args> requires requires(Args&&... args){ heap_variant<Types...>::make(std::forward<Args>(args)...); }
+    template<class... Args> //requires requires(Args&&... args){ heap_variant<Types...>::make(std::forward<Args>(args)...); }
     shared_variant(Args&&... args):val(heap_variant<Types...>::make(std::forward<Args>(args)...)){}
     heap_variant<Types...>* get(){ return val.get(); }
     heap_variant<Types...> const* get() const{ return val.get(); }

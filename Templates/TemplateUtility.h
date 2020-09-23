@@ -15,6 +15,8 @@
 #include <variant>
 #include <cassert>
 #include <utility>
+#include <algorithm>
+#include <type_traits>
 
 namespace utility{
     struct init_required_t {
@@ -129,6 +131,12 @@ namespace utility{
     template<class T> //ret_type, arg_list members
     using invoke_signature_of = detail::invoke_signature_finder<T>;
 
+    template<class Ret, class... Args>
+    using function_pointer_t = Ret(*)(Args...);
+    template<class Ret, class... Args>
+    function_pointer_t<Ret, Args...> to_raw_function(Ret(*f)(Args...)){
+      return f;
+    }
 
     namespace detail{
         template<class T>
@@ -143,7 +151,7 @@ namespace utility{
 
     template<auto Fn>
     struct static_function{ //A default-constructible wrapper for a specific function.
-        static_assert(std::is_function_v<Fn>, "Only functions can be used as static functions.");
+        static_assert(std::is_function_v<decltype(Fn)>, "Only functions can be used as static functions.");
     };
     template<class Ret, class... Args, Ret(*fn)(Args...)>
     struct static_function<fn>{
@@ -242,7 +250,7 @@ namespace utility{
     template<class... Ts> struct precedence_overloaded;
     template<> struct precedence_overloaded<>{};
     template<class T, class... Ts> struct precedence_overloaded<T, Ts...> : T, precedence_overloaded<Ts...>{
-      template<class... Args> requires (std::is_invocable_v<T, Args&&...> || ... || std::is_invocable_v<Ts, Args&&...>)
+      template<class... Args> //requires (std::is_invocable_v<T, Args&&...> || ... || std::is_invocable_v<Ts, Args&&...>)
       decltype(auto) operator()(Args&&... args){
         if constexpr(std::is_invocable_v<T, Args&&...>){
           return T::operator()(std::forward<Args>(args)...);
@@ -355,7 +363,7 @@ namespace utility{
     namespace detail{
         template<class ret_type, class visitor_t>
         using func_instantiation = ret_type(*)(visitor_t&&);
-        template<class ret_type, class visitor_t, std::size_t... indices> requires requires{ {invoke(std::declval<visitor_t&&>(), value_flag<indices>{}...) } -> std::convertible_to<ret_type>; }
+        template<class ret_type, class visitor_t, std::size_t... indices> //requires requires{ ret_type(invoke(std::declval<visitor_t&&>(), value_flag<indices>{}...)); }
         constexpr func_instantiation<ret_type, visitor_t> get_entry_list(std::index_sequence<>, std::index_sequence<indices...>) {
             return [](visitor_t&& visitor){ return invoke(std::forward<visitor_t>(visitor)(value_flag<indices>{}...)); };
         }
@@ -376,21 +384,21 @@ namespace utility{
         }
     }
     template<class ret_type, std::size_t... max, class visitor_t, class... indices_t>
-    constexpr auto visit_by_index(visitor_t&& visitor, indices_t... indices) requires (sizeof...(max) == sizeof...(indices) && (std::is_convertible_v<indices_t, std::size_t> && ...)){
+    constexpr auto visit_by_index(visitor_t&& visitor, indices_t... indices) {//requires (sizeof...(max) == sizeof...(indices) && (std::is_convertible_v<indices_t, std::size_t> && ...)){
         static_assert(((max > 0) && ...), "the maximum indices must be positive.");
         assert(((indices < max) && ...));
         constexpr auto alternative_array = detail::get_entry_list<ret_type, visitor_t>(std::index_sequence<max...>{}, std::index_sequence<>{});
         return get_nested_index(alternative_array, indices...)(std::forward<visitor_t>(visitor));
     }
     template<class callback_t, class... Ts>
-    constexpr auto variant_map(std::variant<Ts...>&& arg, callback_t&& callback) requires (requires{ invoke(std::forward<callback_t>(callback), std::declval<Ts&&>()); } && ...){
+    constexpr auto variant_map(std::variant<Ts...>&& arg, callback_t&& callback) {//requires (requires{ invoke(std::forward<callback_t>(callback), std::declval<Ts&&>()); } && ...){
         using ret_type = std::variant<decltype(invoke(std::forward<callback_t>(callback), std::declval<Ts&&>()))...>;
         return visit_by_index<ret_type, sizeof...(Ts)>([&]<std::size_t index>(value_flag<index>){
             return ret_type{std::in_place_index<index>, invoke(std::forward<callback_t>(callback), std::move(std::get<index>(arg)))};
         }, arg.index());
     }
     template<class callback_t, class... Ts>
-    constexpr auto variant_map(std::variant<Ts...> const& arg, callback_t&& callback) requires (requires{ invoke(std::forward<callback_t>(callback), std::declval<Ts const&>()); } && ...){
+    constexpr auto variant_map(std::variant<Ts...> const& arg, callback_t&& callback) {//requires (requires{ invoke(std::forward<callback_t>(callback), std::declval<Ts const&>()); } && ...){
         using ret_type = std::variant<decltype(invoke(std::forward<callback_t>(callback), std::declval<Ts const&>()))...>;
         return visit_by_index<ret_type, sizeof...(Ts)>([&]<std::size_t index>(value_flag<index>){
             return ret_type{std::in_place_index<index>, invoke(std::forward<callback_t>(callback), std::get<index>(arg))};
@@ -410,14 +418,14 @@ namespace utility{
     template<class T>
     final_action(T) -> final_action<T>;
 
-    template<class T, auto ref, auto deref> requires requires(T& a){ invoke(ref, a); invoke(deref, a); }
+    template<class T, auto ref, auto deref> //requires requires(T& a){ invoke(ref, a); invoke(deref, a); }
     class managed_ptr{
         T* ptr;
     public:
         managed_ptr():ptr(nullptr){}
         managed_ptr(std::nullptr_t):ptr(nullptr){}
         managed_ptr(T* ptr):ptr(ptr){ if(ptr) invoke(ref, *ptr); }
-        template<class... Args> requires std::is_constructible_v<T, Args&&...>
+        template<class... Args> //requires std::is_constructible_v<T, Args&&...>
         managed_ptr(std::in_place_t, Args&&... args):managed_ptr(new T(std::forward<Args>(args)...)){}
         managed_ptr(managed_ptr const& o):ptr(o.ptr){ if(ptr) invoke(ref, *ptr); }
         managed_ptr(managed_ptr&& o):ptr(o.ptr){ o.ptr = nullptr; }
@@ -445,7 +453,7 @@ namespace utility{
     };
     struct member_hasher{
         template<class T>
-        std::size_t operator()(T const& a) const requires requires{ {a.hash()} -> std::convertible_to<std::size_t>; }{
+        std::size_t operator()(T const& a) const {//requires requires{ std::size_t(a.hash()); }{
             return a.hash();
         }
     };
@@ -486,7 +494,26 @@ namespace utility{
         template<std::size_t index>
         using nth_term = nth_parameter_in_pack<index, Args...>;
     };
-
+    template<std::size_t size, std::size_t align, class T>
+    class sized_pimpl_storge {
+      std::aligned_storage<size, align> data;
+    public:
+      template<class... Args> requires (sizeof(T) <= size && std::is_constructible_v<T, Args&&...>)
+      sized_pimpl_storge(Args&&... args) {
+        new (&data) T(std::forward<Args>(args)...);
+      }
+      ~sized_pimpl_storge() {
+        get()->~T();
+      }
+      sized_pimpl_storge(sized_pimpl_storge const& o):sized_pimpl_storge(*o){}
+      sized_pimpl_storge(sized_pimpl_storge&& o):sized_pimpl_storge(std::move(*o)){}
+      T* get() { return (T*)&data; }
+      T const* get() const{ return (T const*)&data; }
+      T* operator->(){ return get(); }
+      T const* operator->() const{ return get(); }
+      T& operator*(){ return *get(); }
+      T const& operator*() const{ return *get(); }
+    };
     /*template<class T, class friend_type>
     class hidden{
     protected:

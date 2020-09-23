@@ -5,6 +5,7 @@
 #include <variant>
 #include <functional>
 #include <memory>
+#include <optional>
 #include "TemplateUtility.h"
 
 template<class T>
@@ -52,8 +53,8 @@ class exceptable<void>{
     std::optional<std::exception_ptr> value;
 public:
     exceptable(std::exception_ptr p):value(std::move(p)){}
-    template<class callback, class = std::enable_if_t<std::is_invocable_r_v<callback&&> > >
-    exceptable(callback&& c):value(std::in_place_index<1>){
+    template<class callback, class = std::enable_if_t<std::is_invocable_v<callback&&> > >
+    exceptable(callback&& c){
         try{
             value = std::invoke(std::forward<callback>(c));
         }catch(...){

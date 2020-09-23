@@ -1,4 +1,4 @@
-#include "Exceptable.h"
+/*#include "Exceptable.h"
 #include <sstream>
 const char* tuple_exception::what() const noexcept{
     try{
@@ -23,4 +23,4 @@ const char* tuple_exception::what() const noexcept{
     }catch(...){
         return "Multiple errors. Concatenation failed.";
     }
-}
+}*/
