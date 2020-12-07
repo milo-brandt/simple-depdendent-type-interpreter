@@ -3,7 +3,7 @@
 #include <cstring>
 
 namespace runtime {
-
+  /*
   namespace {
     std::size_t get_self_size(block const& b) {
       std::size_t ret = b.n_args;
@@ -84,5 +84,5 @@ namespace runtime {
         stack_ptr += jmp.args.size();
       }
     }
-  }
+  }*/
 }

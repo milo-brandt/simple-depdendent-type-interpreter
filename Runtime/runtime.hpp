@@ -11,7 +11,7 @@ namespace runtime{
     using fn_type = std::size_t(*)(std::size_t);
     environment();
     ~environment();
-    fn_type compile(block const&);
+    fn_type compile(block const&, std::string const& name);
   };
 };
 

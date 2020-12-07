@@ -4,6 +4,7 @@
 #include <vector>
 #include <variant>
 #include <memory>
+#include <cstdint>
 
 namespace runtime {
   /*
@@ -70,27 +71,41 @@ namespace runtime {
     void simulate(std::vector<std::size_t>& stack, std::size_t base_pointer);
   };*/
   namespace type {
-    enum primitive { u64 };
-    struct ptr;
-    struct overlay; //union;
-    struct sequence; //struct;
-    using any = std::variant<primitive, ptr, overlay, sequence>;
-    struct ptr {
-      std::unique_ptr<any> base;
+    enum primitive { u1, u64 };
+    struct pointer;
+    struct union_; //union;
+    struct structure; //struct;
+    struct function;
+    using _variant = std::variant<primitive, pointer, union_, structure, function>;
+    using any = std::shared_ptr<_variant>;
+    struct pointer {
+      any element;
     };
-    struct overlay {
-      std::vector<std::unique_ptr<any> > types;
+    struct union_ {
+      std::vector<any> variants;
     };
-    struct sequence {
-      std::vector<std::unique_ptr<any> > types;
+    struct structure {
+      std::vector<any> members;
     };
+    struct function {
+      any ret;
+      std::vector<any> args;
+    };
+    inline any make(primitive p) { return std::make_shared<_variant>(p); }
+    inline any make_union(std::vector<any> vs){ return std::make_shared<_variant>(union_{std::move(vs)}); }
+    inline any make_struct(std::vector<any> vs){ return std::make_shared<_variant>(structure{std::move(vs)}); }
+    inline any make_pointer(any element){ return std::make_shared<_variant>(pointer{std::move(element)}); }
+    inline any make_function(any ret, std::vector<any> args){ return std::make_shared<_variant>(function{ret, std::move(args)}); }
+    namespace detail {
+      template<primitive p> struct primitive_info;
+      template<> struct primitive_info<u1>{ using native_type = bool; };
+      template<> struct primitive_info<u64>{ using native_type = std::uint64_t; };
+    };
+    template<primitive p> using native_type = typename detail::primitive_info<p>::native_type;
+
+    //using any_primitive = std::variant<native_type<u1>, native_type<u64> >;
   };
 
-
-  struct allocation_spec {
-    std::size_t align;
-    std::size_t amt;
-  };
   struct local_value {
     std::size_t index;
     local_value(std::size_t index = -1):index(index){}
@@ -105,10 +120,19 @@ namespace runtime {
       struct load { local_value where; };
       struct store { local_value value; local_value target; };
       struct constant { std::size_t value; };
+      struct constant_fn { void* function; type::any ret; std::vector<type::any> args; };
+
+      struct local_mutable { type::any t; }; //gives pointer
+      struct get_element_ptr { local_value value; std::size_t index; };
+      struct get_index_ptr { local_value value; local_value index; };
+
+      struct bitcast { local_value v; type::any t; };
+
       struct add { local_value lhs; local_value rhs; };
       struct sub { local_value lhs; local_value rhs; };
       struct cmp { local_value lhs; local_value rhs; };
-      using any = std::variant<load, store, constant, add, sub, cmp>;
+      struct call { local_value callee; std::vector<local_value> args; };
+      using any = std::variant<load, store, constant, add, sub, cmp, local_mutable, get_element_ptr, get_index_ptr, constant_fn, call>;
     };
     namespace terminator {
       struct ret{ local_value value; };
@@ -118,11 +142,11 @@ namespace runtime {
     };
   };
   struct block {
-    std::size_t n_args;
+    std::vector<type::any> args;
     std::vector<instructions::body::any> instructions;
     instructions::terminator::any end;
     std::vector<block> children;
-    std::size_t simulate(std::size_t* args) const;
+    //std::size_t simulate(std::size_t* args) const;
     /*
     struct builder {
       local_value get_arg(std::size_t);

@@ -15,19 +15,8 @@ namespace type_theory {
   struct argument;
   using node = std::variant<primitive, application, lambda, argument>;
 
-  struct expr_ctr{
-    static std::size_t x;
-    expr_ctr(){
-      //std::cout << ++x << " expressions exist.\n";
-    }
-    ~expr_ctr(){
-      //std::cout << --x << " expressions exist.\n";
-    }
-  };
-  inline std::size_t expr_ctr::x = 0;
   class expression {
     std::optional<std::size_t> index;
-    expr_ctr e;
     struct detail;
   public:
     expression() noexcept;
