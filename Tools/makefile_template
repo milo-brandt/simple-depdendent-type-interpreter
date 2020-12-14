@@ -1,0 +1,47 @@
+compiler = g++-10
+compiler_cmd = $(compiler) -std=c++20 -fcoroutines -g -fconcepts-diagnostics-depth=10 -Wreturn-type
+
+.PHONY: all
+all: Build/program
+
+.PHONY: run
+run: Build/program
+	Build/program
+
+.PHONY: test
+test: Build/test_program
+	Build/test_program
+
+.PHONY: debug
+debug: Debug/program
+	gdb Debug/program
+
+Build/program: {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %}
+	$(compiler_cmd)  {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -O3 -o Build/program
+
+Debug/program: {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %}
+	$(compiler_cmd)  {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -O0 -ggdb -o Debug/program
+
+Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %}
+	$(compiler_cmd)  {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -O3 -o Build/test_program
+
+{% for src_file in source_files %}
+Build/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O3 -IDependencies/include -c Source/{{src_file}}.cpp -o Build/{{src_file}}.o
+{% endfor %}
+
+{% for src_file in source_files %}
+Debug/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/{{src_file}}.cpp -o Debug/{{src_file}}.o
+{% endfor %}
+
+.PHONY: clean
+clean:
+	-rm -r Build
+	-rm -r Debug
+
+.PHONY: regenerate
+regenerate:
+	python3 Tools/makefile_generator.py
