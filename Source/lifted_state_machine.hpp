@@ -1,7 +1,7 @@
 #include "template_utility.hpp"
 #include "coro_base.hpp"
 #include <variant>
-
+#include <iostream>
 /*
 Represents coroutines that can co_await, co_yield, or co_return some (finite) set of possibilities and then be resumed given appropriate further input.
 
@@ -9,112 +9,210 @@ Represents coroutines that can co_await, co_yield, or co_return some (finite) se
 */
 
 
+
 namespace lifted_state_machine {
-  template<class promise_type, class resume_type = void>
-  class resume_handle {
-    coro::unique_coro_handle<promise_type> raw_handle;
-    explicit resume_handle(coro::unique_coro_handle<promise_type> raw_handle):raw_handle(std::move(raw_handle)){}
-    void set_handle(coro::unique_coro_handle<promise_type> raw_handle){ this->raw_handle = std::move(raw_handle); }
-    friend promise_type;
-  public:
-    resume_handle() = default;
-    auto operator()(resume_type arg) {
-      auto& promise = raw_handle.promise();
-      return promise.run(std::move(raw_handle), std::move(arg));
-    }
-  };
-  template<class promise_type>
-  class resume_handle<promise_type, void> {
-    coro::unique_coro_handle<promise_type> raw_handle;
-    explicit resume_handle(coro::unique_coro_handle<promise_type> raw_handle):raw_handle(std::move(raw_handle)){}
-    void set_handle(coro::unique_coro_handle<promise_type> raw_handle){ this->raw_handle = std::move(raw_handle); }
-    friend promise_type;
-  public:
-    resume_handle() = default;
-    auto operator()() {
-      auto& promise = raw_handle.promise();
-      return promise.run(std::move(raw_handle));
-    }
-  };
-  template<class getter>
-  struct argument_passer {
-    getter get;
+  template<class T = void>
+  struct await_from_pointer {
+    void** where;
     bool await_ready(){ return false; }
+    void await_suspend(std::coroutine_handle<>){}
+    T await_resume(){
+      T ret = std::move(*(T*)*where);
+      return ret;
+    }
+  };
+  template<>
+  struct await_from_pointer<void> {
+    bool await_ready(){ return false; }
+    void await_suspend(std::coroutine_handle<>){}
+    void await_resume(){}
+  };
+  template<class T = void>
+  struct immediate_awaiter {
+    T value;
+    bool await_ready(){ return true; }
+    void await_suspend(std::coroutine_handle<>){ std::terminate(); }
+    T await_resume() {
+      return std::move(value);
+    }
+  };
+  template<>
+  struct immediate_awaiter<void> {
+    bool await_ready(){ return true; }
+    void await_suspend(std::coroutine_handle<>){ std::terminate(); }
+    void await_resume(){ }
+  };
+  template<class T = void>
+  struct await_with_no_resume {
+    bool await_ready(){ return false; }
+    void await_suspend(std::coroutine_handle<>){}
+    T await_resume(){ std::terminate(); }
+  };
+  //awaitable: can accept handle and return useful stuff
+  template<class T>
+  struct __void_hack{ using type = T; };
+  template<>
+  struct __void_hack<void>{ using type = std::monostate; };
+  template<class T>
+  using __void_hack_v = typename __void_hack<T>::type;
+  template<class definition_t>
+  struct coro_type;
+  template<class definition_t, class promise_type, bool x>
+  class __coro_base_returning_helper;
+  template<class definition_t, class promise_type>
+  struct __coro_base_returning_helper<definition_t, promise_type, true> {
+    auto return_void() {
+      return definition_t::on_return_void(((promise_type*)this)->state, ((promise_type*)this)->get_returning_handle());
+    }
+  };
+  template<class definition_t, class promise_type>
+  struct __coro_base_returning_helper<definition_t, promise_type, false> {
     template<class T>
-    void await_suspend(T&&){}
-    auto await_resume() {
-      return get();
+    auto return_value(T&& v) {
+      return definition_t::on_return_value(std::forward<T>(v), ((promise_type*)this)->state, ((promise_type*)this)->get_returning_handle());
     }
   };
-  template<class getter>
-  argument_passer(getter) -> argument_passer<getter>;
-  template<class promise_t, class awaitable>
-  struct await_implementer {
-    using resume_type = typename awaitable::resume_type;
-    using return_type = std::pair<awaitable, resume_handle<promise_t, resume_type> >;
-    promise_t* promise(){ return (promise_t*)this; }
-    auto await_transform(awaitable a) {
-      promise()->template set_result(std::make_pair(std::move(a), resume_handle<promise_t, resume_type>{}));
-      return argument_passer{[p = promise()](){
-        if constexpr(std::is_void_v<resume_type>){
-          return;
-        } else {
-          return std::move(*std::get<resume_type*>(p->passing_slot));
-        }
-      }};
-    }
-  };
-  template<class specification>
-  class promise;
-  template<class... awaitables>
-  class promise<utility::class_list<awaitables...> > : await_implementer<promise<utility::class_list<awaitables...> >, awaitables>... {
+  template<class definition_t>
+  class coro_base {
+  protected:
+    class waiting_handle;
+    class returning_handle;
   public:
-    using unique_handle = coro::unique_coro_handle<promise>;
-    using return_type = std::variant<std::monostate, typename await_implementer<promise, awaitables>::return_type...>;
-    std::variant<std::monostate, std::exception_ptr, return_type, typename awaitables::resume_type*...> passing_slot;
-    using await_implementer<promise<utility::class_list<awaitables...> >, awaitables>::await_transform...;
-    void set_result(return_type&& a) {
-      passing_slot = std::move(a);
-    }
-    return_type get_return_value(unique_handle handle) {
-      if(std::holds_alternative<std::exception_ptr>(passing_slot)) std::rethrow_exception(std::get<std::exception_ptr>(passing_slot));
-      return std::visit<return_type>([&]<class T>(T&& value){
-        if constexpr(std::is_same_v<T, std::monostate>){
-          return value;
-        } else {
-          value.second.set_handle(std::move(handle));
-          return std::move(value);
+    struct promise_type;
+    template<class T = void>
+    class resume_handle {
+      coro::unique_coro_handle<promise_type> handle;
+      friend waiting_handle;
+      friend promise_type;
+      resume_handle(coro::unique_coro_handle<promise_type> handle):handle(std::move(handle)){}
+    public:
+      resume_handle() = default;
+      auto resume() && requires std::is_void_v<T> {
+        auto raw = handle.move();
+        return raw.promise().run();
+      }
+      auto resume(__void_hack_v<T> value) && requires (!std::is_void_v<T>) {
+        auto raw = handle.move();
+        return raw.promise().run(std::move(value));
+      }
+      auto& state() {
+        return handle.promise().state;
+      }
+    };
+    static constexpr bool is_void_return = requires(definition_t d, returning_handle h) {
+      definition_t::on_return_void(std::move(h));
+    };
+    struct promise_type : __coro_base_returning_helper<definition_t, promise_type, is_void_return>  {
+      using return_slot_type = std::variant<std::pair<bool, typename definition_t::paused_type>, std::exception_ptr>;
+      typename definition_t::state state;
+      void* passing_slot;
+      auto get_returning_handle() {
+        return returning_handle(this);
+      }
+      template<class T>
+      auto await_transform(T&& value) {
+        return definition_t::on_await(std::forward<T>(value), state, waiting_handle{this});
+      }
+      template<class T>
+      auto yield_value(T&& value) {
+        return definition_t::on_yield(std::forward<T>(value), state, waiting_handle{this});
+      }
+      void set_return_value(bool done, typename definition_t::paused_type&& v) {
+        passing_slot = new return_slot_type(std::make_pair(done, std::move(v)));
+      }
+      void set_return_exception(std::exception_ptr e) {
+        passing_slot = new return_slot_type(std::move(e));
+      }
+      auto get_coro_handle() {
+        return std::coroutine_handle<promise_type>::from_promise(*this);
+      }
+      typename definition_t::paused_type get_return_value() {
+        auto val = std::move(*(return_slot_type*)passing_slot);
+        delete (return_slot_type*)passing_slot;
+        if((val.index() == 0 && std::get<0>(val).first) || val.index() == 1) {
+          get_coro_handle().destroy(); //clean up before exiting.
         }
-      }, std::move(std::get<return_type>(passing_slot)));
-    }
-    template<class resume_type>
-    return_type run(unique_handle handle, resume_type&& resume) {
-      passing_slot = &resume;
-      std::coroutine_handle<promise>::from_promise(*this).resume();
-      return get_return_value(std::move(handle));
-    }
-    return_type run(unique_handle handle) {
-      std::coroutine_handle<promise>::from_promise(*this).resume();
-      return get_return_value(std::move(handle));
-    }
-    resume_handle<promise> get_return_object(){
-        return resume_handle<promise>{coro::unique_coro_handle<promise>{std::coroutine_handle<promise>::from_promise(*this)}};
-    }
-    auto initial_suspend(){
+        if(val.index() == 1) std::rethrow_exception(std::get<1>(val));
+        auto& [_, ret] = std::get<0>(val);
+        return std::move(ret);
+      }
+      void unhandled_exception() {
+        set_return_exception(std::current_exception());
+      }
+      template<class T>
+      typename definition_t::paused_type run(T&& value) { //must give up your handle's ownership!
+        passing_slot = &value;
+        get_coro_handle().resume();
+        return get_return_value();
+      }
+      typename definition_t::paused_type run() { //must give up your handle's ownership!
+        get_coro_handle().resume();
+        return get_return_value();
+      }
+      coro_type<definition_t> get_return_object() {
+        return definition_t::create_object(resume_handle<>{get_coro_handle()});
+      }
+      auto initial_suspend() {
         return std::suspend_always();
-    }
-    auto final_suspend(){
+      }
+      auto final_suspend() {
         return std::suspend_always();
-    }
-    void return_void(){
-      passing_slot = return_type{};
-    }
-    void unhandled_exception(){
-      passing_slot = std::current_exception();
-    }
+      }
+    };
+  protected:
+    class waiting_handle {
+      promise_type* promise;
+      waiting_handle(promise_type* promise):promise(promise){}
+      friend promise_type;
+    public:
+      template<class T = void, class F> requires requires(F&& f, resume_handle<T> resumer) {
+        {std::forward<F>(f)(std::move(resumer))} /* noexcept */ -> std::convertible_to<typename definition_t::paused_type>;
+      }
+      auto resuming_result(F&& f) && {
+        auto handle = resume_handle<T>{coro::unique_coro_handle{promise->get_coro_handle()}};
+        promise->set_return_value(false, std::forward<F>(f)(std::move(handle)));
+        if constexpr(std::is_void_v<T>) {
+          return await_from_pointer<void>{};
+        } else {
+          return await_from_pointer<T>{&promise->passing_slot};
+        }
+      }
+      template<class T = void>
+      auto destroying_result(typename definition_t::paused_type&& v) && { //specifies that coroutine is destroyed!
+        promise->set_return_value(true, std::move(v));
+        return await_with_no_resume<T>{};
+      }
+      template<class T>
+      auto immediate_result(T&& value) {
+        return immediate_awaiter<T>(std::forward<T>(value));
+      }
+      auto immediate_result(){
+        return immediate_awaiter<void>();
+      }
+    };
+    class returning_handle {
+      promise_type* promise;
+      returning_handle(promise_type* promise):promise(promise){}
+      friend promise_type;
+    public:
+      void result(typename definition_t::paused_type&& v) && {
+        promise->set_return_value(true, std::move(v));
+      }
+    };
+    /*struct returning_handle {
+
+    };*/
+  };
+  template<class definition_t>
+  struct coro_type : definition_t::starter_base {
+    using base = typename definition_t::starter_base;
+  public:
+    coro_type(base b):base(std::move(b)){}
+    coro_type() = default;
   };
 }
-template<class promise_type_t, class... Args>
-struct std::coroutine_traits<lifted_state_machine::resume_handle<promise_type_t>, Args...> {
-  using promise_type = promise_type_t;
+
+template<class definition_t, class... Args>
+struct std::coroutine_traits<lifted_state_machine::coro_type<definition_t>, Args...> {
+  using promise_type = typename lifted_state_machine::coro_base<definition_t>::promise_type;
 };

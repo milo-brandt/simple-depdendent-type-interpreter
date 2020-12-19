@@ -4,7 +4,7 @@
 struct times_plus_neg_expr_tree {
   using return_type = operator_tree::tree<binary_operator, lambda_abstraction>;
   using unary_t = lambda_abstraction;
-  dynamic_parser<lambda_abstraction> left_unary_op = surrounded(recognizer("\\"),sequence{identifier, optional{surrounded{sequence{*whitespace, recognizer(":"), *whitespace}, expression_parser() ,*whitespace}}}, recognizer("."))
+  dynamic_parser<lambda_abstraction> left_unary_op = surrounded(recognizer("\\"),sequence{parse_identifier, optional{surrounded{sequence{*whitespace, recognizer(":"), *whitespace}, expression_parser() ,*whitespace}}}, recognizer("."))
     > [](auto id){ auto& [arg_name, arg_type] = id; return lambda_abstraction{arg_name, arg_type ? *arg_type : nullptr}; };
   dynamic_parser<lambda_abstraction> right_unary_op = fail<lambda_abstraction>;
   dynamic_parser<binary_operator> binary_op = either{

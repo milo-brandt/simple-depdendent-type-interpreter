@@ -21,6 +21,11 @@ namespace parse_results {
 };
 template<class T>
 using parse_result = std::variant<parse_results::failure, parse_results::success<T> >;
+template<class T>
+concept any_parser = requires(T const& parser, std::string_view str) {
+  typename std::decay_t<T>::return_type;
+  { parser.parse(str) } -> std::convertible_to<parse_result<typename std::decay_t<T>::return_type> >;
+};
 
 struct recognizer {
   std::string what;
@@ -56,11 +61,7 @@ constexpr auto alpha = predicate{static_cast<int(*)(int)>(&std::isalpha)};
 constexpr auto id_continuation = predicate{[](char c){ return std::isalnum(c) || c == '_'; }};
 constexpr auto id_start = predicate{[](char c){ return std::isalpha(c) || c == '_'; }};
 
-template<class T>
-concept any_parser = requires(T const& parser, std::string_view str) {
-  typename std::decay_t<T>::return_type;
-  { parser.parse(str) } -> std::convertible_to<parse_result<typename std::decay_t<T>::return_type> >;
-};
+
 template<any_parser... Ts>
 struct either : std::tuple<Ts...> {
   using std::tuple<Ts...>::tuple;
@@ -205,6 +206,10 @@ template<any_parser A, any_parser B, any_parser C>
 struct surrounded : fmap<sequence<A, B, C>, decltype(get_middle_value_of_tuple)> {
   constexpr surrounded(A a, B b, C c):fmap<sequence<A, B, C>, decltype(get_middle_value_of_tuple)>{{std::move(a), std::move(b), std::move(c)}, {}}{}
 };
+template<any_parser T>
+auto white_surround(T parser) {
+  return surrounded{*whitespace, std::move(parser), *whitespace};
+}
 template<class A, class B, class C>
 surrounded(A,B,C) -> surrounded<A, B, C>;
 template<any_parser T>
@@ -270,6 +275,8 @@ struct separated_sequence {
     }
   }
 };
+template<class term_t, class separator_t>
+separated_sequence(term_t, separator_t) -> separated_sequence<term_t, separator_t>;
 template<class T>
 struct pure {
   T ret;
@@ -304,8 +311,6 @@ struct lazy {
 };
 template<class F>
 lazy(F) -> lazy<F>;
-template<class term_t, class separator_t>
-separated_sequence(term_t, separator_t) -> separated_sequence<term_t, separator_t>;
 template<class T>
 struct fail_t {
   using return_type = T;
@@ -322,7 +327,15 @@ struct dynamic_parser {
   template<any_parser T> requires std::is_same_v<typename T::return_type, R>
   dynamic_parser(T parser):parse([parser = std::move(parser)](std::string_view str){ return parser.parse(str); }){}
 };
+template<any_parser lhs_t, any_parser separator_t, any_parser rhs_t>
+auto separated_pair(lhs_t lhs, separator_t separator, rhs_t rhs) {
+  return sequence{std::move(lhs), preceded{std::move(separator), std::move(rhs)}};
+}
+template<any_parser first_t, any_parser... rest_t>
+auto whitespace_sequence(first_t first, rest_t... rest) {
+  return sequence{white_surround(std::move(first)), suffixed{std::move(rest), *whitespace}...};
+}
 
-static constexpr auto identifier = capture{id_start * *id_continuation} > [](auto ret){ return ret.range; };
+static constexpr auto parse_identifier = capture{id_start * *id_continuation} > [](auto ret){ return ret.range; };
 
 #endif

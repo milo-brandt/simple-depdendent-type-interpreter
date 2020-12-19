@@ -1,0 +1,10 @@
+axiom Id: T:Type -> x:T -> y:T -> Type;
+axiom refl: T:Type -> x:T -> Id T x x;
+
+axiom path_induct:    T:Type
+                  ->  P:(x:T -> y:T -> p:Id T x y -> Type)
+                  ->  d:(x:T -> P x x (refl T x))
+                  ->  x:T -> y:T -> p:Id T x y -> P x y p;
+
+rule(T: Type, P:(x:T -> y:T -> p:Id T x y -> Type), d:(x:T -> P x x (refl T x)), x:T)
+  path_induct T P d x x (refl T x) := d x;

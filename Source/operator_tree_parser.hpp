@@ -35,7 +35,6 @@ dynamic_parser<operator_tree::tree<binary_t, unary_t> > build_parser(P const& pa
     parse_result<return_t> parse(std::string_view str) const {
       std::vector<stack_segment> stack;
       std::optional<return_t> top;
-      bool check_superposition = false;
       auto join_string_views = [](std::string_view a, std::string_view b) {
         auto start = std::min(a.data(), b.data());
         auto end = std::max(a.data() + a.size(), b.data() + b.size());
@@ -62,19 +61,9 @@ dynamic_parser<operator_tree::tree<binary_t, unary_t> > build_parser(P const& pa
           collapse_once();
         }
       };
-      auto setup_superposition = [&]() {
-        assert(check_superposition);
-        check_superposition = false;
-        collapse_while([&](stack_segment const& seg) {
-          if(seg.index() == 0) return parser.associate_left(std::get<1>(std::get<0>(seg)), *parser.superposition_op);
-          else return parser.associate_left(std::get<0>(std::get<1>(seg)), *parser.superposition_op);
-        });
-        stack.push_back(stack_segment{std::in_place_index<0>, std::move(*top), *parser.superposition_op, str.substr(0, 0)});
-        top = std::nullopt;
-      };
       while(true) {
         str = std::get<1>((*whitespace).parse(str)).remaining;
-        if(top && !check_superposition) {
+        if(top) {
           auto unary_result = capture(parser.right_unary_op).parse(str);
           if(unary_result.index() == 1){
             auto& [ret, remaining] = std::get<1>(unary_result);
@@ -108,21 +97,21 @@ dynamic_parser<operator_tree::tree<binary_t, unary_t> > build_parser(P const& pa
               str
             };
           } else {
-            check_superposition = true;
+            //hanging_binop = std::make_pair(*parser.superposition_op, str.substr(0, 0));
           }
         } else {
           auto unary_result = capture(parser.left_unary_op).parse(str);
           if(unary_result.index() == 1){
-            if(check_superposition) setup_superposition();
+            //if(hanging_binop) incorporate_binop();
             auto& [ret, remaining] = std::get<1>(unary_result);
             auto& [op, op_span] = ret;
             stack.push_back(stack_segment{std::in_place_index<1>, std::move(op), op_span});
             str = remaining;
             continue;
           }
-          auto id_result = identifier.parse(str);
+          auto id_result = parse_identifier.parse(str);
           if(id_result.index() == 1) {
-            if(check_superposition) setup_superposition();
+            //if(hanging_binop) incorporate_binop();
             auto& [ret, remaining] = std::get<1>(id_result);
             top = make_identifier<binary_t, unary_t>(ret);
             str = remaining;
@@ -130,13 +119,13 @@ dynamic_parser<operator_tree::tree<binary_t, unary_t> > build_parser(P const& pa
           }
           auto paren_result = surrounded(recognizer("("), *this, recognizer(")")).parse(str);
           if(paren_result.index() == 1) {
-            if(check_superposition) setup_superposition();
+            //if(hanging_binop) incorporate_binop();
             auto& [ret, remaining] = std::get<1>(paren_result);
             top = ret;
             str = remaining;
             continue;
           }
-          if(check_superposition) {
+          if(top) {
             collapse_while([](auto&&){ return true; });
             return parse_results::success<return_t> {
               std::move(*top),

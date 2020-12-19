@@ -12,6 +12,10 @@
 #include <coroutine>
 #include <utility>
 #include <exception>
+#include <variant>
+/*namespace std{
+  using namespace experimental;
+}*/
 
 namespace coro{
     template<class promise_type = void>
@@ -171,6 +175,50 @@ namespace coro{
     auto apply_co_await(T&& awaiter){
         return std::forward<T>(awaiter);
     }
+    template<class F, class A>
+    struct mapped_awaiter {
+      F map;
+      A awaiter;
+      bool await_ready() {
+        return awaiter.await_ready();
+      }
+      template<class promise_type>
+      auto await_suspend(std::coroutine_handle<promise_type> handle) {
+        return awaiter.await_suspend(handle);
+      }
+      auto await_resume() {
+        return map(awaiter.await_resume());
+      }
+    };
+    template<class R, class... Ts>
+    struct variant_awaiter {
+      std::variant<Ts...> data;
+      template<class... Args>
+      variant_awaiter(Args&&... args):data{std::forward<Args>(args)...}{}
+      bool await_ready(){
+        return std::visit([](auto& x) -> bool{ return x.await_ready(); }, data);
+      }
+      template<class promise_type>
+      std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) {
+        return std::visit([&](auto& x) -> std::coroutine_handle<>{
+          if constexpr(std::is_void_v<decltype(x.await_suspend(handle))>) {
+            x.await_suspend(handle);
+            return std::noop_coroutine();
+          } else if constexpr(std::is_same_v<decltype(x.await_suspend(handle)), bool>) {
+            if(x.await_suspend(handle)) {
+              return std::noop_coroutine();
+            } else {
+              return handle;
+            }
+          } else {
+            return x.await_suspend(handle);
+          }
+        }, data);
+      }
+      auto await_resume() {
+        return std::visit([](auto& x) -> R { return x.await_resume(); }, data);
+      }
+    };
 }
 
 #endif /* coro_base_h */
