@@ -12,6 +12,10 @@ run: Build/program
 test: Build/test_program
 	Build/test_program
 
+.PHONY: debug_test
+debug_test: Debug/test_program
+	gdb Debug/test_program
+
 .PHONY: debug
 debug: Debug/program
 	gdb Debug/program
@@ -24,6 +28,10 @@ Debug/program: {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfo
 
 Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %}
 	$(compiler_cmd)  {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -O3 -o Build/test_program
+
+Debug/test_program: {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %}
+	$(compiler_cmd)  {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -O0 -ggdb -o Debug/test_program
+
 
 {% for src_file in source_files %}
 Build/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}

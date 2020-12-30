@@ -9,7 +9,7 @@
 #ifndef coro_base_h
 #define coro_base_h
 
-#include <coroutine>
+#include "coroutine_include.hpp"
 #include <utility>
 #include <exception>
 #include <variant>

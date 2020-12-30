@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <variant>
-#include <concepts>
+//#include <concepts>
 #include <iostream>
 #include <vector>
 #include <type_traits>
@@ -21,6 +21,13 @@ namespace expressions {
 
   template<class primitive_type>
   using local_expression = std::variant<apply_t<primitive_type>, abstract_t<primitive_type>, argument_t<primitive_type>, value_t<primitive_type> >;
+  enum class local_type {
+    apply,
+    abstract,
+    argument,
+    value
+  };
+
 
   template<class primitive_t>
   struct expression_base {
@@ -87,7 +94,7 @@ namespace expressions {
     template<class expr_t>
     using expression_type = typename __is_expression_helper<expr_t>::primitive_type;
   }
-  template<class input_primitive_type, std::invocable<input_primitive_type> map_t> requires detail::is_expression<std::invoke_result_t<map_t const&, input_primitive_type> >
+  template<class input_primitive_type, /*std::invocable<input_primitive_type>*/ class map_t> requires detail::is_expression<std::invoke_result_t<map_t const&, input_primitive_type> >
   struct bind : expression_base<detail::expression_type<std::invoke_result_t<map_t const&, input_primitive_type> > > {
     using primitive_type = detail::expression_type<std::invoke_result_t<map_t const&, input_primitive_type> >;
     map_t map;
@@ -326,7 +333,7 @@ namespace expressions {
   constexpr trivial_reducer_t trivial_reducer{};
   template<class reducer_t, class primitive_type>
   concept reduction_rule = requires(reducer_t const& r, primitive_type v, std::vector<expression<primitive_type> > vec) {
-    {r(std::move(v), std::move(vec))} -> std::convertible_to<reduction_result<primitive_type> >;
+    /*{*/r(std::move(v), std::move(vec));//} -> std::convertible_to<reduction_result<primitive_type> >;
   };
   template<class primitive_type, reduction_rule<primitive_type> reducer_t>
   beta_free_expression<primitive_type> reduce_head_with_reducer(reducer_t const& reducer, expression<primitive_type> e, std::vector<expression<primitive_type> > rev_args = {}) {

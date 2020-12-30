@@ -1,11 +1,12 @@
+#ifndef LIFTED_STATE_MACHINE_HPP
+#define LIFTED_STATE_MACHINE_HPP
+
 #include "template_utility.hpp"
 #include "coro_base.hpp"
 #include <variant>
 #include <iostream>
 /*
 Represents coroutines that can co_await, co_yield, or co_return some (finite) set of possibilities and then be resumed given appropriate further input.
-
-
 */
 
 
@@ -166,9 +167,9 @@ namespace lifted_state_machine {
       friend promise_type;
     public:
       template<class T = void, class F> requires requires(F&& f, resume_handle<T> resumer) {
-        {std::forward<F>(f)(std::move(resumer))} /* noexcept */ -> std::convertible_to<typename definition_t::paused_type>;
+        std::forward<F>(f)(std::move(resumer));//} /* noexcept */ -> std::convertible_to<typename definition_t::paused_type>;
       }
-      auto resuming_result(F&& f) && {
+      auto suspending_result(F&& f) && {
         auto handle = resume_handle<T>{coro::unique_coro_handle{promise->get_coro_handle()}};
         promise->set_return_value(false, std::forward<F>(f)(std::move(handle)));
         if constexpr(std::is_void_v<T>) {
@@ -184,10 +185,10 @@ namespace lifted_state_machine {
       }
       template<class T>
       auto immediate_result(T&& value) {
-        return immediate_awaiter<T>(std::forward<T>(value));
+        return immediate_awaiter<std::decay_t<T> >{std::forward<T>(value)};
       }
       auto immediate_result(){
-        return immediate_awaiter<void>();
+        return immediate_awaiter<void>{};
       }
     };
     class returning_handle {
@@ -216,3 +217,5 @@ template<class definition_t, class... Args>
 struct std::coroutine_traits<lifted_state_machine::coro_type<definition_t>, Args...> {
   using promise_type = typename lifted_state_machine::coro_base<definition_t>::promise_type;
 };
+
+#endif

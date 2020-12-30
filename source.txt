@@ -1,10 +1,24 @@
-axiom Id: T:Type -> x:T -> y:T -> Type;
-axiom refl: T:Type -> x:T -> Id T x x;
+axiom zero;
+axiom succ;
 
-axiom path_induct:    T:Type
-                  ->  P:(x:T -> y:T -> p:Id T x y -> Type)
-                  ->  d:(x:T -> P x x (refl T x))
-                  ->  x:T -> y:T -> p:Id T x y -> P x y p;
+axiom cons;
+axiom nil;
 
-rule(T: Type, P:(x:T -> y:T -> p:Id T x y -> Type), d:(x:T -> P x x (refl T x)), x:T)
-  path_induct T P d x x (refl T x) := d x;
+declare at;
+rule at zero (cons head tail) := head;
+rule at (succ n) (cons head tail) := at n tail;
+
+axiom apply;
+axiom primitive;
+axiom lambda;
+axiom argument;
+
+declare execute;
+rule execute ctx (apply f x) := (execute ctx f) (execute ctx x);
+rule execute ctx (primitive v) := v;
+rule execute ctx (argument n) := at n ctx;
+rule execute ctx (lambda b) := \v.(execute (cons v ctx) b);
+
+execute nil (apply (apply (primitive execute) (primitive nil)) (apply (primitive lambda) (apply (primitive argument) (primitive zero))));
+
+execute nil (lambda (lambda (lambda (argument (succ (succ zero))))));

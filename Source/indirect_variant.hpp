@@ -4,7 +4,7 @@
 #include <array>
 #include <memory>
 #include <utility>
-#include "TemplateUtility.h"
+#include "template_utility.hpp"
 #include <functional>
 #include <cassert>
 
@@ -83,15 +83,27 @@ public:
         internal_visit<void>([]<std::size_t i>(derived<i>* ptr){ ptr->_destroy(); });
     }
     template<class Visitor, class Ret = std::common_type_t<std::invoke_result_t<Visitor, Types&>... > >
-    Ret visit_upon(Visitor&& visitor){
+    Ret visit_upon(Visitor&& visitor) &{
         return internal_visit<Ret>([&visitor]<std::size_t i>(derived<i>* d) -> Ret{
             return visitor(d->u.value);
         });
     }
     template<class Visitor, class Ret = std::common_type_t<std::invoke_result_t<Visitor, Types const&>... > >
-    Ret visit_upon(Visitor&& visitor) const{
+    Ret visit_upon(Visitor&& visitor) const& {
         return internal_visit<Ret>([&visitor]<std::size_t i>(derived<i> const* d) -> Ret{
             return visitor(d->u.value);
+        });
+    }
+    template<class Visitor, class Ret = std::common_type_t<std::invoke_result_t<Visitor, Types&&>... > >
+    Ret visit_upon(Visitor&& visitor) &&{
+        return internal_visit<Ret>([&visitor]<std::size_t i>(derived<i>* d) -> Ret{
+            return visitor(std::move(d->u.value));
+        });
+    }
+    template<class Visitor, class Ret = std::common_type_t<std::invoke_result_t<Visitor, Types const&&>... > >
+    Ret visit_upon(Visitor&& visitor) const&&{
+        return internal_visit<Ret>([&visitor]<std::size_t i>(derived<i> const* d) -> Ret{
+            return visitor(std::move(d->u.value));
         });
     }
     template<class T> //requires appears_once<T>
@@ -117,6 +129,38 @@ public:
     nth_type<i> const& get() const{
         assert(index == i);
         return ((derived<i>*)this)->u.value;
+    }
+    template<std::size_t i>
+    nth_type<i>* get_if() {
+      if(index == i) {
+        return &get<i>();
+      } else {
+        return nullptr;
+      }
+    }
+    template<std::size_t i>
+    nth_type<i> const* get_if() const {
+      if(index == i) {
+        return &get<i>();
+      } else {
+        return nullptr;
+      }
+    }
+    template<class T>
+    T* get_if() {
+      if(holds_alternative<T>()) {
+        return &get<T>();
+      } else {
+        return nullptr;
+      }
+    }
+    template<class T>
+    T const* get_if() const {
+      if(holds_alternative<T>()) {
+        return &get<T>();
+      } else {
+        return nullptr;
+      }
     }
     heap_variant* clone() const{
         return internal_visit<heap_variant*>([]<std::size_t i>(derived<i> const* d){
@@ -156,13 +200,17 @@ public:
     indirect_variant& operator=(indirect_variant const& o){
         if(o.val) val.reset(o.val->clone());
         else val.reset();
+        return *this;
     }
     heap_variant<Types...>* get(){ return val.get(); }
     heap_variant<Types...> const* get() const{ return val.get(); }
-    heap_variant<Types...>& operator*(){ return *get(); }
-    heap_variant<Types...> const& operator*() const{ return *get(); }
+    heap_variant<Types...>& operator*() & { return *get(); }
+    heap_variant<Types...> const& operator*() const& { return *get(); }
+    heap_variant<Types...>&& operator*() && { return std::move(*get()); }
+    heap_variant<Types...> const&& operator*() const&& { return std::move(*get()); }
     heap_variant<Types...>* operator->(){ return get(); }
     heap_variant<Types...> const* operator->() const{ return get(); }
+
     operator bool() const{ return val != nullptr; }
 };
 template<class... Types>
