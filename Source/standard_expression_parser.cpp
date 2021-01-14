@@ -14,6 +14,12 @@ namespace standard_parser {
           [&](std::string_view&& id) -> fold_result {
             return folded_parser_output::id_t{id};
           },
+          [&](std::pair<std::string, std::string_view> str_lit) -> fold_result {
+            return folded_parser_output::string_literal_t{ str_lit.second, std::move(str_lit.first) };
+          },
+          [&](std::pair<std::uint64_t, std::string_view> int_lit) -> fold_result {
+            return folded_parser_output::integer_literal_t{ int_lit.second, int_lit.first };
+          },
           [&](std::vector<std::variant<term_t, binop_t, left_unop_t, right_unop_t> >&& vec) -> fold_result {
             return fold_flat_expression(*this, std::move(vec));
           }
@@ -79,6 +85,10 @@ namespace standard_parser {
       co_await error_override{"expected term"};
       if(auto id = co_await optional{parse_identifier}) {
         co_return term{*id};
+      } else if(auto str_lit = co_await optional{capture{parse_escaped_string}}) {
+        co_return term{*str_lit};
+      } else if(auto int_lit = co_await optional{capture{parse_uint<std::uint64_t>}}) {
+        co_return term{*int_lit};
       } else {
         co_await tag{"("};
         co_await cut;

@@ -32,6 +32,12 @@ namespace standard_compiler {
         std::string key(id->id);
         if(!ctx.names.contains(key)) co_yield "unrecognized id " + key;
         co_return ctx.names.at(key);
+      } else if(auto* str_lit = root->get_if<folded_parser_output::string_literal_t>()) {
+        auto ptr = std::make_shared<std::string>(std::move(str_lit->value));
+        std::string_view data(*ptr);
+        co_return expressionz::standard::primitives::shared_string{std::move(ptr), data};
+      } else if(auto* int_lit = root->get_if<folded_parser_output::integer_literal_t>()) {
+        co_return int_lit->value;
       } else if(auto* binop = root->get_if<folded_parser_output::binop>()) {
         //assume it's apply.
         auto f = co_await compile_impl(binop->lhs, ctx);

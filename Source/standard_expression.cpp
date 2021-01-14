@@ -211,12 +211,10 @@ namespace expressionz::standard {
           if(!success) {
             co_return std::nullopt; //no rule recognized
           }
-        } else if(auto* i = std::get_if<std::uint64_t>(a)){
+        } else {
           std::vector<handles::expression> args_fwd;
           std::transform(args.rbegin(), args.rend(), std::back_inserter(args_fwd), [](auto& a){ return std::move(a.arg); });
-          co_return simplification_result{*i, std::move(args_fwd)};
-        } else {
-          std::terminate();
+          co_return simplification_result{*a, std::move(args_fwd)};
         }
       } else {
         //argument!
@@ -243,21 +241,27 @@ namespace expressionz::standard {
     }
   }
   namespace {
-    routine<std::monostate> simple_output_impl(expressionz::coro::handles::expression e, context const& ctx, std::ostream& o, std::size_t depth) {
+    struct output_info {
+      std::size_t depth;
+      bool parenthesize_lambda;
+      bool parenthesize_application;
+    };
+    routine<std::monostate> simple_output_impl(expressionz::coro::handles::expression e, context const& ctx, std::ostream& o, output_info info) {
       using namespace expressionz::coro;
       auto v = co_await actions::expand(e);
       if(auto* a = std::get_if<handles::apply>(&v)) {
-        o << "(";
-        co_await simple_output_impl(a->f, ctx, o, depth);
+        if(info.parenthesize_application) o << "(";
+        co_await simple_output_impl(a->f, ctx, o, {info.depth, true, false});
         o << " ";
-        co_await simple_output_impl(a->x, ctx, o, depth);
-        o << ")";
+        co_await simple_output_impl(a->x, ctx, o, {info.depth, !info.parenthesize_application && info.parenthesize_lambda, true});
+        if(info.parenthesize_application) o << ")";
       } else if(auto* a = std::get_if<handles::abstract>(&v)) {
-        o << "(\\" << (depth + 1) << " => ";
-        co_await simple_output_impl(a->body, ctx, o, depth + 1);
-        o << ")";
+        if(info.parenthesize_lambda) o << "(\\";
+        o << (info.depth + 1) << " => ";
+        co_await simple_output_impl(a->body, ctx, o, {info.depth + 1, false, false});
+        if(info.parenthesize_lambda) o << ")";
       } else if(auto* a = std::get_if<handles::argument>(&v)) {
-        o << "$" << long(depth - a->index);
+        o << "$" << long(info.depth - a->index);
       } else if(auto* a = std::get_if<primitives::any>(&v)) {
         if(auto* axiom = std::get_if<primitives::axiom>(a)) {
           o << ctx.axioms[axiom->index].name;
@@ -265,6 +269,8 @@ namespace expressionz::standard {
           o << ctx.declarations[declaration->index].name;
         } else if(auto* i = std::get_if<std::uint64_t>(a)) {
           o << *i;
+        } else if(auto* s = std::get_if<primitives::shared_string>(a)) {
+          o << "\"" << s->data << "\"";
         } else {
           std::terminate();
         }
@@ -275,7 +281,7 @@ namespace expressionz::standard {
     }
   }
   routine<std::monostate> simple_output(expressionz::coro::handles::expression e, context const& ctx, std::ostream& o) {
-    co_yield simple_output_impl(std::move(e), ctx, o, 0);
+    co_yield simple_output_impl(std::move(e), ctx, o, {0, false, false});
     std::terminate(); //doesn't resume, but compiler doesn't know
   }
 

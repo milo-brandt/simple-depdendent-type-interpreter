@@ -104,11 +104,13 @@ namespace utility{
         struct member_fn_helper<Ret(C::*)(Args...)>{
             using ret_type = Ret;
             using arg_list = class_list<Args...>;
+            using raw_type = Ret(*)(Args...);
         };
         template<class Ret, class C, class... Args>
         struct member_fn_helper<Ret(C::*)(Args...) const>{
             using ret_type = Ret;
             using arg_list = class_list<Args...>;
+            using raw_type = Ret(*)(Args...);
         };
         template<class T>
         struct invoke_signature_finder : member_fn_helper<decltype(&T::operator())>{};
@@ -133,9 +135,16 @@ namespace utility{
 
     template<class Ret, class... Args>
     using function_pointer_t = Ret(*)(Args...);
-    template<class Ret, class... Args>
-    function_pointer_t<Ret, Args...> to_raw_function(Ret(*f)(Args...)){
-      return f;
+    template<class T>
+    auto to_raw_function(T&& value) {
+      if constexpr(std::is_function_v<std::remove_reference_t<T> >) {
+        return &value;
+      } else if constexpr(std::is_pointer_v<std::remove_reference_t<T> >) {
+        static_assert(std::is_function_v<std::remove_pointer_t<std::remove_reference_t<T> > >);
+        return value;
+      } else {
+        return (typename invoke_signature_of<std::decay_t<T> >::raw_type)value;
+      }
     }
 
     namespace detail{

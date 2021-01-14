@@ -20,16 +20,24 @@ namespace standard_parser {
     enum right_unop{};
     struct term {
       using compound = std::vector<std::variant<term, binop, left_unop, right_unop> >;
-      indirect_variant<std::string_view, compound> data;
+      indirect_variant<std::string_view, std::pair<std::string, std::string_view>, std::pair<std::uint64_t, std::string_view>, compound> data;
     };
   }
   namespace folded_parser_output {
     struct id_t {
       std::string_view id;
     };
+    struct string_literal_t {
+      std::string_view where;
+      std::string value;
+    };
+    struct integer_literal_t {
+      std::string_view where;
+      std::uint64_t value;
+    };
     struct binop;
     struct abstraction;
-    using any = indirect_variant<id_t, binop, abstraction>;
+    using any = indirect_variant<id_t, string_literal_t, integer_literal_t, binop, abstraction>;
     struct binop {
       flat_parser_output::binop index;
       any lhs;

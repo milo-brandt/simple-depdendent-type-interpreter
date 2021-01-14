@@ -1,3 +1,6 @@
+#ifndef PARSER_UTILITY_HPP
+#define PARSER_UTILITY_HPP
+
 #include <string>
 #include <vector>
 #include <variant>
@@ -107,7 +110,6 @@ namespace parse {
     static auto on_await(fail f, state& state, typename coro_base::waiting_handle&& handle) {
       return std::move(handle).template destroying_result(parse_result::failed{state.position, std::move(f.reason)});
     }
-
     template<parser P, class V = parser_return_type<P> >
     static coro::variant_awaiter<V, lifted_state_machine::immediate_awaiter<V>, lifted_state_machine::await_with_no_resume<V> >
       on_await(P&& routine, state& state, typename coro_base::waiting_handle&& handle) {
@@ -219,7 +221,41 @@ namespace parse {
   constexpr auto digit = char_predicate{[](char c){ return std::isdigit(c); }};
   constexpr auto id_start = char_predicate{[](char c){ return c == '_' || std::isalpha(c); }};
   constexpr auto id_tail = char_predicate{[](char c){ return c == '_' || std::isalnum(c); }};
-
+  constexpr auto parse_escaped_string = [](std::string_view str) -> parse_result::any<std::string> {
+    std::string_view outer = str;
+    if(str.starts_with("\"")) {
+      std::string ret;
+      str.remove_prefix(1);
+      while(true) {
+        auto next_end_quote = str.find("\"");
+        if(next_end_quote == std::string_view::npos) {
+          return parse_result::failed{outer, "unterminated string literal"};
+        }
+        auto next_escape = str.find("\\");
+        if(next_escape == std::string_view::npos || next_escape > next_end_quote) {
+          ret += str.substr(0, next_end_quote);
+          str.remove_prefix(next_end_quote + 1);
+          return parse_result::success{str, std::move(ret)};
+        } else {
+          //note - next_escape + 1 is in range because next_escape < next_end_quote.
+          ret += str.substr(0, next_escape);
+          char control = str[next_escape + 1];
+          str.remove_prefix(next_escape); //advance to control sequence
+          if(control == 'n') { ret += "\n"; }
+          else if(control == 't'){ ret += "\t"; }
+          else if(control == '"'){ ret += "\""; }
+          else if(control == '\''){ ret += "'"; }
+          else if(control == '\\'){ ret += "\\"; }
+          else {
+            return parse_result::failed{str, "unrecognized control sequence \\" + std::string(control, 1)};
+          }
+          str.remove_prefix(2); //advance *past* control sequence
+        }
+      }
+    } else {
+      return parse_result::not_matched{str, "expected string literal"};
+    }
+  };
   template<parser P, class R = parser_return_type<P> >
   parsing_routine<std::vector<R> > repeat(P&& parser) {
     std::vector<R> ret;
@@ -263,3 +299,5 @@ namespace parse {
     return parse_uint_routine<T>()(str);
   };
 }
+
+#endif
