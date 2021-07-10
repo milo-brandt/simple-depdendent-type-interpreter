@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+.interactive_element {
+  cursor: pointer;
+  background-color: #E0FFFF;
+}
+.interactive_element:hover {
+  background-color: #FFFF00;
+}
+#output {
+  font-size: 20px;
+}
+#preview {
+  color: gray;
+}
+body {
+  background-color:black;
+  color: white;
+}
+
+</style>
+</head>
+<body>
+<input type="number" id="value" name="value" min="1" max="40" step="1" value="17">
+<button onclick="start()">Initialize</button><br>
+
+<span id="output">Press a button...</span><br>
+<span id="preview"></span>
+
+<script>
+var preview_element = document.getElementById("preview");
+var output_element = document.getElementById("output");
+
+function generate_styled_text(text, styles) {
+  //styles should a be a list of form {start: ?, end: ?, color: ?}
+  //smallest elements take priority
+  styles.sort((x, y) => x.start > y.start || x.start == y.start && x.end < y.end);
+  //transform list of styles into start/end events
+  let events = [];
+  {
+    let stack = [];
+    let i = 0;
+    while(true) {
+      let style = null;
+      if(i < styles.length) {
+        style = styles[i];
+      }
+      while(stack.length > 0) {
+        let next_end = stack[stack.length - 1];
+        if(style === null || next_end < style.start) {
+          events.push({
+            position: next_end,
+            kind: "end"
+          });
+          stack.pop();
+        } else {
+          break;
+        }
+      }
+      if(style === null) {
+        break;
+      } else {
+        if(stack.length > 0 && stack[stack.length - 1] < style.end) {
+          throw new Error("Styles are interleaved!");
+        }
+        events.push({
+          position: style.start,
+          kind: "start",
+          color: style.color,
+          id: style.id
+        });
+        stack.push(style.end);
+        i = i + 1;
+      }
+    }
+  }
+
+  let output = "";
+  let last_pointer = 0;
+  events.forEach(event => {
+    output += text.substr(last_pointer, event.position - last_pointer);
+    last_pointer = event.position;
+    if(event.kind == "end") {
+      output += "</span>"
+    } else {
+      output += "<span";
+      if(event.color) {
+        output += " style=\"background-color:" + event.color + "\"";
+      }
+      if(event.id) {
+        output += " id=\"" + event.id + "\"";
+      }
+      output += ">";
+    }
+  });
+  output += text.substr(last_pointer);
+  return output;
+}
+
+var last_value_received = null
+
+let trigger_color = "#555500";
+let highlight_color = "#005555";
+
+function draw_with_extra(info, extra_events, callbacks) {
+  let events = extra_events;
+  let i = 0;
+  info.matches.forEach(match => {
+    events.push({
+      start: match.trigger.start,
+      end: match.trigger.end,
+      id: "element" + i,
+      color: trigger_color
+    });
+    i += 1;
+  });
+  output_element.innerHTML = generate_styled_text(info.string, events);
+  var valid = true;
+  for(let j = 0; j < i; j++) {
+    let index = j;
+    let element = document.getElementById("element" + index);
+    element.onmouseover = function() {
+      if(valid) {
+        callbacks.onselect(index);
+      }
+    }
+    element.onmouseout = function() {
+      if(valid) {
+        callbacks.ondeselect();
+      }
+    }
+    element.onclick = function() {
+      if(valid) {
+        callbacks.onclick(index);
+      }
+      return false;
+    }
+  }
+  return {
+    invalidate: function() { valid = false; }
+  };
+}
+function draw_basic(info, callbacks) {
+  return draw_with_extra(info, [], callbacks);
+}
+function draw_with_selection(info, index, callbacks) {
+  let match = info.matches[index];
+  let extra_events = [];
+  extra_events.push({
+    start: match.area.start,
+    end: match.area.end,
+    color: highlight_color
+  });
+  return draw_with_extra(info, extra_events, callbacks);
+}
+function setup_state(info) {
+  var valid = true;
+  var last = null;
+  var selected = null
+  var callbacks = {
+    onselect: function(index) {
+      if(selected !== index) {
+        console.log("Selecting!", index);
+        selected = index;
+        last.invalidate();
+        last = draw_with_selection(info, index, callbacks);
+      }
+    },
+    ondeselect: function() {
+      if(selected !== null) {
+        console.log("Unselecting!");
+        selected = null;
+        last.invalidate();
+        last = draw_basic(info, callbacks);
+      }
+    },
+    onclick: function(index) {
+      query({
+        action: "simplify",
+        index: index
+      });
+    }
+  };
+  last = draw_basic(info, callbacks);
+  return {
+    invalidate: function() {
+      if(last !== null){
+        last.invalidate();
+      }
+    }
+  };
+}
+
+
+var last_state = null;
+
+function update(data) {
+  last_value_received = data;
+  if(data.ok) {
+    if(last_state !== null) {
+      last_state.invalidate();
+    }
+    last_state = setup_state(data.state);
+  } else {
+    document.getElementById("output").innerHTML = data.error;
+  }
+}
+function update_error(reason) {
+  document.getElementById("output").innerHTML = reason;
+}
+
+var session_id = null
+fetch('/query', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    action: "new_session"
+  })
+}).then(response => response.json()).then(data => session_id = data.session_id).catch(update_error);
+
+function query(data) {
+  data["session_id"] = session_id
+  return fetch('/query', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  }).then(response => response.json()).then(update).catch(update_error);
+}
+
+function start() {
+  var v = Number(document.getElementById("value").value);
+  query({
+    action: "initialize"
+  })
+}
+
+</script>
+</body>
+</html>

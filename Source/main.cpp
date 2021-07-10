@@ -1,7 +1,4 @@
-#include <iostream>
-#include <variant>
-#include <memory>
-#include <vector>
+#include "WebInterface/web_interface.hpp"
 
 /*
 Simple example with...
@@ -403,66 +400,10 @@ int main(int, char**) {
 }
 */
 
-#include <httpserver.hpp>
-#include <json.hpp>
-#include <sstream>
-
-using namespace httpserver;
-
-struct SessionData {
-  long accumulator = 0;
-};
-SessionData data; //danger!
-
-class landing_page : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request& request) {
-      return std::shared_ptr<http_response>(new file_response("Resources/index.html", 200, "text/html"));
-    }
-};
-class query_handler : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request& request) {
-      auto content = request.get_content();
-      std::cout << "Received content: " << content << "\n";
-      auto j = nlohmann::json::parse(content);
-      auto action = j["action"].get<std::string>();
-      if(action == "add") {
-        auto value = j["amount"].get<long>();
-        data.accumulator += value;
-      } else if(action == "reset") {
-        data.accumulator = 0;
-      } else {
-        nlohmann::json response{
-          {"ok", false},
-          {"error", "Unrecognized action: \"" + action + "\""}
-        };
-        return std::shared_ptr<http_response>(new string_response(response.dump()));
-      }
-      nlohmann::json response{
-        {"ok", true},
-        {"value", data.accumulator}
-      };
-      return std::shared_ptr<http_response>(new string_response(response.dump()));
-    }
-};
+#include <iostream>
 
 int main(int argc, char** argv) {
-    webserver ws = create_webserver(8080)
-      .log_access([](std::string const& page) { std::cout << "Accessed: " << page << "\n"; })
-      .log_error([](std::string const& error) { std::cout << "Error: " << error << "\n"; });
-    landing_page hwr;
-    query_handler queries;
-    ws.register_resource("/", &hwr);
-    ws.register_resource("/query", &queries);
-    ws.start();
-    std::cout << "Web server started...\n";
-    while(true) {
-      std::string x;
-      std::cin >> x;
-      if(x == "q") break;
-    }
-    std::cout << "Stopping webserver...\n";
-    ws.sweet_kill();
-    return 0;
+
+//Web::run_server();
+
 }

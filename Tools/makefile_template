@@ -21,10 +21,10 @@ debug: Debug/program
 	gdb Debug/program
 
 Build/program: {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -O3 -o Build/program
+	$(compiler_cmd)  {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O3 -o Build/program
 
 Debug/program: {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -O0 -ggdb -o Debug/program
+	$(compiler_cmd)  {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O0 -ggdb -o Debug/program
 
 Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %}
 	$(compiler_cmd)  {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -O3 -o Build/test_program

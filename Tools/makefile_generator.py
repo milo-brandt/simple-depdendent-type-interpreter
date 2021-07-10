@@ -27,12 +27,8 @@ jinja_env = Environment(
 source_files = [os.path.splitext(os.path.relpath(file_path, "../Source"))[0] for folder in os.walk("../Source") for file_path in glob(os.path.join(folder[0],'*.cpp'))];
 test_files = source_files.copy();
 test_files.remove("main");
+test_files = [filename for filename in source_files if filename != 'main' and os.path.commonpath(['WebInterface',filename]) != 'WebInterface'];
 non_test_files = [filename for filename in source_files if os.path.commonpath(['Tests',filename]) != 'Tests'];
-
-
-#for f in source_files:
-#    print(f)
-#    print(getIncludedFileList(f))
 
 makefile = jinja_env.get_template('makefile_template').render(source_files = source_files, test_files = test_files, non_test_files = non_test_files, getIncludedFileList = getIncludedFileList);
 open("../Makefile","w").write(makefile);

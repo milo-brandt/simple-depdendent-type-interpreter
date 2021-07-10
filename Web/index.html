@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+.CodeMirror {
+  font-family: Arial, monospace;
+  font-size: 18px;
+}
+</style>
+</head>
+<body>
+
+<script src="resources/codemirror/lib/codemirror.js"></script>
+<link rel="stylesheet" href="resources/codemirror/lib/codemirror.css">
+<script src="resources/main.js"></script>
+
+<script>
+  var myCodeMirror = CodeMirror(document.body, {
+  value: "function myScript(){return 100;}\n",
+  extraKeys:
+    {
+      'Shift-Enter': (cm) => {
+        console.log(cm.getValue());
+      },
+      'Ctrl-S': (cm) => {
+        console.log("Want save.");
+        console.log(cm.getValue());
+      }
+    }
+  });
+</script>
+</body>
+</html>
