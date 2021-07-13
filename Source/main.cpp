@@ -1,5 +1,7 @@
 #include "WebInterface/web_interface.hpp"
-#include "Parser/parser_tree.hpp"
+#include "ExpressionParser/parser_tree.hpp"
+
+#include "ExpressionParser/expression_parser.hpp"
 
 /*
 Simple example with...
@@ -405,36 +407,50 @@ int main(int, char**) {
 #include <iostream>
 #include "Utility/overloaded.hpp"
 
-using namespace parser::located_output;
+using namespace parser;
+
+void print_tree(expression_parser::locator::Tree const& tree) {
+  tree.visit(mdb::overloaded{
+    [](expression_parser::locator::Apply const& apply) {
+      std::cout << "Apply at: " << apply.position << "\n";
+      print_tree(apply.lhs);
+      print_tree(apply.rhs);
+    },
+    [](expression_parser::locator::Lambda const& lambda) {
+      std::cout << "Lambda at: " << lambda.position << "\n";
+      print_tree(lambda.body);
+      if(lambda.type) print_tree(*lambda.type);
+    },
+    [](expression_parser::locator::Arrow const& arrow) {
+      std::cout << "Arrow at: " << arrow.position << "\n";
+      print_tree(arrow.domain);
+      print_tree(arrow.codomain);
+    },
+    [](expression_parser::locator::Identifier const& identifier) {
+      std::cout << "Identifier at: " << identifier.position << "\n";
+    },
+    [](expression_parser::locator::Hole const& hole) {
+      std::cout << "Hole at: " << hole.position << "\n";
+    }
+  });
+}
 
 int main(int argc, char** argv) {
 
-  Tree t = Apply{
-    Apply{
-      Hole{},
-      Identifier{"hey-yo"}
-    },
-    Hole{}
-  };
+  while(true) {
+    std::string line;
+    std::getline(std::cin, line);
+    if(line == "q") return 0;
 
-  parser::output::match::Apply matcher{
-    .lhs = parser::output::match::Apply{
-      .lhs = parser::output::match::Hole{},
-      .rhs = parser::output::full_match::Identifier{
-        .id = parser::output::match::Predicate{[](std::string_view const& str) {
-          return str.starts_with("hey");
-        }}
-      }
-    },
-    .rhs = parser::output::match::Any{}
-  };
+    std::string_view source = line;
 
-  auto x = *matcher.try_match(t.output);
+    auto x = expression_parser::parser::expression(source);
 
-  x.lhs.rhs.id = "ho";
-
-
-  std::cout << "Hi" << "\n";
-//Web::run_server();
-
+    if(auto* error = parser::get_if_error(&x)) {
+      std::cout << "Error: " << error->error << "\nAt char: " << (error->position.begin() - (std::string_view(source)).begin()) << "\n";
+    } else {
+      auto& success = parser::get_success(x);
+      print_tree(success.value.locator);
+    }
+  }
 }

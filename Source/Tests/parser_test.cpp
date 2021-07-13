@@ -202,5 +202,3 @@ TEST_CASE("Parametric parsers work") {
   REQUIRE_FALSE(holds_success(parametric::bad_repeat(symbol("(("))("(((!")));
   REQUIRE_FALSE(holds_success(parametric::bad_repeat(symbol("))"))(")))!")));
 }
-
-#include "../Parser/expression_parser.hpp"

@@ -1,6 +1,6 @@
 {% include "path_bind_loose.hpp.template" %}
 {% macro lookup(ref_kind, pointer_kind) %}
-  inline {{class_name}}{{ref_kind}} lookup({{class_name}}{{ref_kind}} in, {{path.class_name}} const& path) {
+  inline {{class_name}}{{ref_kind}} lookup({{class_name}}{{ref_kind}} in, {{path_class}} const& path) {
     {{class_name}}{{pointer_kind}} ret = &in;
     for(auto step : path.steps) {
       ret = ret->visit([&]<class T>(T{{ref_kind}} part) -> {{class_name}}{{pointer_kind}} {

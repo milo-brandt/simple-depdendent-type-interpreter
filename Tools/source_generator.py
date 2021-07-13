@@ -75,9 +75,7 @@ def process_tree(spec, tree_name):
         "base_namespace": namespace,
         "components": components,
         "class_name": class_name,
-        "path": {
-            "class_name": "parser::path::Path"
-        }
+        "path_class": tree.get('path')
     }
 
 def destructuring_access(str, member_name):
@@ -164,7 +162,7 @@ def process_all(path_to_file):
     for filename in specification['files']:
         output = process_file(specification, filename)
         true_filename = os.path.dirname(path_to_file) + "/" + filename
-        if filename[:5] == "this.":
+        if filename[:4] == "this":
             true_filename = os.path.splitext(path_to_file)[0] + filename[4:]
         with open(true_filename, "w") as file:
             file.write(output)

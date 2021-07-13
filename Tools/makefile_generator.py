@@ -6,13 +6,19 @@ import re
 
 @lru_cache
 def getIncludedFileListImpl(filename):
+    if not os.path.isfile(filename):
+        raise RuntimeError("No file at " + filename)
     str = open(filename).read()
     requirements = {os.path.normpath(os.path.join(os.path.dirname(filename), m.group(1))) for m in re.finditer("#include \"([^\"]+)\"", str)}
     output = requirements.copy()
     [root, ext] = os.path.splitext(filename);
     if ext != ".inl":
         for r in requirements: #set comprehension caused caching to fail?
-            output = output.union(getIncludedFileListImpl(r))
+            try:
+                output = output.union(getIncludedFileListImpl(r))
+            except RuntimeError as err:
+                print("Failed while parsing file " + filename)
+                raise
     #inductive_requirements = {getIncludedFileList(r) for r in requirements}
     return output#.union(inductive_requirements)
 

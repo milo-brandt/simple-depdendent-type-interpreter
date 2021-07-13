@@ -22,11 +22,12 @@ specification = {
         }
     },
     "paths": {
-        "parser::path::Path": "parser_shape"
+        "expression_parser::path::Path": "parser_shape"
     },
     "trees": {
-        "parser::output::Tree": {
+        "expression_parser::output::Tree": {
             "shape": "parser_shape",
+            "path": "expression_parser::path::Path",
             "data": {
                 "Apply": [],
                 "Lambda": [
@@ -41,8 +42,9 @@ specification = {
                 ]
             }
         },
-        "parser::locator::Tree": {
+        "expression_parser::locator::Tree": {
             "shape": "parser_shape",
+            "path": "expression_parser::path::Path",
             "data": {
                 "Apply": [
                     ("position", "std::string_view")
@@ -63,17 +65,17 @@ specification = {
         }
     },
     "multitrees": {
-        "parser::located_output::Tree": [
-            ("parser::output::Tree", "output"),
-            ("parser::locator::Tree", "locator")
+        "expression_parser::located_output::Tree": [
+            ("expression_parser::output::Tree", "output"),
+            ("expression_parser::locator::Tree", "locator")
         ]
     },
     "files": {
-        "this.hpp": [
-            "parser::path::Path",
-            "parser::output::Tree",
-            "parser::locator::Tree",
-            "parser::located_output::Tree"
+        "this_impl.hpp": [
+            "expression_parser::path::Path",
+            "expression_parser::output::Tree",
+            "expression_parser::locator::Tree",
+            "expression_parser::located_output::Tree"
         ]
     }
 }

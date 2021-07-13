@@ -131,6 +131,7 @@ namespace parser {
     return ParseSuccess{empty, str};
   };
   namespace detail {
+    template<class Call, class... Args> decltype(auto) unpack_call(Call&& call, Empty arg, Args&&... args);
     template<class Call, class First, class Second, class... Args> decltype(auto) unpack_call(Call&& call, std::pair<First, Second>&& pair, Args&&... args);
     template<class Call, class Arg, class... Args> decltype(auto) unpack_call(Call&& call, Arg&& arg, Args&&... args);
     template<class Call> decltype(auto) unpack_call(Call&& call);
@@ -139,6 +140,9 @@ namespace parser {
       return std::apply([&](TupleArgs&&... tuple_args) {
         return unpack_call(std::forward<Call>(call), std::forward<TupleArgs>(tuple_args)..., std::forward<Args>(args)...);
       }, std::move(tuple));
+    }
+    template<class Call, class... Args> decltype(auto) unpack_call(Call&& call, Empty arg, Args&&... args) {
+      return unpack_call(call, std::forward<Args>(args)...);
     }
     template<class Call, class First, class Second, class... Args>
     decltype(auto) unpack_call(Call&& call, std::pair<First, Second>&& pair, Args&&... args) {
@@ -173,13 +177,18 @@ namespace parser {
     };
   }
   template<class Parser>
-  constexpr auto captured(Parser parser) {
+  constexpr auto capture(Parser parser) {
     using Type = ParserTypeOf<Parser>;
-    return [parser](std::string_view str) -> ParseResult<std::pair<Type, std::string_view> > {
+    using OutType = std::conditional_t<std::is_same_v<Type, Empty>, std::string_view, std::pair<Type, std::string_view> >;
+    return [parser](std::string_view str) -> ParseResult<OutType> {
       auto r = parser(str);
       if(auto* success = get_if_success(&r)) {
         std::string_view range{str.begin(), success->remaining.begin()};
-        return ParseSuccess{std::make_pair(std::move(success->value), range), success->remaining};
+        if constexpr(std::is_same_v<Type, Empty>) {
+          return ParseSuccess{range, success->remaining};
+        } else {
+          return ParseSuccess{std::make_pair(std::move(success->value), range), success->remaining};
+        }
       } else {
         return std::move(get_error(r));
       }
@@ -438,13 +447,25 @@ namespace parser {
     );
   }
   constexpr auto loose_symbol(const char* sym) {
-    return sequence(whitespace, symbol(sym));
+    return sequence(maybe_whitespace, symbol(sym));
   }
   template<class Parser>
   constexpr auto loose_capture(Parser parser) {
-    return sequence(whitespace, capture(parser));
+    return sequence(maybe_whitespace, capture(parser));
+  }
+  template<class Parser>
+  constexpr auto capture_only(Parser parser) {
+    return capture(no_result(parser));
+  }
+  template<class Parser>
+  constexpr auto loosen(Parser parser) {
+    return sequence(maybe_whitespace, parser);
   }
 
+  constexpr auto identifier = capture_only(sequence(
+    char_predicate([](char c) { return c == '_' || std::isalpha(c); }),
+    zero_or_more(char_predicate([](char c) { return c == '_' || std::isalnum(c); }))
+  ));
   /*
 
   */
