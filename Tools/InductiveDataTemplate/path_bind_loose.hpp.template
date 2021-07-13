@@ -1,20 +1,22 @@
 {% for component in components %}
 {%- for member_type in component.base_member_types %}
-inline void path_append({{path_class}}& path, {{member_type}} {{component.name}}::* member) {
+inline std::uint64_t path_segment_of({{member_type}} {{component.name}}::* member) {
   {%- for member in component.members %}
   {%- if member.type == member_type %}
-  if(member == &{{component.name}}::{{member.name}}) {
-    path.steps.push_back({{ loop.index0 }});
-    return;
-  }
+  if(member == &{{component.name}}::{{member.name}}) return {{ loop.index0 }};
   {%- endif %}
   {%- endfor %}
   std::terminate(); //unreachable
 }
 {%- endfor %}
 {%- endfor %}
-template<class T1, class T2, class... Ts>
-inline void path_append({{path_class}}& path, T1&& t1, T2&& t2, Ts&&... ts) {
-  path_append(path, std::forward<T1>(t1));
-  path_append(path, std::forward<T2>(t2), std::forward<Ts>(ts)...);
+template<class... Ts>
+inline void path_append({{path_class}}& path, Ts&&... ts) {
+  (path.steps.push_back(path_segment_of(ts)) , ...);
+}
+template<class... Ts>
+inline {{path_class}} path_of(Ts&&... ts) {
+  {{path_class}} ret;
+  path_append(ret, std::forward<Ts>(ts)...);
+  return ret;
 }

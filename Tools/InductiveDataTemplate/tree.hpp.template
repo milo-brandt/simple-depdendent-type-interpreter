@@ -77,7 +77,7 @@ namespace {{base_namespace}} {
 		return std::visit(std::forward<Visitor>(visitor), std::move(data->data));
 	}
 
-{% if path -%}
+{% if path_class -%}
 	{%- include "path_bind.hpp.template" -%}
 	{%- endif %}
 {% if not no_match %}

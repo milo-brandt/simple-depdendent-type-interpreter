@@ -31,14 +31,6 @@ def datatype_for_base(str, tree_name):
     else:
         raise RuntimeError("Unrecognized base kind: " + str)
 
-def path_access_for_base(str, member_name):
-    if str == 'Self':
-        return lambda part: "&" + part + "." + member_name
-    elif str == 'OptionalSelf':
-        return lambda part: "&*" + part + "." + member_name
-    else:
-        raise RuntimeError("Unrecognized base kind: " + str)
-
 def process_path(shape, path_name):
     (class_name, namespace) = get_name_and_namespace(path_name)
     return {
@@ -58,8 +50,8 @@ def process_tree(spec, tree_name):
     for component_name, base_data in shape['components'].items():
         base_members = [{
             "name": name,
+            "kind": base_type,
             "type": datatype_for_base(base_type, class_name),
-            "part_access": path_access_for_base(base_type, name)
         } for (name, base_type) in base_data]
         extra_members = [{"name": name, "type": type} for (name, type) in data[component_name]]
         base_member_types = list(set([datatype_for_base(base_type, class_name) for (name, base_type) in base_data]))
@@ -78,14 +70,6 @@ def process_tree(spec, tree_name):
         "path_class": tree.get('path')
     }
 
-def destructuring_access(str, member_name):
-    if str == 'Self':
-        return lambda base, member: "std::move(" + base + "." + member + ")"
-    elif str == 'OptionalSelf':
-        return lambda base, member: "???"
-    else:
-        raise RuntimeError("Unrecognized base kind: " + str)
-
 def process_multitree(spec, multitree_name):
     shapes = spec['shapes']
     multitree = spec['multitrees'][multitree_name]
@@ -101,7 +85,6 @@ def process_multitree(spec, multitree_name):
             "name": name,
             "kind": base_type,
             "type": datatype_for_base(base_type, class_name),
-            "part_access": path_access_for_base(base_type, name)
         } for (name, base_type) in base_data]
         extra_members = {}
         for (tree_name, tree) in trees:

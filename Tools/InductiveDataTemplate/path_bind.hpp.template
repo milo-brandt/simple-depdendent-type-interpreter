@@ -1,23 +1,36 @@
 {% include "path_bind_loose.hpp.template" %}
-{% macro lookup(ref_kind, pointer_kind) %}
-  inline {{class_name}}{{ref_kind}} lookup({{class_name}}{{ref_kind}} in, {{path_class}} const& path) {
-    {{class_name}}{{pointer_kind}} ret = &in;
-    for(auto step : path.steps) {
-      ret = ret->visit([&]<class T>(T{{ref_kind}} part) -> {{class_name}}{{pointer_kind}} {
-        {%- for component in components %}
-        if constexpr(std::is_same_v<T, {{ component.name}}>) {
-          switch(step) {
-          {%- for member in component.base_members %}
-          case {{ loop.index0 }}: return {{ member.part_access("part") }};
-          {%- endfor %}
-          default: std::terminate();
-          }
-        }
+{% macro path_step(ref_kind) %}
+  inline {{class_name}}{{ref_kind}} path_step({{class_name}}{{ref_kind}} in, std::uint64_t step) {
+    return in.visit([&]<class T>(T{{ref_kind}} part) -> {{class_name}}{{ref_kind}} {
+      {%- for component in components %}
+      if constexpr(std::is_same_v<T, {{component.name}}>) {
+        switch(step) {
+        {%- for member in component.base_members %}
+        case {{ loop.index0 }}: return {% if member.kind == "Self" -%}
+          part.{{member.name}};
+        {% elif member.kind == "OptionalSelf" -%}
+          *part.{{member.name}};
+        {% else %}
+          static_assert(false, "Invalid base kind.");
+        {% endif -%}
         {%- endfor %}
-      });
-    }
-    return *ret;
+        default: std::terminate();
+        }
+      }
+      {%- endfor %}
+    });
   }
   {% endmacro %}
-  {{lookup("&","*")}}
-  {{lookup(" const&", " const*")}}
+  {%- macro path_lookup(ref_kind, ptr_kind) %}
+    inline {{class_name}}{{ref_kind}} path_lookup({{class_name}}{{ref_kind}} in, {{path_class}} const& path) {
+      auto{{ptr_kind}} ret = &in;
+      for(auto step : path.steps) {
+        ret = &path_step(*ret, step);
+      }
+      return *ret;
+    }
+    {% endmacro %}
+  {{path_step("&")}}
+  {{path_step(" const&")}}
+  {{path_lookup("&","*")}}
+  {{path_lookup(" const&"," const*")}}

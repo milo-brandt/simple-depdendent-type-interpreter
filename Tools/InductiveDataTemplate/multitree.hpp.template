@@ -42,7 +42,7 @@ namespace {{base_namespace}} {
           }
         }()
         {%- else %}
-        static_assert(false) {# This isn't reachable #}
+        static_assert(false, "Invalid base kind")
         {%- endif %}{% if not loop.last %},{% endif %}
         {%- endfor %}
         {%- for member in component.extra_members[tree.type] %}{% if loop.first %}{% if component.base_members is nonempty %},{% endif %}{% else %},{% endif %}
