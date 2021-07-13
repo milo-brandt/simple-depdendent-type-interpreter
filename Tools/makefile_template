@@ -32,6 +32,8 @@ Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endf
 Debug/test_program: {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %}
 	$(compiler_cmd)  {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -O0 -ggdb -o Debug/test_program
 
+Source/Parser/parser_tree.hpp: Source/Parser/parser_tree.py
+	python3 Tools/source_generator.py Source/Parser/parser_tree.py
 
 {% for src_file in source_files %}
 Build/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}

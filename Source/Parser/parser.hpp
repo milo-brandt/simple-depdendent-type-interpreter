@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <vector>
 #include <tuple>
+#include <optional>
 
 namespace parser {
   struct Empty{};
@@ -99,8 +100,11 @@ namespace parser {
       }
     };
   }
+
   constexpr auto symbol(const char* sym) {
-    return [sym, size = strlen(sym)](std::string_view str) -> ParseResult<Empty> {
+    std::size_t sym_len = 0;
+    while(*(sym + sym_len)) ++sym_len;
+    return [sym, size = sym_len](std::string_view str) -> ParseResult<Empty> {
       if(str.starts_with(sym)) {
         return ParseSuccess{empty, str.substr(size)};
       } else {
@@ -126,6 +130,61 @@ namespace parser {
   constexpr auto always_match = [](std::string_view str) -> ParseResult<Empty> {
     return ParseSuccess{empty, str};
   };
+  namespace detail {
+    template<class Call, class First, class Second, class... Args> decltype(auto) unpack_call(Call&& call, std::pair<First, Second>&& pair, Args&&... args);
+    template<class Call, class Arg, class... Args> decltype(auto) unpack_call(Call&& call, Arg&& arg, Args&&... args);
+    template<class Call> decltype(auto) unpack_call(Call&& call);
+    template<class Call, class... TupleArgs, class... Args>
+    decltype(auto) unpack_call(Call&& call, std::tuple<TupleArgs...>&& tuple, Args&&... args) {
+      return std::apply([&](TupleArgs&&... tuple_args) {
+        return unpack_call(std::forward<Call>(call), std::forward<TupleArgs>(tuple_args)..., std::forward<Args>(args)...);
+      }, std::move(tuple));
+    }
+    template<class Call, class First, class Second, class... Args>
+    decltype(auto) unpack_call(Call&& call, std::pair<First, Second>&& pair, Args&&... args) {
+      return unpack_call(call, std::forward<First>(pair.first), std::forward<Second>(pair.second), std::forward<Args>(args)...);
+    }
+    template<class Call, class Arg, class... Args>
+    decltype(auto) unpack_call(Call&& call, Arg&& arg, Args&&... args) {
+      return unpack_call([&]<class... Inner>(Inner&&... inner) {
+        return call(std::forward<Arg>(arg), std::forward<Inner>(inner)...);
+      }, std::forward<Args>(args)...);
+    }
+    template<class Call>
+    decltype(auto) unpack_call(Call&& call) {
+      return call();
+    }
+  }
+  template<class F>
+  constexpr auto unpacked(F map) {
+    return [map]<class... Args>(Args&&... args) -> decltype(auto) {
+      return detail::unpack_call(map, std::forward<Args>(args)...);
+    };
+  }
+  template<class Parser>
+  constexpr auto no_result(Parser parser) {
+    return [parser](std::string_view str) -> ParseResult<Empty> {
+      auto ret = parser(str);
+      if(auto* success = get_if_success(&ret)) {
+        return ParseSuccess{empty, success->remaining};
+      } else {
+        return std::move(get_error(ret));
+      }
+    };
+  }
+  template<class Parser>
+  constexpr auto captured(Parser parser) {
+    using Type = ParserTypeOf<Parser>;
+    return [parser](std::string_view str) -> ParseResult<std::pair<Type, std::string_view> > {
+      auto r = parser(str);
+      if(auto* success = get_if_success(&r)) {
+        std::string_view range{str.begin(), success->remaining.begin()};
+        return ParseSuccess{std::make_pair(std::move(success->value), range), success->remaining};
+      } else {
+        return std::move(get_error(r));
+      }
+    };
+  }
   template<class Parser, class F>
   constexpr auto map(Parser parse, F map) {
     using ParserType = ParserTypeOf<Parser>;
@@ -140,20 +199,44 @@ namespace parser {
     };
   }
   template<class Parser, class F>
-  constexpr auto map_tuple(Parser parse, F map) {
+  constexpr auto bind(Parser parse, F map) {
     using ParserType = ParserTypeOf<Parser>;
-    using Type = decltype(std::apply(map, std::declval<ParserType>()));
+    using Type = ParserTypeOf<std::invoke_result_t<F, ParserType> >;
     return [parse, map](std::string_view str) -> ParseResult<Type> {
       auto r = parse(str);
       if(auto* success = get_if_success(&r)) {
-        return ParseSuccess{std::apply(map, std::move(success->value)), success->remaining};
+        return map(std::move(success->value))(success->remaining);
       } else {
         return std::move(get_error(r));
       }
     };
   }
+  template<class Parser, class F>
+  constexpr auto bind_fold(Parser parse, F map) { //applies bind repeatedly
+    using ParserType = ParserTypeOf<Parser>;
+    using Type = ParserTypeOf<std::invoke_result_t<F, ParserType&> >;
+    static_assert(std::is_same_v<ParserType, Type>, "Bind fold requires the base parser and bind parser to have same return type.");
+    return [parse, map](std::string_view str) -> ParseResult<Type> {
+      auto r = parse(str);
+      if(auto* success = get_if_success(&r)) {
+        ParseSuccess<Type> ret = std::move(*success);
+        while(true) {
+          auto next = map(ret.value)(ret.remaining);
+          if(holds_success(next)) {
+            ret = std::move(get_success(next));
+          } else {
+            break;
+          }
+        }
+        return ret;
+      } else {
+        return std::move(get_error(r));
+      }
+    };
+  }
+
   template<class Checker, class TrueBranch, class FalseBranch>
-  constexpr auto simple_condition_branch(Checker condition, TrueBranch true_branch, FalseBranch false_branch) {
+  constexpr auto condition_branch(Checker condition, TrueBranch true_branch, FalseBranch false_branch) {
     static_assert(std::is_same_v<ParserTypeOf<TrueBranch>, ParserTypeOf<FalseBranch> >, "Branches must have same type.");
     return [condition, true_branch, false_branch](std::string_view str) {
       if(holds_success(condition(str))) {
@@ -195,23 +278,76 @@ namespace parser {
       }, choices);
     };
   }
+  template<class... Conditions, class... Actions>
+  constexpr auto branch_after(std::pair<Conditions, Actions>... args) { //avoid repeating branch statement
+    return branch(
+      std::make_pair(args.first, sequence(no_result(args.first), std::move(args.second)))...
+    );
+  }
   template<class Parser>
   constexpr auto zero_or_more(Parser parse) {
     using Type = ParserTypeOf<Parser>;
     return [parse](std::string_view str) -> ParseResult<std::vector<Type> > {
-      std::vector<Type> ret;
+      std::vector<Type> vec;
       while(true) {
         auto ret = parse(str);
         if(auto* success = get_if_success(&ret)) {
           str = success->remaining;
-          ret.push_back(std::move(success->value));
+          vec.push_back(std::move(success->value));
         } else {
-          break;
+          return ParseSuccess{std::move(vec), str};
         }
       }
-      return ret;
     };
   }
+  template<class Parser>
+  constexpr auto one_or_more(Parser parse) {
+    using Type = ParserTypeOf<Parser>;
+    return [parse](std::string_view str) -> ParseResult<std::vector<Type> > {
+      std::vector<Type> vec;
+      while(true) {
+        auto ret = parse(str);
+        if(auto* success = get_if_success(&ret)) {
+          str = success->remaining;
+          vec.push_back(std::move(success->value));
+        } else {
+          if(vec.empty()) {
+            return get_error(ret);
+          } else {
+            return ParseSuccess{std::move(vec), str};
+          }
+        }
+      }
+    };
+  }
+  template<class Parser>
+  constexpr auto optional(Parser parse) {
+    using Type = ParserTypeOf<Parser>;
+    return [parse](std::string_view str) -> ParseResult<std::optional<Type> > {
+      auto ret = parse(str);
+      if(auto* success = get_if_success(&ret)) {
+        return ParseSuccess{std::optional<Type>{std::move(success->value)}, success->remaining};
+      } else {
+        return ParseSuccess{std::optional<Type>{}, str};
+      }
+    };
+  }
+  template<class Condition, class Parser>
+  constexpr auto condition_optional(Condition condition, Parser parse) {
+    using Type = ParserTypeOf<Parser>;
+    return [condition, parse](std::string_view str) -> ParseResult<std::optional<Type> > {
+      if(holds_success(condition(str))) {
+        return parse(str);
+      } else {
+        return ParseSuccess{std::optional<Type>{}, str};
+      }
+    };
+  }
+  template<class Condition, class Parser>
+  constexpr auto condition_after_optional(Condition condition, Parser parse) {
+    return condition_optional(condition, sequence(no_result(condition), std::move(parse)));
+  }
+
   namespace detail {
     template<class T, class Finisher>
     ParseResult<T> parse_sequence(std::string_view str, Finisher&& finisher) {
@@ -276,16 +412,37 @@ namespace parser {
       }, parser_tuple);
     };
   }
+
+  constexpr auto whitespace_char = char_predicate([](char c){ return std::isspace(c); });
+  constexpr auto maybe_whitespace = no_result(zero_or_more(whitespace_char));
+  constexpr auto whitespace = no_result(one_or_more(whitespace_char));
+
+  namespace detail {
+    template<class Finisher>
+    constexpr auto build_loose_sequence(Finisher&& finisher) {
+      return finisher();
+    }
+    template<class Finisher, class Parser, class... Parsers>
+    constexpr auto build_loose_sequence(Finisher&& finisher, Parser&& parser, Parsers&&... parsers) {
+      return build_loose_sequence([&]<class... Args>(Args&&... args) {
+        return finisher(maybe_whitespace, std::forward<Parser>(parser), std::forward<Args>(args)...);
+      }, std::forward<Parsers>(parsers)...);
+    }
+  }
+  template<class Parser, class... Parsers> //interleaves maybe_whitespace in between everything
+  constexpr auto loose_sequence(Parser parser, Parsers... parsers) {
+    return detail::build_loose_sequence(
+      [&parser]<class... Args>(Args&&... args) {
+        return sequence(std::move(parser), std::forward<Args>(args)...);
+      }, std::move(parsers)...
+    );
+  }
+  constexpr auto loose_symbol(const char* sym) {
+    return sequence(whitespace, symbol(sym));
+  }
   template<class Parser>
-  constexpr auto no_result(Parser parser) {
-    return [parser](std::string_view str) -> ParseResult<Empty> {
-      auto ret = parser(str);
-      if(auto* success = get_if_success(&ret)) {
-        return ParseSuccess{empty, success->remaining};
-      } else {
-        return std::move(get_error(ret));
-      }
-    };
+  constexpr auto loose_capture(Parser parser) {
+    return sequence(whitespace, capture(parser));
   }
 
   /*

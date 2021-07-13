@@ -31,7 +31,7 @@ TEST_CASE("Basic parser pieces work."){
   REQUIRE_FALSE(holds_success(is_xy("")));
 
   constexpr auto is_z = char_predicate([](char c){ return c == 'z' || c == 'Z'; });
-  constexpr auto branched = simple_condition_branch(is_z, sequence(is_z, is_x), sequence(is_x, is_y));
+  constexpr auto branched = condition_branch(is_z, sequence(is_z, is_x), sequence(is_x, is_y));
 
   REQUIRE(holds_success(branched("zx")));
   REQUIRE(holds_success(branched("xy")));
@@ -65,7 +65,7 @@ TEST_CASE("Basic parser pieces work."){
 
   //Match matched parenthesis
   /*
-  balanced = simple_condition_branch(is_open_paren,
+  balanced = condition_branch(is_open_paren,
     sequence(is_open_paren, balanced, is_close_paren),
     always_match
   )
@@ -80,7 +80,7 @@ namespace test {
 
   MB_DECLARE_RECURSIVE_PARSER(nested_parenthesis, parser::Empty);
   MB_DEFINE_RECURSIVE_PARSER(nested_parenthesis,
-    simple_condition_branch(is_open_paren,
+    condition_branch(is_open_paren,
       sequence(is_open_paren, nested_parenthesis, is_close_paren),
       always_match
     )
@@ -107,19 +107,19 @@ namespace calculator {
 
   MB_DECLARE_RECURSIVE_PARSER(expression, int);
 
-  constexpr auto term = simple_condition_branch(open_paren,
+  constexpr auto term = condition_branch(open_paren,
     sequence(open_paren, expression, close_paren),
     literal
   );
 
   MB_DEFINE_RECURSIVE_PARSER(expression,
-    map_tuple(sequence(term, op, term), [](int x, char op, int y) {
+    map(sequence(term, op, term), unpacked([](int x, char op, int y) {
       if(op == '+') {
         return x + y;
       } else {
         return x * y;
       }
-    })
+    }))
   );
 }
 
@@ -138,3 +138,69 @@ TEST_CASE("Calculator works.") {
     REQUIRE(success.value == val);
   }
 }
+
+namespace flat {
+  constexpr auto times = symbol("*");
+  constexpr auto plus = symbol("+");
+  constexpr auto minus = symbol("-");
+  constexpr auto literal = integer<int>;
+
+  constexpr auto collect_times = [](int const& evaluation) { //note bind and bind_fold can safely accept argument by reference
+    return map(sequence(times, literal), [&evaluation](int x) { return evaluation * x; });
+  };
+
+  constexpr auto product_expression = bind_fold(literal, collect_times);
+
+  constexpr auto collect_plus = [](int const& evaluation) { //note bind and bind_fold can safely accept argument by reference
+    return branch_after(
+      std::make_pair(plus, map(product_expression, [&](int x) { return evaluation + x; })),
+      std::make_pair(minus, map(product_expression, [&](int x) { return evaluation - x; }))
+    );
+  };
+
+  constexpr auto sum_expression = bind_fold(product_expression, collect_plus);
+}
+
+TEST_CASE("Bind fold can make a calculator with precedence.") {
+  std::pair<const char*, int> success_cases[] = {
+    {"5", 5},
+    {"5*4", 20},
+    {"5+4", 9},
+    {"5*4+3", 23},
+    {"2*3+4*5",26},
+    {"1-2+3-4+5",3},
+    {"7*8-2*3",50}
+  };
+  for(auto const& [str, val] : success_cases) {
+    INFO(str);
+    auto ret = flat::sum_expression(str);
+    REQUIRE(holds_success(ret));
+    auto const& success = get_success(ret);
+    REQUIRE(success.remaining.empty());
+    REQUIRE(success.value == val);
+  }
+}
+
+namespace parametric {
+
+  constexpr auto done = symbol("!");
+
+
+  MB_DECLARE_PARAMETRIC_RECURSIVE_PARSER(bad_repeat, Empty);
+
+  MB_DEFINE_PARAMETRIC_RECURSIVE_PARSER(bad_repeat, [](auto const& parser) {
+    return condition_branch(done,
+      done,
+      sequence(parser, bad_repeat(parser))
+    );
+  });
+}
+
+TEST_CASE("Parametric parsers work") {
+  REQUIRE(holds_success(parametric::bad_repeat(symbol("("))("(((!")));
+  REQUIRE(holds_success(parametric::bad_repeat(symbol(")"))(")))!")));
+  REQUIRE_FALSE(holds_success(parametric::bad_repeat(symbol("(("))("(((!")));
+  REQUIRE_FALSE(holds_success(parametric::bad_repeat(symbol("))"))(")))!")));
+}
+
+#include "../Parser/expression_parser.hpp"

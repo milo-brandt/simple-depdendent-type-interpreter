@@ -1,0 +1,176 @@
+  namespace match_result {
+    {% for component in components -%}
+    {%- if component.members is nonempty %}
+    template<{%- for member in component.members %}class {{member.name|camelize}}{% if not loop.last %}, {% endif %}{% endfor %}>
+    {%- endif %}
+  	struct {{component.name}} {
+    {%- for member in component.members %}
+  		{{member.name|camelize}} {{member.name}};
+    {%- endfor %}
+  	};
+    {%- if component.members is nonempty %}
+    template<{%- for member in component.members -%}
+    class {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}> {{component.name}}({%- for member in component.members -%}
+    {{member.name|camelize}}&&{% if not loop.last %}, {% endif %}
+    {%- endfor %}) -> {{component.name}}<{%- for member in component.members -%}
+    {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}>;
+    {%- endif %}
+  	{% endfor %}
+  }
+  namespace match {
+    struct Any {
+      template<class T>
+      bool check(T const&) const { return true; }
+      template<class T>
+      T match(T&& value) const { return std::forward<T>(value); }
+    };
+    struct None {
+      template<class T>
+      bool check(std::optional<T> const& opt) const { return !opt.has_value(); }
+      template<class T>
+      auto match(T&& value) { return std::nullopt; }
+    };
+    template<class Inner>
+    struct Some {
+      Inner inner;
+      template<class T>
+      bool check(std::optional<T> const& opt) const { return opt.has_value() && inner.check(*opt); }
+      template<class T>
+      T match(std::optional<T>&& value) { return std::move(*value); }
+      template<class T>
+      T& match(std::optional<T>& value) { return *value; }
+      template<class T>
+      T const& match(std::optional<T> const& value) { return *value; }
+    };
+    template<class Matcher, class Test>
+    struct Filter {
+      Matcher matcher;
+      Test test;
+      template<class T>
+      bool check(T const& value) const { return matcher(value) && test(value); }
+      template<class T>
+      decltype(auto) match(T&& value) const { return matcher(std::forward<T>(value)); }
+    };
+    template<class Matcher, class Test> Filter(Matcher, Test) -> Filter<Matcher, Test>;
+    template<class Test>
+    struct Predicate {
+      Test test;
+      template<class T>
+      bool check(T const& value) const { return test(value); }
+      template<class T>
+      T match(T&& value) const { return std::forward<T>(value); }
+    };
+    template<class Test> Predicate(Test) -> Predicate<Test>;
+
+    {%- for component in components %}
+    {%- if component.base_members is nonempty %}
+    template<{%- for member in component.base_members %}class {{member.name|camelize}}{% if not loop.last %}, {% endif %}{% endfor %}>
+    {%- endif %}
+  	struct {{component.name}} {
+  {%- for member in component.base_members %}
+  		{{member.name|camelize}} {{member.name}};
+  {%- endfor %}
+      bool check({{class_name}} const& tree) const {
+        {%- if component.base_members is empty %}
+        return true;
+        {% else %}
+        if(auto const* component = tree.get_if_{{component.name|underscore}}()) {
+          return {% for member in component.base_members %}{% if not loop.first %}
+              && {% endif %}{{member.name}}.check(component->{{member.name}})
+          {%- endfor %};
+        } else {
+          return false;
+        }
+        {% endif %}
+      }
+  {%- macro match(ref_kind, forward_start = "", forward_end = "") %}
+      auto match(Tree{{ref_kind}} tree) const {
+        auto{{ref_kind}} component = tree.get_{{component.name|underscore}}();
+        return match_result::{{component.name}}{
+        {%- for member in component.base_members %}
+            .{{member.name}} = {{member.name}}.match({{forward_start}}component.{{member.name}}{{forward_end}}){% if not loop.last %},{% elif component.extra_members is nonempty %},{% endif %}
+        {%- endfor %}
+        {%- for member in component.extra_members %}
+            .{{member.name}} = {{forward_start}}component.{{member.name}}{{forward_end}}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+        };
+      }
+      auto try_match(Tree{{ref_kind}} tree) const {
+        using MatchType = decltype(match({{forward_start}}tree{{forward_end}}));
+        if(check(tree)) {
+          return std::optional<MatchType>{match({{forward_start}}tree{{forward_end}})};
+        } else {
+          return std::optional<MatchType>{std::nullopt};
+        }
+      }
+    {%- endmacro -%}
+    {{ match("&") }}{{ match("&&", "std::move(", ")") }}{{ match(" const&", pass) }}
+    };
+    {%- if component.base_members is nonempty %}
+    template<{%- for member in component.base_members -%}
+    class {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}> {{component.name}}({%- for member in component.base_members -%}
+    {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}) -> {{component.name}}<{%- for member in component.base_members -%}
+    {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}>;
+    {%- endif %}
+  	{%- endfor %}
+  }
+  namespace full_match {
+    {%- for component in components %}
+    {%- if component.members is nonempty %}
+    template<{%- for member in component.members %}class {{member.name|camelize}}{% if not loop.last %}, {% endif %}{% endfor %}>
+    {%- endif %}
+    struct {{component.name}} {
+  {%- for member in component.members %}
+      {{member.name|camelize}} {{member.name}};
+  {%- endfor %}
+      bool check({{class_name}} const& tree) const {
+        {%- if component.members is empty %}
+        return true;
+        {% else %}
+        if(auto const* component = tree.get_if_{{component.name|underscore}}()) {
+          return {% for member in component.members %}{% if not loop.first %}
+              && {% endif %}{{member.name}}.check(component->{{member.name}})
+          {%- endfor %};
+        } else {
+          return false;
+        }
+        {% endif %}
+      }
+  {%- macro match(ref_kind, forward_start = "", forward_end = "") %}
+      auto match(Tree{{ref_kind}} tree) const {
+        auto{{ref_kind}} component = tree.get_{{component.name|underscore}}();
+        return match_result::{{component.name}}{
+        {%- for member in component.members %}
+            .{{member.name}} = {{member.name}}.match({{forward_start}}component.{{member.name}}{{forward_end}}){% if not loop.last %},{% endif %}
+        {%- endfor %}
+        };
+      }
+      auto try_match(Tree{{ref_kind}} tree) const {
+        using MatchType = decltype(match({{forward_start}}tree{{forward_end}}));
+        if(check(tree)) {
+          return std::optional<MatchType>{match({{forward_start}}tree{{forward_end}})};
+        } else {
+          return std::optional<MatchType>{std::nullopt};
+        }
+      }
+    {%- endmacro %}
+    {{ match("&") }}
+    {{ match("&&", "std::move(", ")") }}
+    {{ match(" const&", pass) }}
+    };
+    {%- if component.members is nonempty %}
+    template<{%- for member in component.members -%}
+    class {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}> {{component.name}}({%- for member in component.members -%}
+    {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}) -> {{component.name}}<{%- for member in component.members -%}
+    {{member.name|camelize}}{% if not loop.last %}, {% endif %}
+    {%- endfor %}>;
+    {%- endif %}
+    {%- endfor %}
+  }

@@ -1,0 +1,9 @@
+{%if base_namespace %}
+namespace {{base_namespace}} {
+{%- endif %}
+  struct {{class_name}} {
+    std::vector<std::size_t> steps;
+  };
+{%- if base_namespace %}
+}
+{%- endif %}

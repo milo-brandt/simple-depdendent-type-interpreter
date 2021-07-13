@@ -1,0 +1,20 @@
+{% for component in components %}
+{%- for member_type in component.base_member_types %}
+inline void path_append({{path.class_name}}& path, {{member_type}} {{component.name}}::* member) {
+  {%- for member in component.members %}
+  {%- if member.type == member_type %}
+  if(member == &{{component.name}}::{{member.name}}) {
+    path.steps.push_back({{ loop.index0 }});
+    return;
+  }
+  {%- endif %}
+  {%- endfor %}
+  std::terminate(); //unreachable
+}
+{%- endfor %}
+{%- endfor %}
+template<class T1, class T2, class... Ts>
+inline void path_append({{path.class_name}}& path, T1&& t1, T2&& t2, Ts&&... ts) {
+  path_append(path, std::forward<T1>(t1));
+  path_append(path, std::forward<T2>(t2), std::forward<Ts>(ts)...);
+}

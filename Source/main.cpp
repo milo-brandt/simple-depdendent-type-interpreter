@@ -1,4 +1,5 @@
 #include "WebInterface/web_interface.hpp"
+#include "Parser/parser_tree.hpp"
 
 /*
 Simple example with...
@@ -400,10 +401,40 @@ int main(int, char**) {
 }
 */
 
+
 #include <iostream>
+#include "Utility/overloaded.hpp"
+
+using namespace parser::located_output;
 
 int main(int argc, char** argv) {
 
+  Tree t = Apply{
+    Apply{
+      Hole{},
+      Identifier{"hey-yo"}
+    },
+    Hole{}
+  };
+
+  parser::output::match::Apply matcher{
+    .lhs = parser::output::match::Apply{
+      .lhs = parser::output::match::Hole{},
+      .rhs = parser::output::full_match::Identifier{
+        .id = parser::output::match::Predicate{[](std::string_view const& str) {
+          return str.starts_with("hey");
+        }}
+      }
+    },
+    .rhs = parser::output::match::Any{}
+  };
+
+  auto x = *matcher.try_match(t.output);
+
+  x.lhs.rhs.id = "ho";
+
+
+  std::cout << "Hi" << "\n";
 //Web::run_server();
 
 }
