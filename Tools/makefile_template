@@ -35,6 +35,15 @@ Debug/test_program: {% for src_file in test_files %}Debug/{{src_file}}.o {% endf
 Source/ExpressionParser/parser_tree_impl.hpp: Source/ExpressionParser/parser_tree.py
 	python3 Tools/source_generator.py Source/ExpressionParser/parser_tree.py
 
+Source/Compiler/resolved_tree_impl.hpp: Source/Compiler/resolved_tree.py
+	python3 Tools/source_generator.py Source/Compiler/resolved_tree.py
+
+Source/Expression/expression_tree_impl.hpp: Source/Expression/expression_tree.py
+	python3 Tools/source_generator.py Source/Expression/expression_tree.py
+
+Source/Expression/pattern_tree_impl.hpp: Source/Expression/pattern_tree.py
+	python3 Tools/source_generator.py Source/Expression/pattern_tree.py
+
 {% for src_file in source_files %}
 Build/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}
 	@mkdir -p $(@D)

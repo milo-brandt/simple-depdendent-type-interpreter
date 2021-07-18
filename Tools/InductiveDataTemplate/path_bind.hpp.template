@@ -34,3 +34,90 @@
   {{path_step(" const&")}}
   {{path_lookup("&","*")}}
   {{path_lookup(" const&"," const*")}}
+  inline std::uint64_t children_count_of({{class_name}} const& in) {
+    return in.visit([&]<class T>(T const& part) -> std::uint64_t {
+      {%- for component in components %}
+      if constexpr(std::is_same_v<T, {{component.name}}>) {
+        return {{ component.base_members|length }};
+      }
+      {%- endfor %}
+    });
+  }
+  inline bool is_child_valid({{class_name}} const& in, std::uint64_t step) {
+    return in.visit([&]<class T>(T{{ref_kind}} part) -> bool {
+      {%- for component in components %}
+      if constexpr(std::is_same_v<T, {{component.name}}>) {
+        switch(step) {
+        {%- for member in component.base_members %}
+        case {{ loop.index0 }}: return {% if member.kind == "Self" -%}
+          true;
+        {% elif member.kind == "OptionalSelf" -%}
+          part.{{member.name}}.has_value();
+        {% else %}
+          static_assert(false, "Invalid base kind.");
+        {% endif -%}
+        {%- endfor %}
+        default: std::terminate();
+        }
+      }
+      {%- endfor %}
+    });
+  }
+
+  {%- macro path_iterate(ref_kind, ptr_kind, suffix) %}
+  namespace detail {
+    struct IteratorOutput{{suffix}} {
+      {{path_class}} const& path;
+      {{class_name}}{{ref_kind}} head;
+    };
+    class Iterator{{suffix}} {
+      {{path_class}} path;
+      std::vector<{{class_name}}{{ptr_kind}}> stack;
+      friend bool operator==(Iterator{{suffix}} const& lhs, Iterator{{suffix}} const& rhs) {
+        return lhs.stack == rhs.stack && lhs.path == rhs.path;
+      }
+    public:
+      Iterator{{suffix}}() = default;
+      explicit Iterator{{suffix}}({{class_name}}{{ref_kind}} base):stack{&base}{}
+      IteratorOutput{{suffix}} operator*() const {
+        return {
+          .path = path,
+          .head = *stack.back()
+        };
+      }
+      Iterator{{suffix}}& operator++() {
+        path.steps.push_back(0); //start looking at the first child of the given node
+        while(!stack.empty()) {
+          auto{{ref_kind}} back = *stack.back();
+          auto& path_back = path.steps.back();
+          auto max_steps = children_count_of(back);
+          for(;path_back < max_steps;++path_back) {
+            if(is_child_valid(back, path_back)) {
+              stack.push_back(&path_step(back, path_back));
+              return *this;
+            }
+          }
+          stack.pop_back(); //step outwards
+          path.steps.pop_back();
+          if(!path.steps.empty()) {
+            ++path.steps.back(); //look at next child of given node
+          }
+        }
+      }
+    };
+  }
+  struct {{class_name}}RecursiveIterator{{suffix}} {
+    {{class_name}}{{ref_kind}} tree;
+    detail::Iterator{{suffix}} begin() const {
+      return detail::Iterator{{suffix}}{tree};
+    }
+    detail::Iterator{{suffix}} end() const {
+      return {};
+    }
+  };
+  inline {{class_name}}RecursiveIterator{{suffix}} recursive_range({{class_name}}{{ref_kind}} tree) {
+    return {.tree = tree};
+  }
+  {% endmacro %}
+  {{ path_iterate("&","*","") }}
+  {{ path_iterate(" const&"," const*","Const") }}

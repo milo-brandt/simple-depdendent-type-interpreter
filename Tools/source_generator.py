@@ -121,6 +121,13 @@ multi_template = jinja_env.get_template('multitree.hpp.template')
 def process_file(specification, filename):
     ret = ""
     ret = ret + head_template.render() + "\n"
+
+    for include_name in specification.get('includes', []):
+        if include_name[0] == '<':
+            ret = ret + "#include " + include_name + "\n";
+        else:
+            ret = ret + "#include \"" + include_name + "\"\n";
+
     for class_name in specification['files'][filename]:
         path = specification['paths'].get(class_name)
         if path:

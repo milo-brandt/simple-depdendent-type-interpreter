@@ -1,0 +1,38 @@
+
+	template<class Formatter>
+	void format_indented(std::ostream& o, {{class_name}} const& value, std::size_t indent, Formatter&& format_inner = [](auto& o, auto const& v) { o << v; }) {
+		auto make_indent = [&] { for(std::size_t i = 0; i < indent; ++i) o << "   "; };
+		auto make_inner_indent = [&] { for(std::size_t i = 0; i <= indent; ++i) o << "   "; };
+		value.visit(mdb::overloaded{
+			{%- for component in components %}
+			[&]({{component.name}} const& component) {
+				o << "{{component.name}} {\n";
+				{%- for member in component.base_members %}
+				{%- if member.kind == "Self" %}
+				make_inner_indent(); o << ".{{member.name}} = "; format_indented(o, component.{{member.name}}, indent + 1, format_inner); o << "\n";
+				{%- elif member.kind == "OptionalSelf" %}
+				make_inner_indent(); o << ".{{member.name}} = "; if(component.{{member.name}}) { format_indented(o, *component.{{member.name}}, indent + 1, format_inner); o << "\n"; } else { o << "None\n"; }
+				{%- else %}
+				static_assert(false, "Unknown kind: {{member.kind}}");
+				{%- endif %}
+				{%- endfor %}
+				{%- for member in component.extra_members %}
+				make_inner_indent(); o << ".{{member.name}} = "; format_inner(o, component.{{member.name}}); o << "\n";
+				{%- if not loop.last %} o << "\n";{%endif%}
+				{%- endfor %}
+				make_indent(); o << "}";
+			}{% if not loop.last %},{%endif%}
+			{%- endfor %}
+		});
+	}
+	template<class Formatter>
+	struct FormatTree {
+		{{class_name}} const& tree;
+		Formatter formatter;
+	};
+	template<class Formatter> FormatTree({{class_name}} const&, Formatter&&) -> FormatTree<Formatter>;
+	template<class Formatter>
+	std::ostream& operator<<(std::ostream& o, FormatTree<Formatter> const& formatter) {
+		format_indented(o, formatter.tree, 0, formatter.formatter);
+		return o;
+	}

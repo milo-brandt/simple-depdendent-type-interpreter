@@ -4,6 +4,7 @@ namespace {{base_namespace}} {
   struct {{class_name}} {
     std::vector<std::uint64_t> steps;
   };
+  inline bool operator==({{class_name}} const& lhs, {{class_name}} const& rhs) { return lhs.steps == rhs.steps; }
 {%- if base_namespace %}
 }
 {%- endif %}

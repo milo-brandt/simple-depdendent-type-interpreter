@@ -54,14 +54,14 @@ namespace {{base_namespace}} {
 		> data;
 	};
 	{% for component in components %}
-	{{class_name}}::{{class_name}}({{component.name}} arg):data(mdb::in_place, std::move(arg)) {}
+	inline {{class_name}}::{{class_name}}({{component.name}} arg):data(mdb::in_place, std::move(arg)) {}
 	{%- endfor %}
 	{% for component in components %}
-	{{component.name}}& {{class_name}}::get_{{component.name|underscore}}() & { return std::get<{{component.name}}>(data->data); }
-	{{component.name}} const& {{class_name}}::get_{{component.name|underscore}}() const& { return std::get<{{component.name}}>(data->data); }
-	{{component.name}}&& {{class_name}}::get_{{component.name|underscore}}() && { return std::move(std::get<{{component.name}}>(data->data)); }
-	{{component.name}}* {{class_name}}::get_if_{{component.name|underscore}}() { return std::get_if<{{component.name}}>(&data->data); }
-	{{component.name}} const* {{class_name}}::get_if_{{component.name|underscore}}() const { return std::get_if<{{component.name}}>(&data->data); }
+	inline {{component.name}}& {{class_name}}::get_{{component.name|underscore}}() & { return std::get<{{component.name}}>(data->data); }
+	inline {{component.name}} const& {{class_name}}::get_{{component.name|underscore}}() const& { return std::get<{{component.name}}>(data->data); }
+	inline {{component.name}}&& {{class_name}}::get_{{component.name|underscore}}() && { return std::move(std::get<{{component.name}}>(data->data)); }
+	inline {{component.name}}* {{class_name}}::get_if_{{component.name|underscore}}() { return std::get_if<{{component.name}}>(&data->data); }
+	inline {{component.name}} const* {{class_name}}::get_if_{{component.name|underscore}}() const { return std::get_if<{{component.name}}>(&data->data); }
 	{% endfor %}
 
 	template<class Visitor> requires ({{visitor_requirement("Visitor&&","&")}})
@@ -83,7 +83,12 @@ namespace {{base_namespace}} {
 {% if not no_match %}
 {%- include "match.hpp.template" -%}
 	{%-endif %}
-
+{%- if not no_cmp %}
+{%- include "tree_cmp.hpp.template" -%}
+{%- endif %}
+{%- if not no_debug %}
+{%- include "tree_debug.hpp.template" -%}
+{%- endif %}
 {%- if base_namespace %}
 }
 {% endif %}

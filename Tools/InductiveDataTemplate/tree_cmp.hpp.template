@@ -1,0 +1,26 @@
+	bool operator==({{class_name}} const& lhs, {{class_name}} const& rhs);
+
+	{% for component in components -%}
+	inline bool operator==({{component.name}} const& lhs, {{component.name}} const& rhs) {
+		{%- if component.members is nonempty %}
+		return {% for member in component.members %}lhs.{{member.name}} == rhs.{{member.name}}{% if not loop.last %}
+		    && {% endif %}{% endfor %};
+		{%- else %}
+		return true;
+		{% endif %}
+	}
+	{% endfor %}
+
+	inline bool operator==({{class_name}} const& lhs, {{class_name}} const& rhs) {
+		return lhs.visit(mdb::overloaded{
+			{%- for component in components %}
+			[&]({{component.name}} const& component) {
+				if(auto* other = rhs.get_if_{{component.name|underscore}}()) {
+					return component == *other;
+				} else {
+					return false;
+				}
+			}{% if not loop.last %},{% endif %}
+			{%- endfor %}
+		});
+	}
