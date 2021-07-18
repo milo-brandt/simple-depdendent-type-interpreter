@@ -19,6 +19,7 @@ namespace compiler::resolution::path {
   struct Path {
     std::vector<std::uint64_t> steps;
   };
+  inline bool operator==(Path const& lhs, Path const& rhs) { return lhs.steps == rhs.steps; }
 }
 
 
@@ -311,6 +312,174 @@ inline compiler::resolution::path::Path path_of(Ts&&... ts) {
       return *ret;
     }
     
+  inline std::uint64_t children_count_of(Tree const& in) {
+    return in.visit([&]<class T>(T const& part) -> std::uint64_t {
+      if constexpr(std::is_same_v<T, Apply>) {
+        return 2;
+      }
+      if constexpr(std::is_same_v<T, Lambda>) {
+        return 2;
+      }
+      if constexpr(std::is_same_v<T, Local>) {
+        return 0;
+      }
+      if constexpr(std::is_same_v<T, Hole>) {
+        return 0;
+      }
+      if constexpr(std::is_same_v<T, Embed>) {
+        return 0;
+      }
+    });
+  }
+  inline bool is_child_valid(Tree const& in, std::uint64_t step) {
+    return in.visit([&]<class T>(T part) -> bool {
+      if constexpr(std::is_same_v<T, Apply>) {
+        switch(step) {
+        case 0: return true;
+        
+        case 1: return true;
+        
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Lambda>) {
+        switch(step) {
+        case 0: return true;
+        
+        case 1: return true;
+        
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Local>) {
+        switch(step) {
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Hole>) {
+        switch(step) {
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Embed>) {
+        switch(step) {
+        default: std::terminate();
+        }
+      }
+    });
+  }
+  
+  namespace detail {
+    struct IteratorOutput {
+      compiler::resolution::path::Path const& path;
+      Tree& value;
+    };
+    class Iterator {
+      compiler::resolution::path::Path path;
+      std::vector<Tree*> stack;
+      friend bool operator==(Iterator const& lhs, Iterator const& rhs) {
+        return lhs.stack == rhs.stack && lhs.path == rhs.path;
+      }
+    public:
+      Iterator() = default;
+      explicit Iterator(Tree& base):stack{&base}{}
+      IteratorOutput operator*() const {
+        return {
+          .path = path,
+          .value = *stack.back()
+        };
+      }
+      Iterator& operator++() {
+        path.steps.push_back(0); //start looking at the first child of the given node
+        while(!stack.empty()) {
+          auto& back = *stack.back();
+          auto& path_back = path.steps.back();
+          auto max_steps = children_count_of(back);
+          for(;path_back < max_steps;++path_back) {
+            if(is_child_valid(back, path_back)) {
+              stack.push_back(&path_step(back, path_back));
+              return *this;
+            }
+          }
+          stack.pop_back(); //step outwards
+          path.steps.pop_back();
+          if(!path.steps.empty()) {
+            ++path.steps.back(); //look at next child of given node
+          }
+        }
+        return *this;
+      }
+    };
+  }
+  struct TreeRecursiveIterator {
+    Tree& tree;
+    detail::Iterator begin() const {
+      return detail::Iterator{tree};
+    }
+    detail::Iterator end() const {
+      return {};
+    }
+  };
+  inline TreeRecursiveIterator recursive_range(Tree& tree) {
+    return {.tree = tree};
+  }
+  
+  
+  namespace detail {
+    struct IteratorOutputConst {
+      compiler::resolution::path::Path const& path;
+      Tree const& value;
+    };
+    class IteratorConst {
+      compiler::resolution::path::Path path;
+      std::vector<Tree const*> stack;
+      friend bool operator==(IteratorConst const& lhs, IteratorConst const& rhs) {
+        return lhs.stack == rhs.stack && lhs.path == rhs.path;
+      }
+    public:
+      IteratorConst() = default;
+      explicit IteratorConst(Tree const& base):stack{&base}{}
+      IteratorOutputConst operator*() const {
+        return {
+          .path = path,
+          .value = *stack.back()
+        };
+      }
+      IteratorConst& operator++() {
+        path.steps.push_back(0); //start looking at the first child of the given node
+        while(!stack.empty()) {
+          auto const& back = *stack.back();
+          auto& path_back = path.steps.back();
+          auto max_steps = children_count_of(back);
+          for(;path_back < max_steps;++path_back) {
+            if(is_child_valid(back, path_back)) {
+              stack.push_back(&path_step(back, path_back));
+              return *this;
+            }
+          }
+          stack.pop_back(); //step outwards
+          path.steps.pop_back();
+          if(!path.steps.empty()) {
+            ++path.steps.back(); //look at next child of given node
+          }
+        }
+        return *this;
+      }
+    };
+  }
+  struct TreeRecursiveIteratorConst {
+    Tree const& tree;
+    detail::IteratorConst begin() const {
+      return detail::IteratorConst{tree};
+    }
+    detail::IteratorConst end() const {
+      return {};
+    }
+  };
+  inline TreeRecursiveIteratorConst recursive_range(Tree const& tree) {
+    return {.tree = tree};
+  }
+  
   namespace match_result {
     
     template<class Lhs, class Rhs>
@@ -1341,6 +1510,174 @@ inline compiler::resolution::path::Path path_of(Ts&&... ts) {
       return *ret;
     }
     
+  inline std::uint64_t children_count_of(Tree const& in) {
+    return in.visit([&]<class T>(T const& part) -> std::uint64_t {
+      if constexpr(std::is_same_v<T, Apply>) {
+        return 2;
+      }
+      if constexpr(std::is_same_v<T, Lambda>) {
+        return 2;
+      }
+      if constexpr(std::is_same_v<T, Local>) {
+        return 0;
+      }
+      if constexpr(std::is_same_v<T, Hole>) {
+        return 0;
+      }
+      if constexpr(std::is_same_v<T, Embed>) {
+        return 0;
+      }
+    });
+  }
+  inline bool is_child_valid(Tree const& in, std::uint64_t step) {
+    return in.visit([&]<class T>(T part) -> bool {
+      if constexpr(std::is_same_v<T, Apply>) {
+        switch(step) {
+        case 0: return true;
+        
+        case 1: return true;
+        
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Lambda>) {
+        switch(step) {
+        case 0: return true;
+        
+        case 1: return true;
+        
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Local>) {
+        switch(step) {
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Hole>) {
+        switch(step) {
+        default: std::terminate();
+        }
+      }
+      if constexpr(std::is_same_v<T, Embed>) {
+        switch(step) {
+        default: std::terminate();
+        }
+      }
+    });
+  }
+  
+  namespace detail {
+    struct IteratorOutput {
+      compiler::resolution::path::Path const& path;
+      Tree& value;
+    };
+    class Iterator {
+      compiler::resolution::path::Path path;
+      std::vector<Tree*> stack;
+      friend bool operator==(Iterator const& lhs, Iterator const& rhs) {
+        return lhs.stack == rhs.stack && lhs.path == rhs.path;
+      }
+    public:
+      Iterator() = default;
+      explicit Iterator(Tree& base):stack{&base}{}
+      IteratorOutput operator*() const {
+        return {
+          .path = path,
+          .value = *stack.back()
+        };
+      }
+      Iterator& operator++() {
+        path.steps.push_back(0); //start looking at the first child of the given node
+        while(!stack.empty()) {
+          auto& back = *stack.back();
+          auto& path_back = path.steps.back();
+          auto max_steps = children_count_of(back);
+          for(;path_back < max_steps;++path_back) {
+            if(is_child_valid(back, path_back)) {
+              stack.push_back(&path_step(back, path_back));
+              return *this;
+            }
+          }
+          stack.pop_back(); //step outwards
+          path.steps.pop_back();
+          if(!path.steps.empty()) {
+            ++path.steps.back(); //look at next child of given node
+          }
+        }
+        return *this;
+      }
+    };
+  }
+  struct TreeRecursiveIterator {
+    Tree& tree;
+    detail::Iterator begin() const {
+      return detail::Iterator{tree};
+    }
+    detail::Iterator end() const {
+      return {};
+    }
+  };
+  inline TreeRecursiveIterator recursive_range(Tree& tree) {
+    return {.tree = tree};
+  }
+  
+  
+  namespace detail {
+    struct IteratorOutputConst {
+      compiler::resolution::path::Path const& path;
+      Tree const& value;
+    };
+    class IteratorConst {
+      compiler::resolution::path::Path path;
+      std::vector<Tree const*> stack;
+      friend bool operator==(IteratorConst const& lhs, IteratorConst const& rhs) {
+        return lhs.stack == rhs.stack && lhs.path == rhs.path;
+      }
+    public:
+      IteratorConst() = default;
+      explicit IteratorConst(Tree const& base):stack{&base}{}
+      IteratorOutputConst operator*() const {
+        return {
+          .path = path,
+          .value = *stack.back()
+        };
+      }
+      IteratorConst& operator++() {
+        path.steps.push_back(0); //start looking at the first child of the given node
+        while(!stack.empty()) {
+          auto const& back = *stack.back();
+          auto& path_back = path.steps.back();
+          auto max_steps = children_count_of(back);
+          for(;path_back < max_steps;++path_back) {
+            if(is_child_valid(back, path_back)) {
+              stack.push_back(&path_step(back, path_back));
+              return *this;
+            }
+          }
+          stack.pop_back(); //step outwards
+          path.steps.pop_back();
+          if(!path.steps.empty()) {
+            ++path.steps.back(); //look at next child of given node
+          }
+        }
+        return *this;
+      }
+    };
+  }
+  struct TreeRecursiveIteratorConst {
+    Tree const& tree;
+    detail::IteratorConst begin() const {
+      return detail::IteratorConst{tree};
+    }
+    detail::IteratorConst end() const {
+      return {};
+    }
+  };
+  inline TreeRecursiveIteratorConst recursive_range(Tree const& tree) {
+    return {.tree = tree};
+  }
+  
   namespace match_result {
     
     template<class Lhs, class Rhs, class RelativePosition>

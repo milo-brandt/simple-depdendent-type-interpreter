@@ -68,7 +68,7 @@
   namespace detail {
     struct IteratorOutput{{suffix}} {
       {{path_class}} const& path;
-      {{class_name}}{{ref_kind}} head;
+      {{class_name}}{{ref_kind}} value;
     };
     class Iterator{{suffix}} {
       {{path_class}} path;
@@ -82,7 +82,7 @@
       IteratorOutput{{suffix}} operator*() const {
         return {
           .path = path,
-          .head = *stack.back()
+          .value = *stack.back()
         };
       }
       Iterator{{suffix}}& operator++() {
@@ -103,6 +103,7 @@
             ++path.steps.back(); //look at next child of given node
           }
         }
+        return *this;
       }
     };
   }

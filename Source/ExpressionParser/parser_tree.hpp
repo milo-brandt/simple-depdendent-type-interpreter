@@ -4,7 +4,7 @@
 #include "parser_tree_impl.hpp"
 
 namespace expression_parser::locator {
-  std::string_view position_of(Tree const& tree) {
+  inline std::string_view position_of(Tree const& tree) {
     return tree.visit([](auto const& x) { return x.position; });
   }
 }

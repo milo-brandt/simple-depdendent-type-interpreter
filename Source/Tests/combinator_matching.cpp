@@ -1,36 +1,35 @@
-#include "../CombinatorComputation/matching.hpp"
+#include "../Expression/expression_tree.hpp"
 #include <catch.hpp>
 
-using namespace combinator;
+using namespace expression;
+using namespace expression::tree;
 
 TEST_CASE("Matches are correctly identified."){
-  auto term = Term{
-    Term{TermLeaf{0}},
-    Term{TermLeaf{1}}
+  auto term = Apply{
+    External{0},
+    External{1}
   };
 
-  auto pattern_1 = Pattern{
-    Pattern{PatternLeaf{0}},
-    Pattern{PatternLeaf{}}
+  auto pattern_1 = pattern::Apply{
+    pattern::Fixed{0},
+    pattern::Wildcard{}
   };
 
-  auto pattern_2 = Pattern{
-    Pattern{PatternLeaf{}}
+  auto pattern_2 = pattern::Wildcard{};
+
+  auto pattern_3 = pattern::Apply{
+    pattern::Fixed{1},
+    pattern::Wildcard{}
   };
 
-  auto pattern_3 = Pattern{
-    Pattern{PatternLeaf{1}},
-    Pattern{PatternLeaf{}}
+  auto pattern_4 = pattern::Apply{
+    pattern::Wildcard{},
+    pattern::Fixed{1}
   };
 
-  auto pattern_4 = Pattern{
-    Pattern{PatternLeaf{}},
-    Pattern{PatternLeaf{1}}
-  };
-
-  auto pattern_5 = Pattern{
-    Pattern{PatternLeaf{}},
-    Pattern{PatternLeaf{2}}
+  auto pattern_5 = pattern::Apply{
+    pattern::Wildcard{},
+    pattern::Fixed{2}
   };
 
 
@@ -42,55 +41,55 @@ TEST_CASE("Matches are correctly identified."){
 }
 
 TEST_CASE("Matches can be found in larger expressions.") {
-  auto term = Term{
-    Term{
-      Term{TermLeaf{0}},
-      Term{TermLeaf{1}}
+  auto term = Apply{
+    Apply{
+      External{0},
+      External{1}
     },
-    Term{
-      Term{TermLeaf{0}},
-      Term{TermLeaf{2}}
+    Apply{
+      External{0},
+      External{2}
     }
   };
 
-  auto pattern_1 = Pattern{
-    Pattern{PatternLeaf{0}},
-    Pattern{PatternLeaf{}}
+  auto pattern_1 = pattern::Apply{
+    pattern::Fixed{0},
+    pattern::Wildcard{}
   };
 
   auto matches = find_all_matches(term, pattern_1);
 
   REQUIRE(matches.size() == 2);
-  REQUIRE(matches[0].steps == std::vector<mdb::TreeStep>{mdb::TreeStep::left});
-  REQUIRE(matches[1].steps == std::vector<mdb::TreeStep>{mdb::TreeStep::right});
+  REQUIRE(matches[0].steps == path_of(&Apply::lhs).steps);
+  REQUIRE(matches[1].steps == path_of(&Apply::rhs).steps);
 
-  auto pattern_2 = Pattern{
-    Pattern{PatternLeaf{}},
-    Pattern{PatternLeaf{}}
+  auto pattern_2 = pattern::Apply{
+    pattern::Wildcard{},
+    pattern::Wildcard{}
   };
 
   matches = find_all_matches(term, pattern_2);
 
   REQUIRE(matches.size() == 3);
-  REQUIRE(matches[0].steps == std::vector<mdb::TreeStep>{});
-  REQUIRE(matches[1].steps == std::vector<mdb::TreeStep>{mdb::TreeStep::left});
-  REQUIRE(matches[2].steps == std::vector<mdb::TreeStep>{mdb::TreeStep::right});
+  REQUIRE(matches[0].steps == path_of().steps);
+  REQUIRE(matches[1].steps == path_of(&Apply::lhs).steps);
+  REQUIRE(matches[2].steps == path_of(&Apply::rhs).steps);
 
-  auto pattern_3 = Pattern{
-    Pattern{PatternLeaf{}},
-    Pattern{PatternLeaf{2}}
+  auto pattern_3 = pattern::Apply{
+    pattern::Wildcard{},
+    pattern::Fixed{2}
   };
 
   matches = find_all_matches(term, pattern_3);
 
   REQUIRE(matches.size() == 1);
-  REQUIRE(matches[0].steps == std::vector<mdb::TreeStep>{mdb::TreeStep::right});
+  REQUIRE(matches[0].steps == path_of(&Apply::rhs).steps);
 
-  auto pattern_4 = Pattern{
-    Pattern{PatternLeaf{}},
-    Pattern{
-      Pattern{PatternLeaf{1}},
-      Pattern{PatternLeaf{}}
+  auto pattern_4 = pattern::Apply{
+    pattern::Wildcard{},
+    pattern::Apply{
+      pattern::Fixed{1},
+      pattern::Wildcard{}
     }
   };
 
@@ -102,119 +101,118 @@ TEST_CASE("Matches can be found in larger expressions.") {
 
 TEST_CASE("Matches can be properly destructured.") {
 
-  auto term = Term{
-    Term{
-      Term{TermLeaf{0}},
-      Term{TermLeaf{1}}
+  auto term = Apply{
+    Apply{
+      External{0},
+      External{1}
     },
-    Term{
-      Term{TermLeaf{0}},
-      Term{TermLeaf{2}}
+    Apply{
+      External{0},
+      External{2}
     }
   };
 
-  auto pattern = Pattern{
-    Pattern{
-      Pattern{PatternLeaf{0}},
-      Pattern{PatternLeaf{}}
+  auto pattern = pattern::Apply{
+    pattern::Apply{
+      pattern::Fixed{0},
+      pattern::Wildcard{}
     },
-    Pattern{PatternLeaf{}}
+    pattern::Wildcard{}
   };
 
   REQUIRE(term_matches(term, pattern));
   auto captures = destructure_match(term, pattern);
 
   REQUIRE(captures.size() == 2);
-  REQUIRE(captures[0] == Term{TermLeaf{1}});
-  REQUIRE(captures[1] == Term{
-    Term{TermLeaf{0}},
-    Term{TermLeaf{2}}
+  REQUIRE(captures[0] == External{1});
+  REQUIRE(captures[1] == Apply{
+    External{0},
+    External{2}
   });
 
 }
 
 TEST_CASE("Substitution into replacements works properly.") {
 
-  auto replacement = Replacement{
-    constant_replacement(20),
-    Replacement{
-      arg_replacement(0),
-      Replacement{
-        arg_replacement(0),
-        arg_replacement(1)
+  auto replacement = Apply{
+    External{20},
+    Apply{
+      Arg{0},
+      Apply{
+        Arg{0},
+        Arg{1}
       }
     }
   };
 
-  std::vector<Term> captures = {
-    Term{
-      Term{TermLeaf{10}},
-      Term{TermLeaf{11}}
+  std::vector<Tree> captures = {
+    Apply{
+      External{10},
+      External{11}
     },
-    Term{TermLeaf{12}}
+    External{12}
   };
 
   auto ret = substitute_into_replacement(captures, std::move(replacement));
 
-  REQUIRE(ret == Term{
-    Term{TermLeaf{20}},
-    Term{
-      Term{
-        Term{TermLeaf{10}},
-        Term{TermLeaf{11}}
+  REQUIRE(ret == Apply{
+    External{20},
+    Apply{
+      Apply{
+        External{10},
+        External{11}
       },
-      Term{
-        Term{
-          Term{TermLeaf{10}},
-          Term{TermLeaf{11}}
+      Apply{
+        Apply{
+          External{10},
+          External{11}
         },
-        Term{TermLeaf{12}}
+        External{12}
       }
     }
   });
-
 }
 
 TEST_CASE("Pattern matching and substituting into deep replacements works properly.") {
 
-  auto term = Term{
-    Term{
-      Term{
-        Term{TermLeaf{10}},
-        Term{TermLeaf{11}},
+  Tree term = Apply{
+    Apply{
+      Apply{
+        External{10},
+        External{11}
       },
-      Term{
-        Term{TermLeaf{12}},
-        Term{TermLeaf{13}}
+      Apply{
+        External{12},
+        External{13}
       }
     },
-    Term{TermLeaf{14}}
+    External{14}
   };
 
-  auto replacement = Replacement{
-    arg_replacement(1),
-    constant_replacement(20)
+  auto replacement = Apply{
+    Arg{1},
+    External{20}
   };
 
-  auto pattern = Pattern{
-    Pattern{
-      Pattern{PatternLeaf{10}},
-      Pattern{PatternLeaf{}}
+  auto pattern = pattern::Apply{
+    pattern::Apply{
+      pattern::Fixed{10},
+      pattern::Wildcard{}
     },
-    Pattern{PatternLeaf{}}
+    pattern::Wildcard{}
   };
 
-  auto replaced = make_substitution(std::move(term), {{mdb::TreeStep::left}}, pattern, replacement);
+  replace_with_substitution_at(term, path_of(&Apply::lhs), pattern, replacement);
 
-  REQUIRE(replaced == Term{
-    Term{
-      Term{
-        Term{TermLeaf{12}},
-        Term{TermLeaf{13}}
+  REQUIRE(term == Apply{
+    Apply{
+      Apply{
+        External{12},
+        External{13}
       },
-      Term{TermLeaf{20}}
+      External{20}
     },
-    Term{TermLeaf{14}}
+    External{14}
   });
 
 }
