@@ -38,7 +38,10 @@ namespace compiler::flat {
       std::uint64_t from_value;
       std::uint64_t to_type;
     };
-    using Instruction = std::variant<Foundation, Hole, Declaration, Context, Embed, Apply, Rule, Cast>;
+    struct TypeFamilyOver {
+      std::uint64_t domain;
+    };
+    using Instruction = std::variant<Foundation, Hole, Declaration, Context, Embed, Apply, Rule, Cast, TypeFamilyOver>;
     struct Program {
       std::vector<Instruction> instructions;
       std::uint64_t ret_index;
@@ -50,6 +53,7 @@ namespace compiler::flat {
     inline bool operator==(Apply const& lhs, Apply const& rhs) { return lhs.lhs == rhs.lhs && lhs.rhs == rhs.rhs; }
     inline bool operator==(Rule const& lhs, Rule const& rhs) { return lhs.pattern == rhs.pattern && lhs.replacement == rhs.replacement; }
     inline bool operator==(Cast const& lhs, Cast const& rhs) { return lhs.from_value == rhs.from_value && lhs.to_type == rhs.to_type; }
+    inline bool operator==(TypeFamilyOver const& lhs, TypeFamilyOver const& rhs) { return lhs.domain == rhs.domain; }
 
     inline std::ostream& operator<<(std::ostream& o, Foundation const& var) { constexpr const char* str[] = {"Type","Arrow","empty_context"}; return o << str[(std::size_t)var]; }
     inline std::ostream& operator<<(std::ostream& o, Hole const& var) { return o << "Hole of type " << var.type << " in context " << var.context; }
@@ -59,6 +63,7 @@ namespace compiler::flat {
     inline std::ostream& operator<<(std::ostream& o, Apply const& var) { return o << "Apply " << var.lhs << " to " << var.rhs; }
     inline std::ostream& operator<<(std::ostream& o, Rule const& var) { return o << "Rule " << var.pattern << " -> " << var.replacement; }
     inline std::ostream& operator<<(std::ostream& o, Cast const& var) { return o << "Cast " << var.from_value << " to type " << var.to_type; }
+    inline std::ostream& operator<<(std::ostream& o, TypeFamilyOver const& var) { return o << "Type family over " << var.domain; }
     inline std::ostream& operator<<(std::ostream& o, Instruction const& var) { return std::visit([&](auto const& var) -> std::ostream& { return o << var; }, var); }
     inline std::ostream& operator<<(std::ostream& o, Program const& program) {
       std::size_t count;

@@ -10,6 +10,8 @@ namespace expression {
     NoMatchException():std::runtime_error("Attempted to destructure non-existant match.") {}
   };
 
+  std::vector<tree::Tree*> destructure_match_ref(tree::Tree&, pattern::Tree const&); //throws if not matching
+  std::vector<tree::Tree const*> destructure_match_ref(tree::Tree const&, pattern::Tree const&); //throws if not matching
   std::vector<tree::Tree> destructure_match(tree::Tree, pattern::Tree const&); //throws if not matching
   std::vector<path::Path> captures_of_pattern(pattern::Tree const&);
   std::vector<path::Path> find_all_matches(tree::Tree const&, pattern::Tree const&);
@@ -20,6 +22,11 @@ namespace expression {
 
   tree::Tree substitute_into_replacement(std::vector<tree::Tree> const& terms, tree::Tree const& replacement); //args are replaced
   void replace_with_substitution_at(tree::Tree& term, path::Path const& path, pattern::Tree const& pattern, tree::Tree const& replacement);
+
+  struct TypedValue {
+    tree::Tree value;
+    tree::Tree type;
+  };
 }
 
 #endif

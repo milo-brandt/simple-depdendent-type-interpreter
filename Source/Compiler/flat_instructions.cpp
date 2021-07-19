@@ -29,21 +29,9 @@ namespace compiler::flat {
         });
       }
       std::uint64_t type_family_over(std::uint64_t context, std::uint64_t domain) {
-        auto codomain_type_type = push(instruction::Declaration{
-          .context = context,
-          .type = type_index
+        return push(instruction::TypeFamilyOver{
+          .domain = domain
         });
-        push(instruction::Rule{
-          .pattern = push(instruction::Apply{
-            .lhs = codomain_type_type,
-            .rhs = push(instruction::Context{
-              .base_context = context,
-              .next_type = domain
-            })
-          }),
-          .replacement = type_index
-        });
-        return codomain_type_type;
       }
       std::uint64_t flatten(compiler::resolution::output::Tree const& tree, std::uint64_t context) {
         return tree.visit(mdb::overloaded{

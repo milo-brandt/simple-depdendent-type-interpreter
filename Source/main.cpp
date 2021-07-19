@@ -13,8 +13,19 @@
 int main(int argc, char** argv) {
   expression::Context context;
   compiler::resolution::NameContext name_context;
-  std::size_t counter = 0;
+  expression::EmbedInfo embeds;
 
+  auto add_name = [&](std::string name, expression::TypedValue value) {
+    name_context.names.insert_or_assign(std::move(name), compiler::resolution::NameInfo{
+      .embed_index = embeds.values.size()
+    });
+    embeds.values.push_back(std::move(value));
+  };
+
+  add_name("Type", { expression::tree::External{context.primitives.type}, expression::tree::External{context.primitives.type} });
+  add_name("arrow", { expression::tree::External{context.primitives.arrow}, context.primitives.arrow_type() });
+
+  std::size_t counter = 0;
   while(true) {
     std::string line;
     std::getline(std::cin, line);
@@ -50,7 +61,7 @@ int main(int argc, char** argv) {
         auto [program, explain] = compiler::flat::flatten_tree(resolved.tree.output);
         std::cout << "Program:\n" << program << "\n";
 
-        auto ret = expression::interpret_program(program, context);
+        auto [ret_value, ret_type] = expression::interpret_program(program, context, embeds);
 
         for(auto const& rule : context.rules) {
           std::cout << "Pattern: ";
@@ -62,19 +73,23 @@ int main(int argc, char** argv) {
         }
 
         std::cout << "Interpreted result: ";
-        format_indented(std::cout, ret, 0, [](auto& o, auto const& v) { o << v; });
+        format_indented(std::cout, ret_value, 0, [](auto& o, auto const& v) { o << v; });
         std::cout << "\n";
-        ret = context.reduce(std::move(ret));
+        std::cout << "Of type: ";
+        format_indented(std::cout, ret_type, 0, [](auto& o, auto const& v) { o << v; });
+        std::cout << "\n";
+        ret_value = context.reduce(std::move(ret_value));
         std::cout << "Simplified: ";
-        format_indented(std::cout, ret, 0, [](auto& o, auto const& v) { o << v; });
+        format_indented(std::cout, ret_value, 0, [](auto& o, auto const& v) { o << v; });
+        std::cout << "\n";
+        ret_type = context.reduce(std::move(ret_type));
+        std::cout << "Of type: ";
+        format_indented(std::cout, ret_type, 0, [](auto& o, auto const& v) { o << v; });
         std::cout << "\n";
 
-        auto name = context.name_expression(std::move(ret));
         std::stringstream str;
         str << "last" << counter++;
-        name_context.names.insert_or_assign(str.str(), compiler::resolution::NameInfo{
-          .embed_index = name
-        });
+        add_name(str.str(), {std::move(ret_value), std::move(ret_type)});
       }
     }
   }

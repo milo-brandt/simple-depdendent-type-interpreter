@@ -4,8 +4,48 @@ namespace expression {
   Context::Context() {
     external_info.push_back({ .is_axiom = true });
     external_info.push_back({ .is_axiom = true });
+    external_info.push_back({ .is_axiom = false });
+    external_info.push_back({ .is_axiom = false });
+    external_info.push_back({ .is_axiom = false });
     primitives.type = 0;
     primitives.arrow = 1;
+    primitives.arrow_type_codomain = 2;
+    primitives.type_constant_function = 3;
+    rules.push_back({
+      .pattern = pattern::Apply{
+        .lhs = pattern::Fixed{primitives.type_constant_function},
+        .rhs = pattern::Wildcard{}
+      },
+      .replacement = tree::External{primitives.type}
+    });
+    rules.push_back({
+      .pattern = pattern::Apply{
+        .lhs = pattern::Fixed{primitives.arrow_type_codomain},
+        .rhs = pattern::Wildcard{}
+      },
+      .replacement = tree::Apply{
+        .lhs = tree::Apply{
+          .lhs = tree::External{primitives.arrow},
+          .rhs = tree::Apply{
+            .lhs = tree::Apply{
+              .lhs = tree::External{primitives.arrow},
+              .rhs = tree::Arg{0}
+            },
+            .rhs = tree::External{primitives.type_constant_function}
+          }
+        },
+        .rhs = tree::External{primitives.type_constant_function}
+      }
+    });
+  }
+  tree::Tree Primitives::arrow_type() {
+    return tree::Apply{
+      .lhs = tree::Apply{
+        .lhs = tree::External{arrow},
+        .rhs = tree::External{type}
+      },
+      .rhs = tree::External{arrow_type_codomain}
+    };
   }
   tree::Tree Context::reduce(tree::Tree tree) {
   REDUCTION_START:

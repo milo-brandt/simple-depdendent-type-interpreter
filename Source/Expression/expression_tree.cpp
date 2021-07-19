@@ -41,16 +41,16 @@ namespace expression {
       });
     }
   }
-  /*std::vector<tree::Tree*> destructure_match(tree::Tree& term, pattern::Tree const& pattern) {
+  std::vector<tree::Tree*> destructure_match_ref(tree::Tree& term, pattern::Tree const& pattern) {
     std::vector<tree::Tree*> ret;
     destructure_match_impl<tree::Tree&>(term, pattern, [&](tree::Tree& term) { ret.push_back(&term); });
     return ret;
   }
-  std::vector<tree::Tree const*> destructure_match(tree::Tree const& term, pattern::Tree const& pattern) {
+  std::vector<tree::Tree const*> destructure_match_ref(tree::Tree const& term, pattern::Tree const& pattern) {
     std::vector<tree::Tree const*> ret;
     destructure_match_impl<tree::Tree const&>(term, pattern, [&](tree::Tree const& term) { ret.push_back(&term); });
     return ret;
-  }*/
+  }
   std::vector<tree::Tree> destructure_match(tree::Tree term, pattern::Tree const& pattern) {
     std::vector<tree::Tree> ret;
     destructure_match_impl<tree::Tree&>(term, pattern, [&](tree::Tree& term) { ret.push_back(std::move(term)); });

@@ -14,6 +14,10 @@ namespace expression {
   struct Primitives {
     std::uint64_t type;
     std::uint64_t arrow;
+    std::uint64_t arrow_type_codomain;
+    std::uint64_t type_constant_function;
+    std::uint64_t arrow_type_codomain_codomain;
+    tree::Tree arrow_type();
   };
   struct Context {
     std::vector<Rule> rules;
