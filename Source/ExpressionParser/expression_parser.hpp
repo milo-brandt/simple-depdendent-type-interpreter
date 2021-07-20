@@ -73,6 +73,7 @@ namespace expression_parser {
 
     MB_DEFINE_RECURSIVE_PARSER(term, branch(
       std::make_pair(loose_symbol("("), loose_sequence(loose_symbol("("), expression, loose_symbol(")"))),
+      std::make_pair(loose_symbol("\\"), lambda_expression),
       std::make_pair(always_match, map(loosen(identifier), [](std::string_view identifier) -> located_output::Tree {
         if(identifier == "_") {
           return located_output::Hole{ .position = identifier };
@@ -83,7 +84,6 @@ namespace expression_parser {
     ));
     MB_DEFINE_RECURSIVE_PARSER(expression, branch(
       std::make_pair(loose_sequence(loose_symbol("("), identifier, symbol(":")), dependent_arrow_expression),
-      std::make_pair(loose_symbol("\\"), lambda_expression),
       std::make_pair(always_match, expression_with_arrows)
     ));
   }
