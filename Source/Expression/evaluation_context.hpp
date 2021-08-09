@@ -25,7 +25,10 @@ namespace expression {
     Primitives primitives;
     Context();
     std::uint64_t name_expression(tree::Tree);
+    std::uint64_t add_axiom();
+    std::uint64_t add_declaration();
     tree::Tree reduce(tree::Tree tree);
+    tree::Tree reduce_once_at_root(tree::Tree tree);
   };
 }
 

@@ -27,6 +27,17 @@ namespace expression {
     tree::Tree value;
     tree::Tree type;
   };
+
+  struct RefUnfolding {
+    tree::Tree const* head;
+    std::vector<tree::Tree const*> args;
+  };
+  RefUnfolding unfold_ref(tree::Tree const&);
+  struct Unfolding {
+    tree::Tree head;
+    std::vector<tree::Tree> args;
+  };
+  Unfolding unfold(tree::Tree);
 }
 
 #endif

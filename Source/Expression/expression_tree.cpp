@@ -1,4 +1,5 @@
 #include "expression_tree.hpp"
+#include <algorithm>
 
 namespace expression {
   bool term_matches(tree::Tree const& term, pattern::Tree const& pattern) {
@@ -114,5 +115,29 @@ namespace expression {
     tree::Tree& inner_term = path_lookup(term, path);
     auto captures = destructure_match(std::move(inner_term), pattern);
     inner_term = substitute_into_replacement(captures, replacement);
+  }
+
+  RefUnfolding unfold_ref(tree::Tree const& tree) {
+    RefUnfolding ret{
+      .head = &tree
+    };
+    while(auto* app = ret.head->get_if_apply()) {
+      ret.head = &app->lhs;
+      ret.args.push_back(&app->rhs);
+    }
+    std::reverse(ret.args.begin(), ret.args.end());
+    return ret;
+  }
+  Unfolding unfold(tree::Tree tree) {
+    Unfolding ret{
+      .head = std::move(tree)
+    };
+    while(auto* app = ret.head.get_if_apply()) {
+      ret.args.push_back(std::move(app->rhs));
+      ret.head = std::move(app->lhs);
+    }
+    std::reverse(ret.args.begin(), ret.args.end());
+    return ret;
+
   }
 }
