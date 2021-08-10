@@ -32,7 +32,10 @@ namespace expression::format {
         if(auto match = arrow_pattern.try_match(term)) {
           tree::Tree const& domain = match->lhs.rhs;
           tree::Tree const& codomain = match->rhs;
-          auto true_codomain = evaluation_context.reduce_once_at_root(tree::Apply{codomain, tree::Arg{settings.depth}});
+          auto codomain_applied = tree::Apply{codomain, tree::Arg{settings.depth}};
+          auto true_codomain = format_context.full_reduce ?
+            evaluation_context.reduce(std::move(codomain_applied))
+          : evaluation_context.reduce_once_at_root(std::move(codomain_applied));
           if(settings.parenthesize_arrow) {
             out << "(";
           }
@@ -85,5 +88,24 @@ namespace expression::format {
       .result = out.str(),
       .included_externals = std::move(detail.included_externals)
     };
+  }
+  FormatResult format_pattern(pattern::Tree const& pattern, Context& evaluation_context, FormatContext format_context) {
+    struct Detail {
+      std::uint64_t index = 0;
+      tree::Tree to_tree(pattern::Tree const& pattern) {
+        return pattern.visit(mdb::overloaded{
+          [&](pattern::Apply const& apply) -> tree::Tree {
+            return tree::Apply{to_tree(apply.lhs), to_tree(apply.rhs)};
+          },
+          [&](pattern::Wildcard const&) -> tree::Tree {
+            return tree::Arg{index++};
+          },
+          [&](pattern::Fixed const& fixed) -> tree::Tree {
+            return tree::External{fixed.index};
+          }
+        });
+      }
+    };
+    return format_expression(Detail{}.to_tree(pattern), evaluation_context, std::move(format_context));
   }
 }

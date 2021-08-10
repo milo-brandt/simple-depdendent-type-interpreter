@@ -1,0 +1,25 @@
+EVALUATOR
+
+Requires a context which can create new indeterminate variables.
+
+O
+
+
+SOLVER
+
+Requires a context which can:
+  1. Determine whether an expression is in the form VARIABLE ...args...
+  2. Determine whether an expression is head-closed and, if so, list the head
+     and arguments.
+  3. Determine whether two expressions are judgmentally equal.
+  4. Determine which arguments are present in an expression.
+
+Produces output:
+  1. Indicating if an external equation has been satisfied.
+  2. Asserting the definition of a variable as a lambda.
+  3. Requesting the creation of new indeterminate variables.
+
+Accepts signals:
+  1. Adding equations.
+  2. Registering variables.
+  3. Querying the status of external equations.

@@ -6,74 +6,109 @@
 #include <iostream>
 #include "Utility/overloaded.hpp"
 #include "Compiler/resolved_tree.hpp"
-#include "Compiler/flat_instructions.hpp"
-#include "Expression/evaluation_context_interpreter.hpp"
+#include "Compiler/evaluator.hpp"
 #include "Expression/solver.hpp"
 #include "Expression/solver_context.hpp"
 #include "Expression/formatter.hpp"
 
 #include <sstream>
 
+std::optional<std::pair<expression::pattern::Tree, std::unordered_map<std::uint64_t, std::uint64_t> > > as_pattern(expression::tree::Tree const& tree, expression::Context& context) {
+  struct Detail {
+    expression::Context& context;
+    std::unordered_map<std::uint64_t, std::uint64_t> map;
+    std::optional<expression::pattern::Tree> evaluate(expression::tree::Tree const& tree, bool on_spine) {
+      return tree.visit(mdb::overloaded{
+        [&](expression::tree::Apply const& apply) -> std::optional<expression::pattern::Tree> {
+          auto lhs = evaluate(apply.lhs, on_spine);
+          if(!lhs) return std::nullopt;
+          auto rhs = evaluate(apply.rhs, false);
+          if(!rhs) return std::nullopt;
+          return expression::pattern::Apply{std::move(*lhs), std::move(*rhs)};
+        },
+        [&](expression::tree::Arg const& arg) -> std::optional<expression::pattern::Tree> {
+          if(map.contains(arg.index))
+            return std::nullopt;
+          map.insert(std::make_pair(arg.index, map.size()));
+          return expression::pattern::Wildcard{};
+        },
+        [&](expression::tree::External const& ext) -> std::optional<expression::pattern::Tree> {
+          if(on_spine || context.external_info.at(ext.index).is_axiom) {
+            return expression::pattern::Fixed{ext.index};
+          } else {
+            return std::nullopt;
+          }
+        }
+      });
+    }
+  };
+  Detail detail{context};
+  auto ret = detail.evaluate(tree, true);
+  if(ret) {
+    return std::make_pair(std::move(*ret), std::move(detail.map));
+  } else {
+    return std::nullopt;
+  }
+}
+std::optional<expression::tree::Tree> as_replacement(expression::tree::Tree const& tree, std::unordered_map<std::uint64_t, std::uint64_t> const& map) {
+  struct Detail {
+    std::unordered_map<std::uint64_t, std::uint64_t> const& map;
+    std::optional<expression::tree::Tree> evaluate(expression::tree::Tree const& tree) {
+      return tree.visit(mdb::overloaded{
+        [&](expression::tree::Apply const& apply) -> std::optional<expression::tree::Tree> {
+          auto lhs = evaluate(apply.lhs);
+          if(!lhs) return std::nullopt;
+          auto rhs = evaluate(apply.rhs);
+          if(!rhs) return std::nullopt;
+          return expression::tree::Apply{std::move(*lhs), std::move(*rhs)};
+        },
+        [&](expression::tree::Arg const& arg) -> std::optional<expression::tree::Tree> {
+          if(!map.contains(arg.index))
+            return std::nullopt;
+          return expression::tree::Arg{map.at(arg.index)};
+        },
+        [&](expression::tree::External const& ext) -> std::optional<expression::tree::Tree> {
+          return ext;
+        }
+      });
+    }
+  };
+  Detail detail{map};
+  return detail.evaluate(tree);
+}
+std::optional<expression::Rule> create_rule(compiler::evaluate::Rule& rule, expression::Context& context) {
+  rule.pattern = context.reduce(std::move(rule.pattern));
+  rule.replacement = context.reduce(std::move(rule.replacement));
+  if(auto pat = as_pattern(rule.pattern, context)) {
+    if(auto rep = as_replacement(rule.replacement, pat->second)) {
+      return expression::Rule{
+        .pattern = std::move(pat->first),
+        .replacement = std::move(*rep)
+      };
+    }
+  }
+  return std::nullopt;
+}
+bool try_to_insert_rule(compiler::evaluate::Rule& rule, expression::Context& context) {
+  if(auto r = create_rule(rule, context)) {
+    context.rules.push_back(std::move(*r));
+    return true;
+  } else {
+    return false;
+  }
+}
+
 int main(int argc, char** argv) {
-  //expression::Context ctx;
-/*  expression::solve::Solver solvey{expression::solve::SimpleContext{ctx}};
-
-  auto ax = ctx.add_axiom();
-  auto hole = ctx.add_declaration();
-  solvey.register_variable(hole);
-
-  expression::tree::Tree lhs = expression::tree::Apply{
-    expression::tree::Apply{
-      expression::tree::External{ax},
-      expression::tree::Apply{
-        expression::tree::External{hole},
-        expression::tree::Arg{0}
-      }
-    },
-    expression::tree::Arg{1}
-  };
-  expression::tree::Tree rhs = expression::tree::Apply{
-    expression::tree::Apply{
-      expression::tree::External{ax},
-      expression::tree::Arg{0}
-    },
-    expression::tree::Arg{1}
-  };
-
-  solvey.add_equation({
-    .depth = 2,
-    .lhs = lhs,
-    .rhs = rhs
-  });
-
-  std::cout << "LHS:\n";
-  format_indented(std::cout, lhs, 0, [](auto& o, auto const& v) { o << v; });
-  std::cout << "\nRHS:\n";
-  format_indented(std::cout, rhs, 0, [](auto& o, auto const& v) { o << v; });
-
-
-  solvey.deduce();
-
-  std::cout << "\nSolved: " << solvey.is_fully_satisfied() << "\n";
-
-  lhs = ctx.reduce(lhs);
-  rhs = ctx.reduce(rhs);
-  std::cout << "\nLHS:\n";
-  format_indented(std::cout, lhs, 0, [](auto& o, auto const& v) { o << v; });
-  std::cout << "\nRHS:\n";
-  format_indented(std::cout, rhs, 0, [](auto& o, auto const& v) { o << v; });
-  std::cout << "\n";*/
-
 
   expression::Context context;
   compiler::resolution::NameContext name_context;
-  expression::EmbedInfo embeds;
+  std::vector<expression::TypedValue> embeds;
 
   auto add_name = [&](std::string name, expression::TypedValue value) {
     name_context.names.insert_or_assign(std::move(name), compiler::resolution::NameInfo{
-      .embed_index = embeds.values.size()
+      .embed_index = embeds.size()
     });
-    embeds.values.push_back(std::move(value));
+    embeds.push_back(std::move(value));
   };
 
   add_name("Type", { expression::tree::External{context.primitives.type}, expression::tree::External{context.primitives.type} });
@@ -131,18 +166,27 @@ int main(int argc, char** argv) {
         format_indented(std::cout, resolved.tree.output, 0, [](auto& o, auto const& v) { o << v; });
         std::cout << "\n";
 
-        auto [program, explain] = compiler::flat::flatten_tree(resolved.tree.output);
-        std::cout << "Program:\n" << program << "\n";
-
-        auto interpret_result = expression::interpret_program(program, context, embeds);
-        auto& [ret_value, ret_type] = interpret_result.result;
+        auto evaluation_result = compiler::evaluate::evaluate_tree(
+          resolved.tree.output,
+          {
+            .arrow_axiom = context.primitives.arrow,
+            .type_axiom = context.primitives.type,
+            .embed = [&](std::uint64_t index) { return embeds.at(index); },
+            .allocate_variable = [&]() { return context.add_declaration(); }
+          }
+        );
 
         expression::solve::Solver solvey{expression::solve::SimpleContext{context}};
-        for(auto const& hole : interpret_result.holes) {
-          std::cout << "Variable registered: " << hole << "\n";
-          solvey.register_variable(hole);
+        for(auto const& var : evaluation_result.variables) {
+          if(!std::holds_alternative<compiler::evaluate::variable_explanation::LambdaDeclaration>(var.second)) {
+            std::cout << "Variable registered: " << var.first << "\n";
+            solvey.register_variable(var.first);
+          } else {
+            std::cout << "Declaration registered: " << var.first << "\n";
+          }
         }
-        for(auto& cast : interpret_result.casts) {
+        std::vector<std::tuple<std::uint64_t, std::uint64_t, expression::tree::Tree, expression::tree::Tree> > casts;
+        for(auto& cast : evaluation_result.casts) {
           std::cout << "Cast registered:\n";
           std::cout << "\tDepth: " << cast.depth << "\n";
           std::cout << "\tSource Type: " << expression::format::format_expression(cast.source_type, context, {
@@ -154,25 +198,62 @@ int main(int argc, char** argv) {
           std::cout << "\tTarget Type: " << expression::format::format_expression(cast.target_type, context, {
             .arrow_external = context.primitives.arrow
           }).result << "\n";
-          std::cout << "\tCast Result: " << cast.cast_result << "\n";
-          solvey.add_cast(std::move(cast));
-        }
-        for(auto& constraint : interpret_result.constraints) {
-          std::cout << "Constraint registered:\n";
-          std::cout << "\tDepth: " << constraint.depth << "\n";
-          std::cout << "\tLHS: " << expression::format::format_expression(constraint.lhs, context, {
+          std::cout << "\tTarget: " << expression::format::format_expression(cast.target, context, {
             .arrow_external = context.primitives.arrow
           }).result << "\n";
-          std::cout << "\tRHS: " << expression::format::format_expression(constraint.rhs, context, {
+          auto index = solvey.add_equation({
+            .depth = cast.depth,
+            .lhs = std::move(cast.source_type),
+            .rhs = std::move(cast.target_type)
+          });
+          casts.emplace_back(index, cast.depth, std::move(cast.source), std::move(cast.target));
+        }
+        for(auto& rule : evaluation_result.rules) {
+          std::cout << "Rule registered:\n";
+          std::cout << "\tPattern: " << expression::format::format_expression(rule.pattern, context, {
             .arrow_external = context.primitives.arrow
           }).result << "\n";
-
-          solvey.add_equation(std::move(constraint));
+          std::cout << "\tReplacement: " << expression::format::format_expression(rule.replacement, context, {
+            .arrow_external = context.primitives.arrow
+          }).result << "\n";
         }
-
-        solvey.deduce();
-
-
+      SOLVE_HEAD:
+        bool made_progress = solvey.deduce();
+        auto casts_new_end = std::remove_if(casts.begin(), casts.end(), [&](auto& cast) {
+          if(solvey.is_equation_satisfied(std::get<0>(cast))) {
+            solvey.add_equation({
+              .depth = std::get<1>(cast),
+              .lhs = std::move(std::get<2>(cast)),
+              .rhs = std::move(std::get<3>(cast))
+            });
+            return true;
+          } else {
+            return false;
+          }
+        });
+        if(casts_new_end != casts.end()) {
+          made_progress = true;
+          casts.erase(casts_new_end, casts.end());
+        }
+        auto rules_new_end = std::remove_if(evaluation_result.rules.begin(), evaluation_result.rules.end(), [&](auto& rule) {
+          return try_to_insert_rule(rule, context);
+        });
+        if(rules_new_end != evaluation_result.rules.end()) {
+          made_progress = true;
+          evaluation_result.rules.erase(rules_new_end, evaluation_result.rules.end());
+        }
+        if(made_progress) goto SOLVE_HEAD;
+        if(!evaluation_result.rules.empty()) {
+          std::cout << "Rules left unsatisfied!\n";
+          for(auto const& rule : evaluation_result.rules) {
+            std::cout
+              << "Unsatisfied: " << expression::format::format_expression(rule.pattern, context, {
+                .arrow_external = context.primitives.arrow
+              }).result << " := " << expression::format::format_expression(rule.replacement, context, {
+              .arrow_external = context.primitives.arrow
+            }).result << "\n";
+          }
+        }
         if(solvey.is_fully_satisfied()) {
           std::cout << "Type solving succeeded.\n";
         } else {
@@ -217,35 +298,24 @@ int main(int argc, char** argv) {
         }
         for(std::size_t c = rule_size; c < context.rules.size(); ++c) {
           auto const& rule = context.rules[c];
-          std::cout << "Pattern: ";
-          format_indented(std::cout, rule.pattern, 0, [](auto& o, auto const& v) { o << v; });
-          std::cout << "\n";
-          std::cout << "Replacement: ";
-          format_indented(std::cout, rule.replacement, 0, [](auto& o, auto const& v) { o << v; });
-          std::cout << "\n\n";
+          std::cout << "Pattern: " << expression::format::format_pattern(rule.pattern, context, {
+            .arrow_external = context.primitives.arrow
+          }).result << " := " << expression::format::format_expression(rule.replacement, context, {
+            .arrow_external = context.primitives.arrow
+          }).result << "\n";
         }
         rule_size = context.rules.size();
 
-        std::cout << "Interpreted result: ";
-        format_indented(std::cout, ret_value, 0, [](auto& o, auto const& v) { o << v; });
-        std::cout << "\n";
-        std::cout << "Of type: ";
-        format_indented(std::cout, ret_type, 0, [](auto& o, auto const& v) { o << v; });
-        std::cout << "\n";
-        ret_value = context.reduce(std::move(ret_value));
-        std::cout << "Simplified: ";
-        format_indented(std::cout, ret_value, 0, [](auto& o, auto const& v) { o << v; });
-        std::cout << "\n";
-        ret_type = context.reduce(std::move(ret_type));
-        std::cout << "Of type: ";
-        format_indented(std::cout, ret_type, 0, [](auto& o, auto const& v) { o << v; });
-        std::cout << "\n";
+        auto ret_value = context.reduce(std::move(evaluation_result.result.value));
+        auto ret_type = context.reduce(std::move(evaluation_result.result.type));
 
         std::cout << "Pretty print:\n" << expression::format::format_expression(ret_value, context, {
-          .arrow_external = context.primitives.arrow
+          .arrow_external = context.primitives.arrow,
+          .full_reduce = true
         }).result << "\n";
         std::cout << "Of type:\n" << expression::format::format_expression(ret_type, context, {
-          .arrow_external = context.primitives.arrow
+          .arrow_external = context.primitives.arrow,
+          .full_reduce = true
         }).result << "\n";
 
         std::stringstream str;

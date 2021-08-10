@@ -140,11 +140,6 @@ namespace expression::solve {
     };*/
     using Any = std::variant<Open, AxiomMismatch, ArgumentMismatch, Rewritten, Deepened, SymmetricExplode, AsymmetricExplode, JudgedTrue>;
   };
-/*
-  struct SolveSetup {
-    std::vector<CastSpecification> casts;
-  };
-*/
 
   template<class T>
   concept SolverContext = requires(
@@ -177,17 +172,10 @@ namespace expression::solve {
     std::vector<SolveFragment> parts;
   };
 
-  struct ConstraintSpecification {
+  struct EquationSpecification {
     std::uint64_t depth;
     tree::Tree lhs;
     tree::Tree rhs;
-  };
-  struct CastSpecification {
-    std::uint64_t depth;
-    tree::Tree source_type;
-    tree::Tree source;
-    tree::Tree target_type;
-    std::uint64_t cast_result; //cast applied to arg(0) arg(1) arg(2) ... arg(depth - 1)
   };
 
   template<SolverContext Context>
@@ -198,8 +186,7 @@ namespace expression::solve {
     Solver(Context);
     std::vector<SolveFragment> const& parts();
     std::unordered_set<std::uint64_t> const& variables();
-    std::uint64_t add_equation(ConstraintSpecification);
-    std::uint64_t add_cast(CastSpecification);
+    std::uint64_t add_equation(EquationSpecification);
     void register_variable(std::uint64_t);
     bool is_equation_satisfied(std::uint64_t index) const;
     bool is_fully_satisfied() const;
@@ -210,8 +197,7 @@ namespace expression::solve {
   template<class Context> Solver<Context>::Solver(Context context):impl(std::make_unique<Impl>(std::forward<Context>(context))){}
   template<class Context> std::vector<SolveFragment> const& Solver<Context>::parts() { return impl->parts; }
   template<class Context> std::unordered_set<std::uint64_t> const& Solver<Context>::variables() { return impl->variables; }
-  template<class Context> std::uint64_t Solver<Context>::add_equation(ConstraintSpecification specification) { return impl->add_equation(std::move(specification)); }
-  template<class Context> std::uint64_t Solver<Context>::add_cast(CastSpecification specification) { return impl->add_cast(std::move(specification)); }
+  template<class Context> std::uint64_t Solver<Context>::add_equation(EquationSpecification specification) { return impl->add_equation(std::move(specification)); }
   template<class Context> void Solver<Context>::register_variable(std::uint64_t var) { return impl->register_variable(var); }
   template<class Context> bool Solver<Context>::is_equation_satisfied(std::uint64_t index) const { return impl->is_equation_satisfied(index); }
   template<class Context> bool Solver<Context>::is_fully_satisfied() const { return impl->is_fully_satisfied(); }
@@ -227,7 +213,6 @@ namespace expression::solve {
     };
     Context context;
     std::vector<SolveFragment> parts;
-    std::vector<CastInfo> casts;
     std::unordered_set<std::uint64_t> variables;
     Impl(Context context):context(std::forward<Context>(context)) {}
     /*
@@ -565,7 +550,7 @@ namespace expression::solve {
     /*
       Interface
     */
-    std::uint64_t add_equation(ConstraintSpecification specification) {
+    std::uint64_t add_equation(EquationSpecification specification) {
       std::uint64_t ret = parts.size();
       parts.push_back({
         .depth = specification.depth,
@@ -574,24 +559,6 @@ namespace expression::solve {
         .disposition = equation_disposition::Open{},
         .explanation = equation_explanation::External{}
       });
-      return ret;
-    }
-    std::uint64_t add_cast(CastSpecification specification) {
-      std::uint64_t ret = parts.size();
-      parts.push_back({
-        .depth = specification.depth,
-        .lhs = std::move(specification.source_type),
-        .rhs = std::move(specification.target_type),
-        .disposition = equation_disposition::Open{},
-        .explanation = equation_explanation::External{}
-      });
-      casts.push_back({
-        .index = ret,
-        .source = std::move(specification.source),
-        .cast_result = specification.cast_result,
-        .depth = specification.depth
-      });
-      variables.insert(specification.cast_result);
       return ret;
     }
     void register_variable(std::uint64_t var) {
@@ -655,24 +622,6 @@ namespace expression::solve {
       bool made_progress = false;
       std::uint64_t start_point = 0;
     DEDUCE_START:
-      auto cast_removed = std::remove_if(casts.begin(), casts.end(), [&](CastInfo const& cast) {
-        if(is_equation_satisfied(cast.index)) {
-          parts.push_back({
-            .depth = cast.depth,
-            .lhs = apply_args_enumerated(tree::External{cast.cast_result}, cast.depth),
-            .rhs = std::move(cast.source),
-            .disposition = equation_disposition::Open{},
-            .explanation = equation_explanation::FromCast{cast.index}
-          });
-          return true;
-        } else {
-          return false;
-        }
-      });
-      if(cast_removed != casts.end()) {
-        casts.erase(cast_removed, casts.end());
-        made_progress = true;
-      }
       for(std::uint64_t i = start_point; i < parts.size(); ++i) {
         if(std::holds_alternative<equation_disposition::Open>(parts[i].disposition)) {
           if(examine_equation(i)) {

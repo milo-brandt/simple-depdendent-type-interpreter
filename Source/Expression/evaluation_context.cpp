@@ -59,10 +59,11 @@ namespace expression {
     return tree;
   }
   tree::Tree Context::reduce_once_at_root(tree::Tree tree) {
+  ROOT_REDUCTION_START:
     for(auto const& rule : rules) {
       if(term_matches(tree, rule.pattern)) {
         replace_with_substitution_at(tree, {}, rule.pattern, rule.replacement);
-        return tree;
+        goto ROOT_REDUCTION_START;
       }
     }
     return tree;
