@@ -28,11 +28,12 @@ namespace expression::solve {
   void SimpleContext::add_rule(Rule rule, rule_explanation::Any) {
     context.rules.push_back(std::move(rule));
   }
-  std::uint64_t SimpleContext::introduce_variable(introduction_explanation::Any) {
+  std::uint64_t SimpleContext::introduce_variable(introduction_explanation::Any explanation) {
     auto ret = context.external_info.size();
     context.external_info.push_back({
       .is_axiom = false
     });
+    introductions.insert(std::make_pair(ret, std::move(explanation)));
     return ret;
   }
   bool SimpleContext::term_depends_on(std::uint64_t term, std::uint64_t check) {

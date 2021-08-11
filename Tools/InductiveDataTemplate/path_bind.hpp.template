@@ -44,7 +44,7 @@
     });
   }
   inline bool is_child_valid({{class_name}} const& in, std::uint64_t step) {
-    return in.visit([&]<class T>(T{{ref_kind}} part) -> bool {
+    return in.visit([&]<class T>(T const& part) -> bool {
       {%- for component in components %}
       if constexpr(std::is_same_v<T, {{component.name}}>) {
         switch(step) {

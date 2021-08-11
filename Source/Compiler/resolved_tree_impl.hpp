@@ -332,7 +332,7 @@ inline compiler::resolution::path::Path path_of(Ts&&... ts) {
     });
   }
   inline bool is_child_valid(Tree const& in, std::uint64_t step) {
-    return in.visit([&]<class T>(T part) -> bool {
+    return in.visit([&]<class T>(T const& part) -> bool {
       if constexpr(std::is_same_v<T, Apply>) {
         switch(step) {
         case 0: return true;
@@ -1530,7 +1530,7 @@ inline compiler::resolution::path::Path path_of(Ts&&... ts) {
     });
   }
   inline bool is_child_valid(Tree const& in, std::uint64_t step) {
-    return in.visit([&]<class T>(T part) -> bool {
+    return in.visit([&]<class T>(T const& part) -> bool {
       if constexpr(std::is_same_v<T, Apply>) {
         switch(step) {
         case 0: return true;

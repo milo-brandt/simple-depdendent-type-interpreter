@@ -6,6 +6,7 @@
 namespace expression::solve {
   struct SimpleContext {
     Context& context;
+    std::unordered_map<std::uint64_t, introduction_explanation::Any> introductions;
     tree::Tree reduce(tree::Tree input);
     bool needs_more_arguments(tree::Tree const&);
     bool is_head_closed(tree::Tree const& input, std::unordered_set<std::uint64_t> const& variables);
