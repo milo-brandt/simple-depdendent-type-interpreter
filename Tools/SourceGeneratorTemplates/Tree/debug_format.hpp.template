@@ -1,0 +1,67 @@
+{%- macro define_formatter(tree_namespace, tree) -%}
+	{%- call in_namespace(tree_namespace) -%}
+	{%- call in_namespace_relative("format_detail") -%}
+	{%- for kind in tree.kinds %}
+	template<class Formatter> void format_indented(std::ostream& o, {{kind.name}} const& value, std::size_t indent, Formatter&& format_inner);
+	{%- call in_extension("inl") %}
+	template<class Formatter> void format_indented(std::ostream& o, {{kind.name}} const& value, std::size_t indent, Formatter&& format_inner) {
+		auto make_indent = [&] { for(std::size_t i = 0; i < indent; ++i) o << "   "; };
+		auto make_inner_indent = [&] { for(std::size_t i = 0; i <= indent; ++i) o << "   "; };
+		value.visit(mdb::overloaded{
+			{%- for component in kind.components %}
+			[&]({{component.name}} const& component) {
+				o << "{{component.name}} {\n";
+				{%- for member in component.base_members %}
+				{%- if member.type_info.is_vector() %}
+				make_inner_indent(); o << ".{{member.name}} = {";
+				{
+					++indent;
+					bool is_first = true;
+					for(auto const& member : component.{{member.name}}) {
+						if(is_first) { is_first = false; } else { o << ","; }
+						o << "\n";
+						make_inner_indent(); format_indented(o, member, indent + 1, format_inner);
+					};
+					--indent;
+					o << "\n";
+				}
+				make_inner_indent(); o << "}\n";
+				{%- elif member.type_info.is_optional() %}
+				make_inner_indent(); o << ".{{member.name}} = "; if(component.{{member.name}}) { format_indented(o, *component.{{member.name}}, indent + 1, format_inner); o << "\n"; } else { o << "None\n"; }
+				{%- else %}
+				make_inner_indent(); o << ".{{member.name}} = "; format_indented(o, component.{{member.name}}, indent + 1, format_inner); o << "\n";
+				{%- endif %}
+				{%- endfor %}
+				{%- for member in component.extra_members %}
+				make_inner_indent(); o << ".{{member.name}} = "; format_inner(o, component.{{member.name}}); o << "\n";
+				{%- endfor %}
+				make_indent(); o << "}";
+			}{% if not loop.last %},{%endif%}
+			{%- endfor %}
+		});
+	}
+
+	{%- endcall %}
+	{%- endfor %}
+	{%- for kind in tree.kinds %}
+	template<class Formatter> struct {{kind.name}}Formatter { {{kind.name}} const& tree; Formatter formatter; };
+	{%- endfor %}
+	{%- for kind in tree.kinds %}
+  template<class Formatter> std::ostream& operator<<(std::ostream& o, {{kind.name}}Formatter<Formatter> const& formatter) { format_indented(o, formatter.tree, 0, formatter.formatter); return o; }
+	template<class Formatter> std::ostream& operator<<(std::ostream& o, {{kind.name}}Formatter<Formatter>&& formatter) { format_indented(o, formatter.tree, 0, formatter.formatter); return o; }
+	{%- endfor %}
+	{%- endcall %}
+	{%- for kind in tree.kinds %}
+	template<class Formatter> auto format({{kind.name}} const& tree, Formatter&& formatter) { return format_detail::{{kind.name}}Formatter<Formatter>{tree, std::forward<Formatter>(formatter)}; }
+	inline auto format({{kind.name}} const& tree) { return format(tree, [](std::ostream& o, auto const& v) { o << v; }); }
+	{%- endfor %}
+	{%- endcall %}
+{%- endmacro -%}
+{%- macro define_archive_unique_formatter(archive_namespace, tree) %}
+{%- call in_namespace(archive_namespace) %}
+{%- for kind in tree.kinds %}
+  template<class Formatter> auto format({{kind.name}} const& tree, Formatter&& formatter) { return format(tree.root(), std::forward<Formatter>(formatter)); }
+  inline auto format({{kind.name}} const& tree) { return format(tree.root()); }
+{%- endfor %}
+{%- endcall %}
+{%- endmacro %}

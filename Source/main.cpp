@@ -1,4 +1,5 @@
 //#include "WebInterface/web_interface.hpp"
+/*
 #include "ExpressionParser/parser_tree.hpp"
 
 #include "ExpressionParser/expression_parser.hpp"
@@ -249,9 +250,31 @@ struct FormatInstance {
     clear_explanation();
   }
 };
-
+*/
+#include "ExpressionParser/parser_tree_2_impl.hpp"
+using namespace expression;
 int main(int argc, char** argv) {
-
+  located_output::Expression located_expr = located_output::Apply{
+    .lhs = located_output::Identifier{.id = "hi", .position = "hi"},
+    .rhs = located_output::Identifier{.id = "wassup", .position = "wassup"},
+    .position = "hi wassup"
+  };
+  auto expr = located_expr.locator;
+  auto x = archive(expr);
+  std::cout << "Hello, werld!\n";
+  x.root().visit(mdb::overloaded{
+    [](locator::archive_part::Apply const& apply) {
+      std::cout << "Apply!\n";
+      std::cout << apply.index().index() << "\n";
+    },
+    [](auto const&) {
+      std::cout << "o no\n";
+    }
+  });
+  std::cout << format(expr) << "\n";
+  std::cout << format(x.root()) << "\n";
+  std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";
+/*
   expression::Context context;
   compiler::resolution::NameContext name_context;
   std::vector<expression::TypedValue> embeds;
@@ -514,5 +537,5 @@ int main(int argc, char** argv) {
         add_name(str.str(), {std::move(ret_value), std::move(ret_type)});
       }
     }
-  }
+  }*/
 }

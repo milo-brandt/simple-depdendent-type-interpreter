@@ -20,11 +20,11 @@ debug_test: Debug/test_program
 debug: Debug/program
 	gdb Debug/program
 
-Build/program: {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in non_test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O3 -o Build/program
+Build/program: {% for src_file in main_files %}Build/{{src_file}}.o {% endfor %}
+	$(compiler_cmd)  {% for src_file in main_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O3 -o Build/program
 
-Debug/program: {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in non_test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O0 -ggdb -o Debug/program
+Debug/program: {% for src_file in main_files %}Debug/{{src_file}}.o {% endfor %}
+	$(compiler_cmd)  {% for src_file in main_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O0 -ggdb -o Debug/program
 
 Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %}
 	$(compiler_cmd)  {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -O3 -o Build/test_program
@@ -32,17 +32,14 @@ Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endf
 Debug/test_program: {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %}
 	$(compiler_cmd)  {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -O0 -ggdb -o Debug/test_program
 
-Source/ExpressionParser/parser_tree_impl.hpp: Source/ExpressionParser/parser_tree.py
-	python3 Tools/source_generator.py Source/ExpressionParser/parser_tree.py
+{% for source_generator in source_generators %}
+{{source_generator.outputs[0]}} : {{source_generator.source}}
+	python3 Tools/source_generator.py {{ source_generator.source }}
 
-Source/Compiler/resolved_tree_impl.hpp: Source/Compiler/resolved_tree.py
-	python3 Tools/source_generator.py Source/Compiler/resolved_tree.py
-
-Source/Expression/expression_tree_impl.hpp: Source/Expression/expression_tree.py
-	python3 Tools/source_generator.py Source/Expression/expression_tree.py
-
-Source/Expression/pattern_tree_impl.hpp: Source/Expression/pattern_tree.py
-	python3 Tools/source_generator.py Source/Expression/pattern_tree.py
+{% for output in source_generator.outputs[1:] %}
+{{output}} : {{source_generator.outputs[0]}}
+{%- endfor %}
+{%- endfor %}
 
 {% for src_file in source_files %}
 Build/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}

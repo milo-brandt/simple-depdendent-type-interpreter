@@ -202,12 +202,12 @@ inline std::uint64_t path_segment_of(Tree Apply::* member) {
   if(member == &Apply::rhs) return 1;
   std::terminate(); //unreachable
 }
-inline std::uint64_t path_segment_of(std::optional<Tree> Lambda::* member) {
-  if(member == &Lambda::type) return 1;
-  std::terminate(); //unreachable
-}
 inline std::uint64_t path_segment_of(Tree Lambda::* member) {
   if(member == &Lambda::body) return 0;
+  std::terminate(); //unreachable
+}
+inline std::uint64_t path_segment_of(std::optional<Tree> Lambda::* member) {
+  if(member == &Lambda::type) return 1;
   std::terminate(); //unreachable
 }
 inline std::uint64_t path_segment_of(Tree Arrow::* member) {
@@ -1464,12 +1464,12 @@ inline std::uint64_t path_segment_of(Tree Apply::* member) {
   if(member == &Apply::rhs) return 1;
   std::terminate(); //unreachable
 }
-inline std::uint64_t path_segment_of(std::optional<Tree> Lambda::* member) {
-  if(member == &Lambda::type) return 1;
-  std::terminate(); //unreachable
-}
 inline std::uint64_t path_segment_of(Tree Lambda::* member) {
   if(member == &Lambda::body) return 0;
+  std::terminate(); //unreachable
+}
+inline std::uint64_t path_segment_of(std::optional<Tree> Lambda::* member) {
+  if(member == &Lambda::type) return 1;
   std::terminate(); //unreachable
 }
 inline std::uint64_t path_segment_of(Tree Arrow::* member) {

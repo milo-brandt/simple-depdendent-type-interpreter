@@ -1,0 +1,30 @@
+{%- from "Tree/definition.hpp.template" import tree_definition, wrap_namespace %}
+{%- from "Tree/match.hpp.template" import match_definition %}
+{%- from "Tree/archive.hpp.template" import archive_definition %}
+{%- from "Tree/debug_format.hpp.template" import define_formatter, define_archive_unique_formatter %}
+{%- from "Tree/multitree.hpp.template" import define_multitree %}
+
+{%- from "head_macros.hpp.template" import make_head %}
+
+{{- make_head(file_info) }}
+{%- for tree in trees %}
+{% call in_namespace(tree.namespace) %}
+  {{ tree_definition(tree) }}
+  {# { match_definition(tree) } #}
+{% endcall %}
+{%- endfor %}
+{%- if archive %}
+    {{ archive_definition(archive) }}
+{%- endif %}
+{%- for tree in trees %}
+    {{ define_formatter(tree.namespace, tree) }}
+{%- endfor %}
+{%- if archive %}
+{%- for tree in archive.trees %}
+    {{ define_formatter(tree.namespace + "::archive_part", tree) }}
+    {{ define_archive_unique_formatter(tree.namespace + "::archive_root", tree) }}
+{%- endfor %}
+{%- endif %}
+{%- for multitree in multitrees %}
+    {{ define_multitree(multitree) }}
+{%- endfor %}

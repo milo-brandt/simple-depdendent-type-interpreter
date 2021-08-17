@@ -1,3 +1,26 @@
+/*
+  Syntax:
+      Application:     f x
+      Lambda function: \x:T.body (Argument name, type declaration optional)
+      Arrow:           X -> Y
+      Dependent Arrow: (x : X) -> Y
+
+      block {
+        iterate                : (T : Type) -> (T -> T) -> T -> Nat -> T;
+        iterate T f x zero     = x;
+        iterate T f x (succ y) = f (iterate T f x y);
+        let x = y;
+        iterate
+      }
+
+
+      block {
+        axiom Nat : Type
+        axiom zero : Nat
+        axiom succ : Nat -> Nat
+      }
+*/
+
 #ifndef EXPRESSION_PARSER_HPP
 #define EXPRESSION_PARSER_HPP
 
@@ -70,6 +93,47 @@ namespace expression_parser {
         .position = position
       };
     }));
+    /*
+      Block stuff
+    */
+    /*constexpr auto declaration_prototype = map(loose_capture(loose_sequence(
+      identifier,
+      symbol(":"),
+      expression
+    )), unpacked([](std::string_view identifier, located_output::Tree type) {
+      //do stuff
+    }));
+    constexpr auto declaration_pattern = map(loose_capture(loose_sequence(
+      expression,
+      symbol("="),
+      expression
+    )), unpacked([](located_output::Tree lhs, located_output::Tree rhs) {
+      //do stuff
+    }));
+    constexpr auto let_expression = map(loose_capture(loose_sequence(
+      symbol("let"),
+      whitespace,
+      identifier,
+      symbol("="),
+      expression
+    )), unpacked([](std::string_view identifier, located_output::Tree rhs) {
+      //do stuff
+    }));
+    constexpr auto block_action = loose_sequence(branch(
+      std::make_pair(declaration_prototype, declaration_prototype),
+      std::make_pair(declaration_pattern, declaration_pattern),
+      std::make_pair(let_expression, let_expression)
+    ), symbol(";"));
+
+    constexpr auto block_expression = map(loose_capture(loose_sequence(
+      symbol("block"),
+      symbol("{"),
+      zero_or_more(block_action),
+      expression,
+      symbol("}")
+    )), unpacked([](std::string_view identifier, located_output::Tree rhs) {
+      //do stuff
+    }));*/
 
     MB_DEFINE_RECURSIVE_PARSER(term, branch(
       std::make_pair(loose_symbol("("), loose_sequence(loose_symbol("("), expression, loose_symbol(")"))),

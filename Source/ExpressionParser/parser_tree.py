@@ -1,5 +1,3 @@
-import os;
-
 specification = {
     "shapes": {
         "parser_shape": {

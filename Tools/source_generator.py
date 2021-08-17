@@ -2,163 +2,440 @@ import inflection
 import os
 from jinja2 import Environment, FileSystemLoader
 import sys
-
-def read_specification(path_to_file):
-    imported = {}
-    with open(path_to_file) as file:
-        exec(file.read(), {}, imported)
-        return imported['specification']
-
-def get_name_and_namespace(str):
-    separator = str.rfind("::")
-    if separator == -1:
-        return (str, None)
-    else:
-        return (str[separator+2:], str[:separator])
-
-def get_namespace_locator(str):
-    separator = str.rfind("::")
-    if separator == -1:
-        return ""
-    else:
-        return str[:separator+2]
-
-def datatype_for_base(str, tree_name):
-    if str == 'Self':
-        return tree_name
-    elif str == 'OptionalSelf':
-        return 'std::optional<' + tree_name + '>'
-    else:
-        raise RuntimeError("Unrecognized base kind: " + str)
-
-def process_path(shape, path_name):
-    (class_name, namespace) = get_name_and_namespace(path_name)
-    return {
-        "base_namespace" : namespace,
-        "class_name": class_name
-    }
-
-def process_tree(spec, tree_name):
-    shapes = spec['shapes']
-    tree = spec['trees'][tree_name]
-    shape = shapes[tree['shape']]
-    data = tree['data']
-
-    (class_name, namespace) = get_name_and_namespace(tree_name)
-
-    components = []
-    for component_name, base_data in shape['components'].items():
-        base_members = [{
-            "name": name,
-            "kind": base_type,
-            "type": datatype_for_base(base_type, class_name),
-        } for (name, base_type) in base_data]
-        extra_members = [{"name": name, "type": type} for (name, type) in data[component_name]]
-        base_member_types = list(set([datatype_for_base(base_type, class_name) for (name, base_type) in base_data]))
-        components.append({
-            "name": component_name,
-            "members": base_members + extra_members,
-            "base_members": base_members,
-            "extra_members": extra_members,
-            "base_member_types": base_member_types
-        })
-
-    return {
-        "base_namespace": namespace,
-        "components": components,
-        "class_name": class_name,
-        "path_class": tree.get('path')
-    }
-
-def process_multitree(spec, multitree_name):
-    shapes = spec['shapes']
-    multitree = spec['multitrees'][multitree_name]
-    trees = [(tree_name, spec['trees'][tree_name]) for (tree_name, member_name) in multitree]
-    example_tree = trees[0][1]
-    shape = shapes[example_tree['shape']]
-
-    (class_name, namespace) = get_name_and_namespace(multitree_name)
-
-    components = []
-    for component_name, base_data in shape['components'].items():
-        base_members = [{
-            "name": name,
-            "kind": base_type,
-            "type": datatype_for_base(base_type, class_name),
-        } for (name, base_type) in base_data]
-        extra_members = {}
-        for (tree_name, tree) in trees:
-            extra_members[tree_name] = [{"name": name, "type": type} for (name, type) in tree['data'][component_name]]
-
-        components.append({
-            "name": component_name,
-            "base_members": base_members,
-            "extra_members": extra_members
-        })
-
-    return {
-        "base_namespace": namespace,
-        "class_name": class_name,
-        "components": components,
-        "trees": [{"type": tree_name, "member": member_name, "namespace": get_namespace_locator(tree_name)} for (tree_name, member_name) in multitree],
-    }
-
+import re
+import itertools
+import glob
 
 jinja_env = Environment(
-    loader=FileSystemLoader(os.path.dirname(os.path.abspath(__file__)) + '/InductiveDataTemplate')
+    loader=FileSystemLoader(os.path.dirname(os.path.abspath(__file__)) + '/SourceGeneratorTemplates')
 );
+
+commands_used = []
 
 jinja_env.filters["camelize"] = inflection.camelize
 jinja_env.filters["underscore"] = inflection.underscore
 jinja_env.tests["empty"] = lambda t: len(t) == 0
 jinja_env.tests["nonempty"] = lambda t: len(t) > 0
 
-inductive_template = jinja_env.get_template('tree.hpp.template')
-path_template = jinja_env.get_template('path.hpp.template')
-head_template = jinja_env.get_template('head.hpp.template')
-multi_template = jinja_env.get_template('multitree.hpp.template')
+def passthrough_call(*, caller):
+    return caller()
+def move_call(*, caller):
+    return "std::move(" + caller() + ")"
 
-def process_file(specification, filename):
-    ret = ""
-    ret = ret + head_template.render() + "\n"
+jinja_env.globals["reference"] = {
+    "cref": {"suffix": " const&", "const_qualifier": " const", "forward": passthrough_call, "name": "cref"},
+    "ref": {"suffix": " &", "const_qualifier": "", "forward": passthrough_call, "name": "ref"},
+    "rref": {"suffix": "&&", "const_qualifier": "", "forward": move_call, "name": "rref"},
+    "crref": {"suffix": " const&&", "const_qualifier": "", "forward": move_call, "name": "crref"}
+}
 
-    for include_name in specification.get('includes', []):
-        if include_name[0] == '<':
-            ret = ret + "#include " + include_name + "\n";
+command_string = "!!!FILE_GENERATOR_COMMAND_"
+
+def fix_multispaces(str):
+    pattern = re.compile(r"\n(\s*\n)+");
+    return pattern.sub(r"\n", str)
+
+class TemplateCommandSegment:
+    def __init__(self):
+        self.content = ""
+        self.last_namespace = ""
+        self.absolute_includes = set()
+        self.relative_includes = set()
+    def add_include(self, include, is_absolute):
+        if is_absolute:
+            self.absolute_includes.add(include)
         else:
-            ret = ret + "#include \"" + include_name + "\"\n";
+            self.relative_includes.add(include)
+    def open_namespace(self, namespace):
+        if namespace != "":
+            self.content = self.content + "\nnamespace " + namespace + "{\n"
+    def close_namespace(self):
+        if self.last_namespace != "":
+            self.content = self.content + "\n}\n"
+    def ensure_namespace(self, namespace):
+        if namespace != self.last_namespace:
+            self.close_namespace()
+            self.open_namespace(namespace)
+            self.last_namespace = namespace
+    def write(self, content, namespace):
+        if re.fullmatch(r"\s*", content) == None: # If we're not just adding whitespace
+            self.ensure_namespace(namespace)
+        self.content += content
+    def write_includes(self, filebase, extension):
+        my_path = os.path.dirname(filebase + "." + extension)
+        absolute_includes = "".join(map(lambda include : "#include <" + include + ">\n", self.absolute_includes));
+        relative_includes = "".join(map(lambda include : "#include \"" + os.path.relpath(include, my_path) + "\"\n", self.relative_includes));
+        return absolute_includes + relative_includes
+    def take_content(self, filebase, extension, context):
+        if extension == "cpp" or extension == "inl":
+            self.relative_includes.add(filebase + ".hpp")
+        if extension == "hpp" and "inl" in context.output_pieces:
+            self.write("\n#include \"" + os.path.basename(filebase) + ".inl\"\n", "")
 
-    for class_name in specification['files'][filename]:
-        path = specification['paths'].get(class_name)
-        if path:
-            render_data = process_path(specification['shapes'][path], class_name)
-            ret = ret + path_template.render(render_data) + "\n"
-            continue
-        tree = specification['trees'].get(class_name)
-        if tree:
-            render_data = process_tree(specification, class_name)
-            ret = ret + inductive_template.render(render_data) + "\n"
-            continue
-        multitree = specification['multitrees'].get(class_name)
-        if multitree:
-            render_data = process_multitree(specification, class_name)
-            ret = ret + multi_template.render(render_data) + "\n"
-            continue
-        raise RuntimeError("No class named " + class_name)
+        ifndefguard = ""
+        ifndefguardend = ""
+        if extension != "cpp":
+            var = "FILE_" + inflection.underscore(filebase.replace("/","_").replace("\\","_").replace(" ","_")).upper() + "_" + inflection.underscore(extension).upper()
+            ifndefguard = "#ifndef " + var + "\n#define " + var + "\n"
+            ifndefguardend = "#endif"
+
+        self.ensure_namespace("")
+        return fix_multispaces(ifndefguard + self.write_includes(filebase, extension) + self.content + ifndefguardend)
+
+class TemplateCommandContext:
+    def __init__(self):
+        self.output_pieces = {}
+        self.extension_stack = ["hpp"]
+        self.namespace_stack = [""]
+        self.position = 0
+    def get_piece(self, piece):
+        return self.output_pieces.setdefault(piece, TemplateCommandSegment())
+    def write_to_piece(self, piece, content):
+        self.get_piece(piece).write(content, self.namespace_stack[-1])
+    def write(self, content):
+        self.write_to_piece(self.extension_stack[-1], content)
+
+class FileCommand:
+    def __init__(self, extension):
+        self.extension = extension
+    def act(self, context):
+        context.extension_stack.append(self.extension)
+    def unact(self, context):
+        context.extension_stack.pop()
+class AbsoluteNamespaceCommand:
+    def __init__(self, namespace):
+        self.namespace = namespace
+    def act(self, context):
+        context.namespace_stack.append(self.namespace)
+    def unact(self, context):
+        context.namespace_stack.pop()
+class RelativeNamespaceCommand:
+    def __init__(self, namespace):
+        self.namespace = namespace
+    def act(self, context):
+        context.namespace_stack.append(context.namespace_stack[-1] + "::" + self.namespace)
+    def unact(self, context):
+        context.namespace_stack.pop()
+class IncludeCommand:
+    def __init__(self, include, absolute):
+        self.include = include
+        self.absolute = absolute
+    def act(self, context):
+        context.get_piece(context.extension_stack[-1]).add_include(self.include, self.absolute)
+
+def add_command(command):
+    index = len(commands_used)
+    commands_used.append(command)
+    return command_string + str(index) + "!!!"
+def add_command_block(command):
+    index = len(commands_used)
+    commands_used.append(command)
+    return (command_string + str(index) + "!!!", command_string + "END_" + str(index) + "!!!")
+def in_extension_command(extension, *, caller):
+    (start_str, end_str) = add_command_block(FileCommand(extension))
+    return start_str + caller() + end_str
+def in_namespace_command(namespace, *, caller):
+    (start_str, end_str) = add_command_block(AbsoluteNamespaceCommand(namespace))
+    return start_str + caller() + end_str
+def in_relative_namespace_command(namespace, *, caller):
+    (start_str, end_str) = add_command_block(RelativeNamespaceCommand(namespace))
+    return start_str + caller() + end_str
+def absolute_include_command(include):
+    return add_command(IncludeCommand(include, True))
+def relative_include_command(include):
+    return add_command(IncludeCommand(include, False))
+
+jinja_env.globals["in_extension"] = in_extension_command
+jinja_env.globals["in_namespace"] = in_namespace_command
+jinja_env.globals["in_namespace_relative"] = in_relative_namespace_command
+jinja_env.globals["absolute_include"] = absolute_include_command
+jinja_env.globals["relative_include"] = relative_include_command
+
+def parse_template_output(output, filebase):
+    context = TemplateCommandContext()
+    while True:
+        next_instance = output.find(command_string, context.position)
+        context.write(output[context.position:next_instance])
+        if next_instance == -1:
+            break
+        command_pos = next_instance + len(command_string)
+        if output[command_pos:command_pos + 4] == "END_":
+            command_pos = command_pos + 4
+            command_end = output.find("!!!", command_pos)
+            command_index = int(output[command_pos:command_end])
+            commands_used[command_index].unact(context)
+            context.position = command_end + 3
+        else:
+            command_end = output.find("!!!", command_pos)
+            command_index = int(output[command_pos:command_end])
+            commands_used[command_index].act(context)
+            context.position = command_end + 3
+    print(context.output_pieces)
+    return { extension:piece.take_content(filebase, extension, context) for (extension, piece) in context.output_pieces.items()}
+
+tree_template = jinja_env.get_template('tree.hpp.template')
+
+
+class TypeInfo:
+    def __init__(self, data):
+        self.data = data
+    def is_reference(self):
+        if isinstance(self.data, str):
+            return self.data[-1] == "&";
+        else:
+            return False;
+    def is_vector(self):
+        if isinstance(self.data, str):
+            return False;
+        else:
+            return self.data["kind"] == "vector"
+    def is_optional(self):
+        if isinstance(self.data, str):
+            return False;
+        else:
+            return self.data["kind"] == "optional"
+    def base_kind(self):
+        if isinstance(self.data, str):
+            return self.data;
+        else:
+            return self.data["base"]
+    def wrapper_type(self):
+        if isinstance(self.data, str):
+            return "simple"
+        else:
+            return self.data["kind"]
+
+    def archive_type(self, const_qualifier):
+        if isinstance(self.data, str):
+            return self.data + const_qualifier
+        else:
+            if self.data["kind"] == "optional":
+                return "Optional" + self.data["base"] + const_qualifier
+            elif self.data["kind"] == "vector":
+                return "std::span<" + self.data["base"] + const_qualifier + ">" + const_qualifier
+            else:
+                raise RuntimeError("Unrecognized kind: " + t.kind)
+
+
+def get_type_name(t):
+    if isinstance(t, str):
+        return t
+    else:
+        if t["kind"] == "optional":
+            return "std::optional<" + t["base"] + ">"
+        elif t["kind"] == "vector":
+            return "std::vector<" + t["base"] + ">"
+        else:
+            raise RuntimeError("Unrecognized kind: " + t.kind)
+
+def generate_kind_component(component_name, kind_component, data_component, index, global_index, kind_index):
+    base_members = [
+        {
+            "name": kind_member_name,
+            "type": get_type_name(kind_member_type),
+            "type_info": TypeInfo(kind_member_type),
+            "base_member": True
+        }
+        for (kind_member_name, kind_member_type) in kind_component
+    ]
+    extra_members = [
+        {
+            "name": extra_member_name,
+            "type": get_type_name(extra_member_type),
+            "type_info": TypeInfo(extra_member_type),
+            "base_member": False
+        }
+        for (extra_member_name, extra_member_type) in data_component
+    ]
+    members = base_members + extra_members
+    return {
+        "name": component_name,
+        "base_members": base_members,
+        "extra_members": extra_members,
+        "members": members,
+        "index": index,
+        "global_index": global_index,
+        "kind_index": kind_index
+    }
+
+def generate_kind(kind_name, kind, data, global_index, kind_index, kind_uses):
+    return {
+        "name": kind_name,
+        "components": [
+            generate_kind_component(component_name, kind[component_name], data[component_name], count, count + global_index, kind_index)
+            for (count, component_name) in enumerate(data)
+        ],
+        "kind_index": kind_index,
+        "users": kind_uses
+    }
+def find_used_kinds(shape):
+    ret = {}
+    for (kind_name, kind) in shape.inner_kinds.items():
+        ret.setdefault(kind_name, {})
+        for (component_name, component) in kind.items():
+            for (_, member) in component:
+                t = TypeInfo(member)
+                seen = ret.setdefault(t.base_kind(), {})
+                seen.setdefault(t.wrapper_type(), set()).add(component_name)
     return ret
 
-def process_all(path_to_file):
-    specification = read_specification(path_to_file)
-    for filename in specification['files']:
-        output = process_file(specification, filename)
-        true_filename = os.path.dirname(path_to_file) + "/" + filename
-        if filename[:4] == "this":
-            true_filename = os.path.splitext(path_to_file)[0] + filename[4:]
-        with open(true_filename, "w") as file:
-            file.write(output)
+def generate_kinds(shape, data):
+    kind_uses = find_used_kinds(shape)
+    return [
+        generate_kind(kind_name, shape.inner_kinds[kind_name], data[kind_name], global_index, kind_index, kind_uses[kind_name])
+        for (kind_index, (kind_name, global_index)) in enumerate(zip(
+            data,
+            itertools.accumulate(map(lambda k : len(shape.inner_kinds[k]), data), initial = 0)
+        ))
+    ]
 
-if len(sys.argv) == 1:
-    raise RuntimeError("No files supplied to source generator.")
+def empty_data_for_shape(kinds):
+    return {
+        kind_name: {
+            component: []
+            for component in components
+        }
+        for (kind_name, components) in kinds.items()
+    }
 
-for argument in sys.argv[1:]:
-    process_all(argument)
+class CompoundShape:
+    def __init__(self, kinds):
+        self.inner_kinds = kinds
+        self.kinds = generate_kinds(self, empty_data_for_shape(self.inner_kinds))
+        self.components = [component for kind in self.kinds for component in kind["components"]]
+        self.multikind = len(self.kinds) > 1
+    def generate_instance(self, *, namespace, data):
+        return ShapeInstance(self, namespace, data)
+
+class ShapeInstance:
+    def __init__(self, shape, namespace, data):
+        self.shape = shape
+        self.namespace = namespace
+        self.data = data
+        self.kinds = generate_kinds(self.shape, self.data)
+        self.components = [component for kind in self.kinds for component in kind["components"]]
+        self.multikind = len(self.kinds) > 1
+
+def multitree_merge_components(component_list):
+    base_members = component_list[0]["base_members"]
+    extra_members = [component["extra_members"] for component in component_list]
+    members = [base_members + component["extra_members"] for component in component_list]
+    return {
+        "name": component_list[0]["name"],
+        "base_members": base_members,
+        "extra_members": extra_members,
+        "members": members,
+        "index": component_list[0]["index"],
+        "global_index": component_list[0]["global_index"],
+        "kind_index": component_list[0]["kind_index"]
+    }
+def multitree_merge_kinds(kind_list):
+    components = [
+        multitree_merge_components([kind["components"][index] for kind in kind_list])
+        for (index, _) in enumerate(kind_list[0]["components"])
+    ]
+    return {
+        "name": kind_list[0]["name"],
+        "components": components
+    }
+def multitree_merge_shapes(shape_list):
+    return [
+        multitree_merge_kinds([shape.kinds[index] for shape in shape_list])
+        for (index, _) in enumerate(shape_list[0].kinds)
+    ]
+
+class Multitree:
+    def __init__(self, namespace, tree_dict):
+        self.namespace = namespace
+        self.trees = [{
+            "namespace": tree.namespace,
+            "member_name": member_name,
+            "index": index
+        } for (index, (member_name, tree)) in enumerate(tree_dict.items())]
+        self.kinds = multitree_merge_shapes([tree for (_, tree) in tree_dict.items()])
+        self.components = [component for kind in self.kinds for component in kind["components"]]
+        self.multikind = len(self.kinds) > 1
+
+class TreeOutput:
+    def __init__(self, *, trees, archive_namespace = None, multitrees = None):
+        self.trees = trees
+        self.shape = self.trees[0].shape
+        for tree in self.trees:
+            if tree.shape != self.shape:
+                raise RuntimeError("Trees in output must have same shape!")
+        if archive_namespace:
+            self.archive = {
+                "namespace": archive_namespace,
+                "trees": trees,
+                "shape": self.shape
+            }
+        else:
+            self.archive = None
+        self.multitrees = multitrees
+    def write_string(self, file_info):
+        return tree_template.render({
+            "trees": self.trees,
+            "archive": self.archive,
+            "shape": self.shape,
+            "multitrees": self.multitrees,
+            "file_info": file_info
+        })
+
+
+class FileWriter:
+    def __init__(self, spec_file):
+        self.outputs = []
+        self.file_info = {
+            "spec_file": spec_file,
+            "generator_file": __file__
+        }
+    def write(self, *args):
+        for arg in args:
+            self.outputs.append(arg.write_string(self.file_info))
+
+class FileContext:
+    def __init__(self, path_to_file):
+        def optional(x):
+            return {"kind": "optional", "base": x}
+        def vector(x):
+            return {"kind": "vector", "base": x}
+        def get_output(filename):
+            if filename[:4] == "THIS":
+                filename = os.path.splitext(path_to_file)[0] + filename[4:]
+            if filename in self.outputs:
+                return self.outputs[filename];
+            else:
+                self.outputs[filename] = FileWriter(path_to_file)
+                return self.outputs[filename]
+        self.outputs = {}
+        self.context = {
+            "get_output": get_output,
+            "optional": optional,
+            "vector": vector,
+            "CompoundShape": CompoundShape,
+            "Multitree": Multitree,
+            "TreeOutput": TreeOutput
+        }
+
+def process_file(path_to_file):
+    context = FileContext(path_to_file)
+    files_written = []
+    with open(path_to_file) as file:
+        exec(file.read(), context.context, {})
+        for (filename, writer) in context.outputs.items():
+            outputs = parse_template_output("\n".join(writer.outputs), filename)
+            for (extension, content) in outputs.items():
+                with open(filename + "." + extension, "w") as file:
+                    print("Writing: " + filename + "." + extension)
+                    file.write(content)
+                    files_written.append(filename + "." + extension)
+    return files_written
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        raise RuntimeError("No files supplied to source generator.")
+
+    for argument in sys.argv[1:]:
+        print("Processing file: " + argument)
+        process_file(argument)

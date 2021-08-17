@@ -1,0 +1,201 @@
+{#
+	Tree definition macros
+#}
+{%- macro tree_component_prototypes(tree) -%}
+{%- for component in tree.components %}
+	struct {{ component.name }};
+{%- endfor %}
+{%- endmacro %}
+{%- macro kind_prototype(kind) -%}
+	{{ visitor_requirement(kind, kind.name + "Visitor", reference.ref) }}
+	{{ visitor_requirement(kind, kind.name + "ConstVisitor", reference.cref) }}
+	{{ visitor_requirement(kind, kind.name + "MoveVisitor", reference.rref) }}
+	class {{ kind.name }} {
+		std::uint64_t index;
+		void* data = nullptr;
+	public:
+		{%- for component in kind.components %}
+		{{ kind.name }}({{ component.name }} arg);
+		{%- endfor %}
+		{{ kind.name }}({{ kind.name }} const&);
+		{{ kind.name }}({{ kind.name }}&&);
+		{{ kind.name }}& operator=({{ kind.name}} const&);
+		{{ kind.name }}& operator=({{ kind.name}}&&);
+		~{{ kind.name }}();
+		{%- for component in kind.components %}
+		{{component.name}}& get_{{component.name|underscore}}() &;
+		{{component.name}} const& get_{{component.name|underscore}}() const&;
+		{{component.name}}&& get_{{component.name|underscore}}() &&;
+		{{component.name}}* get_if_{{component.name|underscore}}();
+		{{component.name}} const* get_if_{{component.name|underscore}}() const;
+		bool holds_{{component.name|underscore}}() const;
+		{%- endfor %}
+		template<{{ kind.name }}Visitor Visitor> auto visit(Visitor&& visitor) & -> {{ visitor_return_type(kind, reference.ref) }};
+		template<{{ kind.name }}ConstVisitor Visitor> auto visit(Visitor&& visitor) const& -> {{ visitor_return_type(kind, reference.cref) }};
+		template<{{ kind.name }}MoveVisitor Visitor> auto visit(Visitor&& visitor) && -> {{ visitor_return_type(kind, reference.rref) }};
+	};
+{%- endmacro %}
+{%- macro tree_kind_prototypes(tree) -%}
+{%- for kind in tree.kinds %}
+	{{ kind_prototype(kind) }}
+{%- endfor %}
+{%- endmacro %}
+{%- macro tree_component_declarations(tree) -%}
+{%- for component in tree.components %}
+	struct {{ component.name }} {
+	{%- for member in component.members %}
+		{{member.type}} {{member.name}};
+	{%- endfor %}
+	};
+{%- endfor %}
+{%- endmacro %}
+{%- macro kind_constructors(kind) -%}
+	{%- for component in kind.components %}
+	{{ kind.name }}::{{ kind.name }}({{component.name}} arg):index({{loop.index0}}),data(new {{ component.name }}{std::move(arg)}) {}
+	{%- endfor %}
+{%- endmacro %}
+{%- macro kind_destructor(kind) -%}
+	{{ kind.name }}::~{{ kind.name}}() {
+		if(!data) return;
+		switch(index) {
+		{%- for component in kind.components %}
+			case {{ loop.index0 }}: delete ({{ component.name }}*)data; break;
+		{%- endfor %}
+			default: std::terminate();
+		}
+	}
+{%- endmacro %}
+{%- macro kind_move_constructor(kind) -%}
+{%- endmacro %}
+{%- macro kind_copy_constructor(kind) -%}
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }} const& other) {
+		if(!other.data) return;
+		switch(other.index) {
+		{%- for component in kind.components %}
+			case {{ loop.index0 }}: index = {{ loop.index0 }}; data = new {{ component.name }}{*({{ component.name }} const*)other.data}; break;
+		{%- endfor %}
+			default: std::terminate();
+		}
+	}
+{%- endmacro %}
+{%- macro kind_move_and_assignment(kind) -%}
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other):index(other.index), data(other.data) { other.data = nullptr; }
+	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }} const& other) {
+		return *this = {{ kind.name }}{other};
+	}
+	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }}&& other) {
+		std::swap(index, other.index);
+		std::swap(data, other.data);
+		return *this;
+	}
+{%- endmacro %}
+{%- macro kind_getters(kind) -%}
+	{%- for component in kind.components %}
+	{{ component.name }}& {{ kind.name }}::get_{{ component.name|underscore }}() & { if(index == {{loop.index0}}) return *({{ component.name }}*)data; else std::terminate(); }
+	{{ component.name }} const& {{ kind.name }}::get_{{ component.name|underscore }}() const& { if(index == {{loop.index0}}) return *({{ component.name }} const*)data; else std::terminate(); }
+	{{ component.name }}&& {{ kind.name }}::get_{{ component.name|underscore }}() && { if(index == {{loop.index0}}) return std::move(*({{ component.name }}*)data); else std::terminate(); }
+	{{ component.name }}* {{ kind.name }}::get_if_{{ component.name|underscore }}() { if(index == {{loop.index0}}) return ({{ component.name }}*)data; else return nullptr; }
+	{{ component.name }} const* {{ kind.name }}::get_if_{{ component.name|underscore }}() const { if(index == {{loop.index0}}) return ({{ component.name }} const*)data; else return nullptr; }
+	bool {{ kind.name }}::holds_{{component.name|underscore}}() const { return index == {{loop.index0}}; }
+	{%- endfor %}
+{%- endmacro %}
+{%- macro kind_definition(kind) -%}
+{%- call in_extension("cpp") %}
+	{{ kind_constructors(kind) }}
+	{{ kind_copy_constructor(kind) }}
+	{{ kind_move_and_assignment(kind) }}
+	{{ kind_destructor(kind) }}
+	{{ kind_getters(kind) }}
+{%- endcall %}
+{%- endmacro %}
+{%- macro tree_kind_definitions(tree) -%}
+	{%- for kind in tree.kinds %}
+	{{ kind_definition(kind) }}
+	{%- endfor %}
+{%- endmacro %}
+{#
+	Visitation macros
+#}
+{%- macro visitor_return_type(kind, ref) -%}
+std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<Visitor&&, {{ component.name }}{{ ref.suffix }}>{% if not loop.last %}, {% endif %}{% endfor %} >
+{%- endmacro %}
+{%- macro visitor_requirement(kind, concept_name, ref) -%}
+	template<class Visitor> concept {{ concept_name }} = requires(Visitor visitor
+	{%- for component in kind.components -%}
+	, {{ component.name }}{{ ref.suffix }} {{component.name|underscore}}
+	{%- endfor -%}
+	) {
+		{%- for component in kind.components %}
+		std::forward<Visitor>(visitor)({% call ref.forward() %}{{ component.name|underscore }}{% endcall %});
+		{%- endfor %}
+		typename {{ visitor_return_type(kind, ref) }};
+	};
+{%- endmacro %}
+{%- macro visitor_implementation(kind, concept_name, ref) -%}
+	template<{{concept_name}} Visitor> auto {{ kind.name }}::visit(Visitor&& visitor) {{ ref.suffix | trim }} -> {{ visitor_return_type(kind, ref) }} {
+		if(!data) std::terminate();
+		switch(index) {
+		{%- for component in kind.components %}
+			case {{ loop.index0 }}: return std::forward<Visitor>(visitor)({% call ref.forward() %}*({{ component.name }}{{ ref.const_qualifier }}*)data{% endcall %});
+		{%- endfor %}
+			default: std::terminate();
+		}
+	}
+{%- endmacro %}
+{%- macro tree_visitor_implementations(tree) -%}
+{%- for kind in tree.kinds %}
+	{{ visitor_implementation(kind, kind.name + "Visitor", reference.ref) }}
+	{{ visitor_implementation(kind, kind.name + "ConstVisitor", reference.cref) }}
+	{{ visitor_implementation(kind, kind.name + "MoveVisitor", reference.rref) }}
+{%- endfor %}
+{%- endmacro %}
+{#
+	Comparison
+#}
+{%- macro tree_cmp_implementation(tree) -%}
+	{%- for kind in tree.kinds %}
+	bool operator==({{kind.name}} const&, {{kind.name}} const&);
+	{%- call in_extension("cpp") %}
+	bool operator==({{kind.name}} const& lhs, {{kind.name}} const& rhs) {
+		return lhs.visit(mdb::overloaded{
+		{%- for component in kind.components %}
+			[&rhs]({{component.name}} const& lhs) {
+				if(auto* ptr = rhs.get_if_{{component.name|underscore}}()) {
+					return lhs == *ptr;
+				} else {
+					return false;
+				}
+			}{%- if not loop.last %},{%- endif %}
+		{%- endfor %}
+		});
+	}
+	{%- endcall %}
+	{%- endfor %}
+	{%- for component in tree.components %}
+	bool operator==({{component.name}} const&, {{component.name}} const&);
+	{%- call in_extension("cpp") %}
+	bool operator==({{component.name}} const& lhs, {{component.name}} const& rhs) {
+	{%- if component.members is empty %}
+		return true;
+	{%- else %}
+		return {% for member in component.members -%}
+		lhs.{{member.name}} == rhs.{{member.name}}
+		{%- if not loop.last %}
+		    && {% endif %}
+		{%- endfor %};
+	{%- endif %}
+	}
+	{%- endcall %}
+	{%- endfor %}
+{%- endmacro %}
+{#
+	General definition
+#}
+{%- macro tree_definition(tree) -%}
+{{ tree_component_prototypes(tree) }}
+{{ tree_kind_prototypes(tree) }}
+{{ tree_component_declarations(tree) }}
+{{ tree_kind_definitions(tree) }}
+{{ tree_visitor_implementations(tree) }}
+{{ tree_cmp_implementation(tree) }}
+{%- endmacro %}

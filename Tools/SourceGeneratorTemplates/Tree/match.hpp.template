@@ -1,0 +1,87 @@
+{%- macro template_head_for(members) -%}
+template<{%- for member in members %}class {{member.name|camelize}}{% if not loop.last %}, {% endif %}{% endfor %}>
+{%- endmacro %}
+{%- macro deduction_guide(classname, members, ref_suffix) -%}
+template<
+{%- for member in members %}class {{member.name|camelize}}{% if not loop.last %}, {% endif %}{% endfor -%}
+> {{classname}}(
+{%- for member in members %}{{member.name|camelize}}{{ ref_suffix }}{% if not loop.last %}, {% endif %}{% endfor -%}
+) -> {{classname}}<
+{%- for member in members %}{{member.name|camelize}}{% if not loop.last %}, {% endif %}{% endfor -%}
+>;
+{%- endmacro %}
+{%- macro ref_deducation_guide(classname, members) -%}
+{{ deduction_guide(classname, members, "&&") }}
+{%- endmacro %}
+{%- macro copy_deducation_guide(classname, members) -%}
+{{ deduction_guide(classname, members, "") }}
+{%- endmacro %}
+{%- macro match_definition(tree) -%}
+  {% call in_namespace_relative("match_result") %}
+  {% for component in tree.components -%}
+  {%- if component.members is empty %}
+  struct {{ component.name }} {};
+  {%- else %}
+  {{ template_head_for(component.members) }}
+	struct {{component.name}} {
+  {%- for member in component.members %}
+		{{member.name|camelize}} {{member.name}};
+  {%- endfor %}
+	};
+  {{ ref_deducation_guide(component.name, component.members) }}
+  {%- endif %}
+	{%- endfor %}
+  {%- endcall %}
+  {%- call in_namespace_relative("match") %}
+  {% for kind in tree.kinds %}
+  {% for component in kind.components -%}
+  {%- if component.base_members is empty %}
+  struct {{ component.name }} {
+    bool matches({{tree.namespace}}::{{kind.name}} const& term) { return term.holds_{{component.name|underscore}}(); }
+    {%- for ref in [reference.cref, reference.rref] %}
+    auto destructure_match({{tree.namespace}}::{{kind.name}}{{ref.suffix}} term) { auto& part = term.get_{{component.name|underscore}}(); return match_result::{{ component.name }}{
+    {%- for member in component.members -%}
+    {%- if member.type_info.is_reference() -%}
+    part.{{member.name}}
+    {%- else -%}
+    {% call ref.forward() %}part.{{member.name}}{% endcall %}
+    {%- endif -%}
+    {%- endfor -%}
+    }; }
+    {%- endfor %}
+    {%- for ref in [reference.cref, reference.rref] %}
+    auto try_match({{tree.namespace}}::{{kind.name}}{{ref.suffix}} term) { using RetType = std::optional<decltype(destructure_match({% call ref.forward() %}term{% endcall %}))>; if(matches(term)) return RetType{destructure_match({% call ref.forward() %}term{% endcall %})}; else return RetType{std::nullopt}; }
+    {%- endfor %}
+  };
+  {%- else %}
+  {{ template_head_for(component.base_members) }}
+  struct {{ component.name }} {
+    {%- for member in component.base_members %}
+    {{member.name|camelize}} {{member.name}};
+    {%- endfor %}
+    bool matches({{tree.namespace}}::{{kind.name}} const& term);
+    {%- call in_extension("inl") %}
+  {{ template_head_for(component.base_members) }} {{ component.name }}::matches({{tree.namespace}}::{{kind.name}} const& term) {
+
+  }
+    {%- endcall %}
+    {%- for ref in [reference.cref, reference.rref] %}
+    auto destructure_match({{tree.namespace}}::{{kind.name}}{{ref.suffix}} term) { auto& part = term.get_{{component.name|underscore}}(); return match_result::{{ component.name }}{
+    {%- for member in component.members -%}
+    {%- if member.type_info.is_reference() -%}
+    part.{{member.name}}
+    {%- else -%}
+    {% call ref.forward() %}part.{{member.name}}{% endcall %}
+    {%- endif -%}
+    {%- endfor -%}
+    }; }
+    {%- endfor %}
+    {%- for ref in [reference.cref, reference.rref] %}
+    auto try_match({{tree.namespace}}::{{kind.name}}{{ref.suffix}} term) { using RetType = std::optional<decltype(destructure_match({% call ref.forward() %}term{% endcall %}))>; if(matches(term)) return RetType{destructure_match({% call ref.forward() %}term{% endcall %})}; else return RetType{std::nullopt}; }
+    {%- endfor %}
+  };
+  {%- endif %}
+  {%- endfor %}
+  {%- endfor %}
+  {%- endcall %}
+{%- endmacro %}

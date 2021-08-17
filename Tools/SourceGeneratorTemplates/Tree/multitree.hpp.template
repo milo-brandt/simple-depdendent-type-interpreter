@@ -1,0 +1,70 @@
+{% macro define_multitree(multitree) -%}
+{%- call in_namespace(multitree.namespace) %}
+{%- for component in multitree.components %}
+  struct {{component.name}};
+{%- endfor %}
+{%- for kind in multitree.kinds %}
+  struct {{kind.name}} {
+    {%- for tree in multitree.trees %}
+    {{tree.namespace}}::{{kind.name}} {{tree.member_name}};
+    {%- endfor %}
+    {%- for component in kind.components %}
+    {{ kind.name }}({{component.name}});
+    {%- endfor %}
+  };
+{%- endfor %}
+{%- for component in multitree.components %}
+  struct {{ component.name }} {
+  {%- for member in component.base_members %}
+    {{member.type}} {{member.name}};
+  {%- endfor %}
+  {%- for tree in multitree.trees %}
+  {%- for member in component.extra_members[tree.index] %}
+    {{member.type}} {{member.name}};
+  {%- endfor %}
+  {%- endfor %}
+  };
+{%- endfor %}
+{%- call in_extension("cpp") %}
+{%- for kind in multitree.kinds %}
+{%- for component in kind.components %}
+  {{kind.name}}::{{kind.name}}({{component.name}} arg):
+  {%- for tree in multitree.trees %}
+    {{tree.member_name}}{ {{-tree.namespace}}::{{component.name}} {
+      {%- for member in component.members[tree.index] %}
+      .{{member.name}} = {% if member.base_member -%}
+      {%- if member.type_info.is_vector() -%}
+      [&] {
+        std::vector<{{tree.namespace}}::{{member.type_info.base_kind()}}> children;
+        for(auto& child : arg.{{member.name}}) {
+          children.push_back(std::move(child.{{tree.member_name}}));
+        }
+        return children;
+      }()
+      {%- elif member.type_info.is_optional() -%}
+      [&]() -> std::optional<{{tree.namespace}}::{{member.type_info.base_kind()}}> {
+        if(arg.{{member.name}}) {
+          return std::move(arg.{{member.name}}->{{tree.member_name}});
+        } else {
+          return std::nullopt;
+        }
+      }()
+      {%- else -%}
+      std::move(arg.{{member.name}}.{{tree.member_name}})
+      {%- endif %}
+      {%- else -%} {# not a base member #}
+      {%- if member.type_info.is_reference() -%}
+      arg.{{member.name}}
+      {%- else -%}
+      std::move(arg.{{member.name}})
+      {%- endif -%}
+      {%- endif -%}{%- if not loop.last %},
+      {% endif %}
+      {%- endfor %}
+    }}{% if not loop.last %},{% else %} {}{% endif %}
+  {%- endfor %}
+{%- endfor %}
+{%- endfor %}
+{%- endcall %}
+{%- endcall %}
+{%- endmacro %}

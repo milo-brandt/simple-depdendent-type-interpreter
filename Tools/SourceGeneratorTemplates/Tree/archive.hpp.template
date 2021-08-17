@@ -1,0 +1,635 @@
+{#
+    Archive index generation
+#}
+{%- macro archive_root_part(tree) -%}
+{%- if tree.multikind -%}
+archive_part::PolymorphicKind
+{%- else -%}
+archive_part::{{ tree.kinds[0].name }}
+{%- endif -%}
+{%- endmacro %}
+{%- macro index_class_definition(classname, friend_trees) %}
+    class {{ classname }} {
+        std::uint64_t private_index;
+        explicit {{ classname }}(std::uint64_t private_index):private_index(private_index) {}
+        {%- for friend in friend_trees %}
+        friend class {{friend.namespace}}::archive_part::{{classname}};
+        {%- endfor %}
+    public:
+        {{- caller() }}
+        std::uint64_t index() const { return private_index; }
+        friend bool operator==({{classname}} const& lhs, {{classname}} const& rhs) { return lhs.private_index == rhs.private_index; }
+        friend bool operator!=({{classname}} const& lhs, {{classname}} const& rhs) { return lhs.private_index != rhs.private_index; }
+    };
+{% endmacro %}
+{%- macro archive_index_definition(tree, archive_namespace, friend_trees) -%}
+{%- call in_namespace(archive_namespace) %}
+{%- for component in tree.components %}
+    {%- call index_class_definition(component.name, friend_trees) %}
+    {%- endcall %}
+{%- endfor %}
+{%- for kind in tree.kinds %}
+    {%- call index_class_definition(kind.name, friend_trees) %}
+        {%- for component in kind.components %}
+        {{ kind.name }}({{component.name}} component):private_index(component.index()) {}
+        {%- endfor %}
+    {%- endcall %}
+{%- endfor %}
+{%- if tree.multikind %}
+    {%- call index_class_definition("PolymorphicKind", friend_trees) %}
+        {%- for component in tree.components %}
+        PolymorphicKind({{component.name}} component):private_index(component.index()) {}
+        {%- endfor %}
+        {%- for kind in tree.kinds %}
+        PolymorphicKind({{kind.name}} kind):private_index(kind.index()) {}
+        {%- endfor %}
+    {%- endcall %}
+{%- endif %}
+{%- endcall %}
+{%- endmacro %}
+{#
+    Archive protoypes
+#}
+{%- macro archive_prototypes(tree) -%}
+{%- call in_namespace_relative("archive_part") %}
+  class PolymorphicKind;
+  {%- for kind in tree.kinds %}
+  class {{ kind.name }};
+  {%- endfor %}
+  {%- for component in tree.components %}
+  class {{ component.name }};
+  {%- endfor %}
+{%- endcall %}
+{%- endmacro -%}
+{#
+  General macros
+#}
+{%- macro friend_detail(tree) -%}
+    friend {{tree.namespace}}::archive_detail::Detail;
+{%- endmacro -%}
+{#
+  Macros for building constructors
+#}
+{%- macro format_base_member(type_info) -%}
+{%- if type_info.is_optional() -%}
+  Optional{{type_info.base_kind()}}
+{%- elif type_info.is_vector() -%}
+  Span{{type_info.base_kind()}}
+{%- else -%}
+  {{type_info.base_kind()}}&
+{%- endif %}
+{%- endmacro %}
+{%- macro base_member_ctor_args(member, named) -%}
+{%- if member.type_info.is_optional() -%}
+  {{member.type_info.base_kind()}}* {%- if named %} {{ member.name }}{%- endif -%}
+{%- elif member.type_info.is_vector() -%}
+  {{member.type_info.base_kind()}}** {%- if named %} {{ member.name }}_begin{%- endif -%}, {{member.type_info.base_kind()}}** {%- if named %} {{ member.name }}_end{%- endif -%}
+{%- else -%}
+  {{member.type_info.base_kind()}}& {%- if named %} {{ member.name}}{%- endif -%}
+{%- endif %}
+{%- endmacro %}
+{%- macro member_ctor_args(member, named) -%}
+{%- if member.base_member -%}
+  {{ base_member_ctor_args(member, named) }}
+{%- else -%}
+  {{ member.type }}  {%- if named %} {{member.name}}{%- endif -%}
+{%- endif -%}
+{%- endmacro -%}
+{%- macro base_member_ctor_initializer(member) -%}
+{%- if member.type_info.is_optional() -%}
+  {{ member.name }}{ {{- member.name -}} }
+{%- elif member.type_info.is_vector() -%}
+  {{ member.name }}{ {{- member.name}}_begin, {{ member.name }}_end}
+{%- else -%}
+  {{ member.name }}{ {{- member.name -}} }
+{%- endif %}
+{%- endmacro %}
+{%- macro extra_member_ctor_initializer(member) -%}
+{%- if member.type_info.is_reference() -%}
+  {{ member.name }}{ {{- member.name -}} }
+{%- else -%}
+  {{ member.name }}{std::move({{ member.name }})}
+{%- endif %}
+{%- endmacro %}
+{%- macro member_ctor_initializer(member) -%}
+{%- if member.base_member -%}
+  {{ base_member_ctor_initializer(member) }}
+{%- else -%}
+  {{ extra_member_ctor_initializer(member) }}
+{%- endif -%}
+{%- endmacro -%}
+
+
+{%- macro no_copy(classname) -%}
+    {{ classname }}({{classname}} const&) = delete;
+    {{ classname }}({{classname}}&&) = delete;
+    {{ classname }}& operator=({{classname}} const&) = delete;
+    {{ classname }}& operator=({{classname}}&&) = delete;
+{%- endmacro %}
+{%- macro getter_declarations(name) -%}
+    {{name}}& get_{{name|underscore}}();
+    {{name}} const& get_{{name|underscore}}() const;
+    {{name}}* get_if_{{name|underscore}}();
+    {{name}} const* get_if_{{name|underscore}}() const;
+{%- endmacro -%}
+{%- macro component_getter_declaration(classname, component) -%}
+    {{ getter_declarations(component.name) }}
+    {%- call in_extension("cpp") %}
+  {{component.name}}& {{ classname }}::get_{{component.name|underscore}}() { if(discriminator == {{component.global_index}}) return *({{component.name}}*)this; else std::terminate(); }
+  {{component.name}} const& {{ classname }}::get_{{component.name|underscore}}() const { if(discriminator == {{component.global_index}}) return *({{component.name}} const*)this; else std::terminate(); }
+  {{component.name}}* {{ classname }}::get_if_{{component.name|underscore}}() { if(discriminator == {{component.global_index}}) return ({{component.name}}*)this; else return nullptr; }
+  {{component.name}} const* {{ classname }}::get_if_{{component.name|underscore}}() const { if(discriminator == {{component.global_index}}) return ({{component.name}} const*)this; else return nullptr; }
+    {%- endcall %}
+{%- endmacro %}
+{%- macro kind_getter_declaration(classname, kind) -%}
+    {{ getter_declarations(kind.name) }}
+{%- call in_extension("cpp") %}
+  {{kind.name}}& {{ classname }}::get_{{kind.name|underscore}}() { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return *({{kind.name}}*)this; else std::terminate(); }
+  {{kind.name}} const& {{ classname }}::get_{{kind.name|underscore}}() const { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return *({{kind.name}} const*)this; else std::terminate(); }
+  {{kind.name}}* {{ classname }}::get_if_{{kind.name|underscore}}() { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return ({{kind.name}}*)this; else return nullptr; }
+  {{kind.name}} const* {{ classname }}::get_if_{{kind.name|underscore}}() const { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return ({{kind.name}} const*)this; else return nullptr; }
+{%- endcall %}
+{%- endmacro %}
+{%- macro visit_declaration(classname, components) -%}
+    template<class Visitor> auto visit(Visitor&& visitor);
+    template<class Visitor> auto visit(Visitor&& visitor) const;
+{%- call in_extension("inl") %}
+  template<class Visitor> auto {{ classname }}::visit(Visitor&& visitor) {
+    switch(discriminator) {
+    {%- for component in components %}
+      case {{ component.global_index }}: return std::forward<Visitor>(visitor)(*({{ component.name }}*)this);
+    {%- endfor %}
+      default: std::terminate();
+    }
+  }
+  template<class Visitor> auto {{ classname }}::visit(Visitor&& visitor) const {
+    switch(discriminator) {
+    {%- for component in components %}
+      case {{ component.global_index }}: return std::forward<Visitor>(visitor)(*({{ component.name }} const*)this);
+    {%- endfor %}
+      default: std::terminate();
+    }
+  }
+{%- endcall %}
+{%- endmacro %}
+{%- macro visit_kind_declaration(classname, kinds) -%}
+    template<class Visitor> auto visit_kind(Visitor&& visitor);
+    template<class Visitor> auto visit_kind(Visitor&& visitor) const;
+{%- call in_extension("inl") %}
+  template<class Visitor> auto {{ classname }}::visit_kind(Visitor&& visitor) {
+    switch(archive_detail::kind_table[discriminator]) {
+    {%- for kind in kinds %}
+      case {{ kind.kind_index }}: return std::forward<Visitor>(visitor)(*({{ kind.name }}*)this);
+    {%- endfor %}
+      default: std::terminate();
+    }
+  }
+  template<class Visitor> auto {{ classname }}::visit_kind(Visitor&& visitor) const {
+    switch(discriminator) {
+        {%- for kind in kinds %}
+      case {{ kind.kind_index }}: return std::forward<Visitor>(visitor)(*({{ kind.name }} const*)this);
+    {%- endfor %}
+      default: std::terminate();
+    }
+  }
+{%- endcall %}
+{%- endmacro %}
+{%- macro archive_part_definition(tree, archive) -%}
+{%- call in_namespace_relative("archive_part") %}
+{%- if tree.multikind %}
+  class PolymorphicKind {
+    {{ friend_detail(tree) }}
+    {%- for kind in tree.kinds %}
+    friend {{ kind.name }};
+    {%- endfor %}
+    {%- for component in tree.components %}
+    friend {{ component.name }};
+    {%- endfor %}
+    std::uint64_t const discriminator;
+    std::uint64_t const private_index;
+    PolymorphicKind(std::uint64_t discriminator, std::uint64_t private_index):discriminator(discriminator),private_index(private_index){}
+    ~PolymorphicKind() {}
+  public:
+    {{ no_copy("PolymorphicKind") }}
+    {{ archive.namespace }}::PolymorphicKind index() const { return {{ archive.namespace }}::PolymorphicKind{private_index}; }
+    {%- for kind in tree.kinds %}
+    {{ kind_getter_declaration("PolymorphicKind", kind) }}
+    {%- endfor %}
+    {%- for component in tree.components %}
+    {{ component_getter_declaration("PolymorphicKind", component) }}
+    {%- endfor %}
+    {{ visit_declaration("PolymorphicKind", tree.components) }}
+    {{ visit_kind_declaration("PolymorphicKind", tree.kinds) }}
+  };
+  {%- endif %}
+  {%- for kind in tree.kinds %}
+  class {{ kind.name }} {% if tree.multikind %}: private PolymorphicKind {% endif %}{
+{%- if tree.multikind %}
+    friend PolymorphicKind;
+{%- endif %}
+    {{ friend_detail(tree) }}
+    {%- for component in kind.components %}
+    friend {{ component.name }};
+    {%- endfor %}
+    {{ kind.name }}(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    ~{{ kind.name }}() {}
+  public:
+    {{ no_copy(kind.name) }}
+    {{ archive.namespace }}::{{ kind.name }} index() const { return {{ archive.namespace }}::{{ kind.name }}{private_index}; }
+    {%- for component in kind.components %}
+    {{ component_getter_declaration(kind.name, component) }}
+    {%- endfor %}
+    {{ visit_declaration(kind.name, kind.components) }}
+    PolymorphicKind& as_poly() { return *(PolymorphicKind*)this; }
+    PolymorphicKind const& as_poly() const { return *(PolymorphicKind const*)this; }
+  };
+  {%- if kind.users.optional %}
+  class Optional{{ kind.name }} {
+    {{ kind.name }}* ptr;
+    Optional{{ kind.name }}({{ kind.name }}* ptr):ptr(ptr) {}
+    {%- for user in kind.users.optional %}
+    friend {{ user }};
+    {%- endfor %}
+  public:
+    {{ no_copy("Optional" + kind.name) }}
+    operator bool() const { return ptr != nullptr; }
+    {{ kind.name }}& operator*() { return *ptr; }
+    {{ kind.name }} const& operator*() const { return *ptr; }
+    {{ kind.name }}* operator->() { return ptr; }
+    {{ kind.name }} const* operator->() const { return ptr; }
+  };
+  {%- endif %}
+  {%- if kind.users.vector %}
+  class Span{{ kind.name }} {
+    {{ kind.name }}** begin_ptr;
+    {{ kind.name }}** end_ptr;
+    Span{{ kind.name }}({{ kind.name }}** begin_ptr, {{ kind.name }}** end_ptr):begin_ptr(begin_ptr), end_ptr(end_ptr) {}
+    {%- for user in kind.users.vector %}
+    friend {{ user }};
+    {%- endfor %}
+  public:
+    class ConstIterator;
+    class Iterator {
+      {{ kind.name }}** pos;
+      explicit Iterator({{ kind.name }}** pos):pos(pos) {}
+      friend Span{{ kind.name }};
+      friend ConstIterator;
+    public:
+      {{ kind.name }}& operator*() const { return **pos; }
+      {{ kind.name }}* operator->() const { return *pos; }
+      Iterator& operator++() { ++pos; return *this; }
+      Iterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      friend constexpr bool operator!=(Iterator const& lhs, Iterator const& rhs) { return lhs.pos != rhs.pos; }
+    };
+    class ConstIterator {
+      {{ kind.name }} const** pos;
+      explicit ConstIterator({{ kind.name }} const** pos):pos(pos) {}
+      friend Span{{ kind.name }};
+    public:
+      ConstIterator(Iterator const& it):pos(({{ kind.name }} const**)it.pos) {}
+      {{ kind.name }} const& operator*() const { return **pos; }
+      {{ kind.name }} const* operator->() const { return *pos; }
+      ConstIterator& operator++() { ++pos; return *this; }
+      ConstIterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      friend constexpr bool operator!=(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos != rhs.pos; }
+    };
+
+    {{ no_copy("Span" + kind.name) }}
+    std::size_t size() const { return end_ptr - begin_ptr; }
+    Iterator begin() { return Iterator{begin_ptr}; }
+    ConstIterator begin() const { return ConstIterator{({{ kind.name }} const**)begin_ptr}; }
+    Iterator end() { return Iterator{end_ptr}; }
+    ConstIterator end() const { return ConstIterator{({{ kind.name }} const**)end_ptr}; }
+    {{ kind.name }}& operator[](std::size_t index) { return *begin_ptr[index]; }
+    {{ kind.name }} const& operator[](std::size_t index) const { return *begin_ptr[index]; }
+  };
+  {%- endif %}
+  {%- endfor %}
+  {%- for kind in tree.kinds %}
+  {%- for component in kind.components %}
+  class {{ component.name }} : private {{ kind.name }} {
+  {%- if tree.multikind %}
+    friend PolymorphicKind;
+  {%- endif %}
+    friend {{ kind.name }};
+    {{ friend_detail(tree) }}
+    {{ component.name }}(std::size_t archive_index_private
+      {%- for member in component.members -%}
+      , {{ member_ctor_args(member, False) }}
+      {%- endfor -%}
+    );
+  public:
+    {{ no_copy(component.name) }}
+    {{ archive.namespace }}::{{ component.name }} index() const { return {{ archive.namespace }}::{{ component.name }}{private_index}; }
+    {%- for member in component.base_members %}
+    {{ format_base_member(member.type_info) }} {{member.name}};
+    {%- endfor %}
+    {%- for member in component.extra_members %}
+    {{ member.type }} {{ member.name }};
+    {%- endfor %}
+    {{ kind.name }}& as_{{kind.name|underscore}}() { return *({{ kind.name }}*)this; }
+    {{ kind.name }} const& as_{{kind.name|underscore}}() const { return *({{ kind.name }} const*)this; }
+    PolymorphicKind& as_poly() { return *(PolymorphicKind*)({{ kind.name }}*)this; }
+    PolymorphicKind const& as_poly() const { return *(PolymorphicKind const*)({{ kind.name }} const*)this; }
+  };
+  {%- call in_extension("cpp") %}
+  {{ component.name }}::{{ component.name }}(std::size_t archive_index_private
+    {%- for member in component.members -%}
+    , {{ member_ctor_args(member, True) }}
+    {%- endfor -%}
+  ):{{ kind.name }}({{ component.global_index}}, archive_index_private)
+  {%- for member in component.members -%}
+  , {{ member_ctor_initializer(member) }}
+  {%- endfor -%} {}
+  {%- endcall %}
+  {%- endfor %}
+  {%- endfor %}
+{%- endcall %}
+{%- endmacro %}
+{%- macro forward_definitions(tree) -%}
+{%- call in_namespace_relative("archive_part") %}
+    {%- if tree.multikind %}
+    class PolymorphicKind;
+    {%- endif %}
+    {%- for kind in tree.kinds %}
+    class {{ kind.name }};
+    {%- endfor %}
+    {%- for component in tree.components %}
+    class {{ component.name }};
+    {%- endfor %}
+{%- endcall %}
+{%- endmacro %}
+{%- macro detail_definition(tree) -%}
+{%- call in_namespace_relative("archive_detail") %}
+    struct Detail;
+    static constexpr std::uint64_t kind_table[] = {
+    {%- for component in tree.components -%}
+    {{ component.kind_index }}{%- if not loop.last %}, {% endif -%}
+    {%- endfor -%}
+    };
+  {%- call in_extension("cpp") %}
+  struct Detail {
+    static constexpr auto max_alignment = std::max({alignof(std::uint64_t)
+      {%- for component in tree.components -%}
+        , alignof(archive_part::{{ component.name }})
+      {%- endfor -%}
+    });
+    static std::uint64_t next_multiple_of(std::uint64_t base, std::uint64_t multiple) {
+        return multiple * ((base + multiple - 1) / multiple);
+    }
+    struct SizeData {
+      std::uint64_t count = 0;
+      std::uint64_t offset = 0;
+      void round_up(std::uint64_t alignment) { offset = next_multiple_of(offset, alignment); }
+      template<class T> void add_to_size() { round_up(alignof(T)); offset += sizeof(T); }
+      template<class T> void add_span_to_size(std::size_t span_size) { round_up(alignof(T)); offset += sizeof(T) * span_size; }
+      {%- for kind in tree.kinds %}
+      void add_{{ kind.name|underscore }}_to_size({{tree.namespace}}::{{ kind.name }} const&);
+      {%- endfor %}
+      {%- for component in tree.components %}
+      void add_{{ component.name|underscore }}_to_size({{tree.namespace}}::{{ component.name }} const&);
+      {%- endfor %}
+      std::uint64_t get_size() const {
+          std::uint64_t ret = (count + 1) * sizeof({{ archive_root_part(tree) }}**);
+          ret = next_multiple_of(ret, max_alignment);
+          return ret + next_multiple_of(offset, max_alignment);
+      }
+    };
+    struct Writer {
+        std::uint64_t index = 0;
+        {{ archive_root_part(tree) }}** indexes;
+        void* head;
+        std::uint64_t size_left;
+        void align_to(std::uint64_t alignment) { std::align(alignment, 0, head, size_left); }
+        template<class T> void* position_for() { auto ret = std::align(alignof(T), sizeof(T), head, size_left); head = (std::uint8_t*)head + sizeof(T); size_left -= sizeof(T); return ret; }
+        template<class T> T* position_for_span(std::size_t count) { auto ret = (T*)std::align(alignof(T), sizeof(T), head, size_left); head = (std::uint8_t*)head + count * sizeof(T); size_left -= count * sizeof(T); return ret; }
+        Writer(void* head, std::uint64_t size_left, std::uint64_t index_count):head(head), size_left(size_left) {
+          auto old_head = head;
+          indexes = position_for_span<{{ archive_root_part(tree) }}*>(index_count);
+          if(old_head != indexes) std::terminate();
+        }
+        {%- for kind in tree.kinds %}
+        archive_part::{{ kind.name }}* write_{{ kind.name|underscore }}_to_cref({{tree.namespace}}::{{ kind.name }} const&);
+        archive_part::{{ kind.name }}* write_{{ kind.name|underscore }}_to_rref({{tree.namespace}}::{{ kind.name }}&&);
+        {%- endfor %}
+        {%- for component in tree.components %}
+        archive_part::{{ component.name }}* write_{{ component.name|underscore }}_to_cref({{tree.namespace}}::{{ component.name }} const&);
+        archive_part::{{ component.name }}* write_{{ component.name|underscore }}_to_rref({{tree.namespace}}::{{ component.name }}&&);
+        {%- endfor %}
+        void finish() { //add null termination
+          *indexes = nullptr;
+        }
+    };
+    static void destroy_parts(void* data) {
+      for(auto index = ({{ archive_root_part(tree) }}**)data; *index; ++index) {
+        auto* target = *index;
+        switch(target->discriminator) {
+          {%- for component in tree.components %}
+          case {{ component.global_index }}: ((archive_part::{{component.name}}*)target)->~{{component.name}}(); break;
+          {%- endfor %}
+          default: std::terminate();
+        }
+      }
+    }
+    {%- for ref in [reference.cref, reference.rref] %}
+    {%- for kind in tree.kinds %}
+    static void* allocate_and_fill_{{ kind.name | underscore }}_{{ref.name}}({{kind.name}}{{ref.suffix}} target) {
+      SizeData sizer;
+      sizer.add_{{ kind.name | underscore }}_to_size(target);
+      void* ret = std::aligned_alloc(max_alignment, sizer.get_size());
+      if(!ret) std::terminate();
+      Writer writer{ret, sizer.get_size(), sizer.count};
+      writer.write_{{ kind.name | underscore }}_to_{{ref.name}}({%call ref.forward() %}target{% endcall %});
+      writer.finish();
+      return ret;
+    }
+    {%- endfor %}
+    {%- endfor %}
+  };
+  {%- for kind in tree.kinds %}
+  void Detail::SizeData::add_{{ kind.name|underscore }}_to_size({{tree.namespace}}::{{ kind.name }} const& term) {
+    term.visit(mdb::overloaded{
+      {%- for component in kind.components %}
+      [&]({{component.name}} const& part) { return add_{{ component.name|underscore }}_to_size(part); }{% if not loop.last %}, {% endif %}
+      {%- endfor %}
+    });
+  }
+  {%- endfor %}
+  {%- for component in tree.components %}
+  void Detail::SizeData::add_{{ component.name|underscore }}_to_size({{tree.namespace}}::{{ component.name }} const& part) {
+    ++count;
+    add_to_size<archive_part::{{component.name}}>();
+    {%- for member in component.base_members %}
+    {%- if member.type_info.is_vector() %}
+    add_span_to_size<std::uint64_t>(part.{{member.name}}.size());
+    for({{ tree.namespace }}::{{ member.type_info.base_kind() }} const& member : part.{{member.name}}) {
+      add_{{ member.type_info.base_kind()|underscore }}_to_size(member);
+    }
+    {%- elif member.type_info.is_optional() %}
+    if(part.{{member.name}}) {
+      add_{{ member.type_info.base_kind()|underscore }}_to_size(*part.{{member.name}});
+    }
+    {%- else %}
+    add_{{ member.type|underscore }}_to_size(part.{{member.name}});
+    {%- endif %}
+    {%- endfor %}
+  }
+  {%- endfor -%}
+  {%- macro define_kind_writer(kind, suffix, ref) %}
+  archive_part::{{ kind.name }}* Detail::Writer::write_{{ kind.name|underscore }}_to_{{suffix}}({{tree.namespace}}::{{ kind.name }}{{ ref.suffix }} term) {
+      return {% call ref.forward() %}term{% endcall %}.visit(mdb::overloaded{
+        {%- for component in kind.components %}
+        [&]({{component.name}}{{ ref.suffix }} part) { return (archive_part::{{ kind.name }}*)write_{{ component.name|underscore }}_to_{{suffix}}({% call ref.forward() %}part{% endcall %}); }{% if not loop.last %}, {% endif %}
+        {%- endfor %}
+      });
+  }
+  {%- endmacro %}
+  {%- for kind in tree.kinds %}
+  {{ define_kind_writer(kind, "cref", reference.cref) }}
+  {{ define_kind_writer(kind, "rref", reference.rref) }}
+  {%- endfor %}
+  {%- macro define_component_writer(component, suffix, ref) %}
+  archive_part::{{ component.name }}* Detail::Writer::write_{{ component.name | underscore }}_to_{{suffix}}({{tree.namespace}}::{{ component.name }}{{ ref.suffix }} term) {
+      void* allocation = position_for<archive_part::{{component.name}}>();
+      auto given_index = index++;
+      *(indexes++) = ({{ archive_root_part(tree) }}*)allocation;
+
+      {%- for member in component.base_members %}
+      {%- if member.type_info.is_vector() %}
+      auto value_for_{{member.name}} = [&] {
+        auto head = position_for_span<archive_part::{{ member.type_info.base_kind() }}*>(term.{{member.name}}.size());
+        auto pos = head;
+        for({{ tree.namespace }}::{{ member.type_info.base_kind() }}{{ ref.const_qualifier }}& member : term.{{member.name}}) {
+          *(pos++) = write_{{ member.type_info.base_kind()|underscore }}_to_{{suffix}}({% call ref.forward() %}member{% endcall %});
+        }
+        return std::make_pair(head, pos);
+      } ();
+      {%- elif member.type_info.is_optional() %}
+      auto value_for_{{ member.name }} = [&] {
+        if(term.{{member.name}}) {
+          return write_{{ member.type_info.base_kind()|underscore }}_to_{{suffix}}({% call ref.forward() %}*term.{{member.name}}{% endcall %});
+        } else {
+          return (archive_part::{{ member.type_info.base_kind() }}*)nullptr;
+        }
+      } ();
+      {%- else %}
+      auto& value_for_{{ member.name }} = *write_{{ member.type_info.base_kind()|underscore }}_to_{{suffix}}({% call ref.forward() %}term.{{member.name}}{% endcall %});
+      {%- endif %}
+      {%- endfor %}
+      new (allocation) archive_part::{{component.name}} {
+        given_index
+      {%- for member in component.members %},
+      {%- if member.base_member %}
+      {%- if member.type_info.is_vector() %}
+        value_for_{{member.name}}.first, value_for_{{member.name}}.second
+      {%- else %}
+        value_for_{{member.name}}
+      {%- endif %}
+      {%- else %}
+      {%- if member.type_info.is_reference() %}
+        term.{{member.name}}
+      {%- else %}
+        {% call ref.forward() %}term.{{member.name}}{% endcall %}
+      {%- endif %}
+      {%- endif %}
+      {%- endfor %}
+      };
+      return (archive_part::{{ component.name }}*)allocation;
+  };
+  {%- endmacro %}
+  {%- for component in tree.components %}
+  {{ define_component_writer(component, "cref", reference.cref) }}
+  {{ define_component_writer(component, "rref", reference.rref) }}
+  {%- endfor %}
+  {% endcall %}
+{%- endcall %}
+{%- endmacro %}
+{%- macro archive_unique_definition(tree, archive) %}
+{%- macro const_variant() %}{{caller("")}}{{caller(" const")}}{%- endmacro %}
+{%- macro index_operation(name) -%}
+    {%- call(const) const_variant() %}
+    archive_part::{{name}}{{const}}& operator[]({{archive.namespace}}::{{name}} index){{const}} { return *(archive_part::{{name}}{{const}}*)get_index(index.index()); }
+    {%- endcall %}
+{%- endmacro %}
+{%- macro archive_base_definition(tree, classname, kinds, is_poly) %}
+  class {{classname}} {
+    void* data;
+    {%- for ref in [reference.cref, reference.rref] %}
+    {{ archive_root_part(tree) }}{{ ref.const_qualifier }}* get_index(std::uint64_t index){{ ref.const_qualifier }} { return *(({{ archive_root_part(tree) }}**)data + index); }
+    {%- endfor %}
+    {%- if tree.multikind and not is_poly %}
+    friend PolymorphicKind;
+    {%- endif %}
+  public:
+    {%- for kind in kinds %}
+    {%- for ref in [reference.cref, reference.rref] %}
+    {{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}});
+    {%- call in_extension("cpp") %}
+  {{classname}}::{{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}} target):data(archive_detail::Detail::allocate_and_fill_{{kind.name|underscore}}_{{ref.name}}({% call ref.forward() %}target{% endcall %})) {}
+    {%- endcall %}
+    {%- endfor %}
+    {%- endfor %}
+    {%- if is_poly %}
+    {%- for kind in kinds %}
+    {{classname}}({{kind.name}}&& other):data(other.data) { other.data = nullptr; }
+    {%- endfor %}
+    {%- endif %}
+    {{classname}}({{classname}}&& other):data(other.data) { other.data = nullptr; }
+    {{classname}}& operator=({{classname}}&& other) { std::swap(data, other.data); return *this; }
+    ~{{classname}}();
+    {%- call(const) const_variant() %}
+    archive_part::{{classname}}{{const}}& root(){{const}} { return *(archive_part::{{classname}}{{const}}*)get_index(0); }
+    {%- endcall %}
+    {%- if tree.multikind %}
+    {{index_operation("PolymorphicKind")}}
+    {%- endif %}
+    {%- for kind in tree.kinds %}
+    {{ index_operation(kind.name) }}
+    {%- endfor %}
+    {%- for component in tree.components %}
+    {{ index_operation(component.name) }}
+    {%- endfor %}
+  };
+  {%- call in_extension("cpp") %}
+  {{classname}}::~{{classname}}() {
+    if(data) {
+      archive_detail::Detail::destroy_parts(data);
+    }
+  }
+  {%- endcall %}
+ {%- endmacro %}
+ {%- call in_namespace_relative("archive_root") %}
+    {%- if tree.multikind %}
+  class PolymorphicKind;
+    {%- endif %}
+    {%- for kind in tree.kinds %}
+    {{archive_base_definition(tree, kind.name, [kind], False)}}
+    {%- endfor %}
+    {%- if tree.multikind %}
+    {{archive_base_definition(tree, "PolymorphicKind", tree.kinds, True)}}
+    {%- endif %}
+{%- endcall %}
+{%- endmacro %}
+{%- macro archive_definition_for_tree(tree, archive) -%}
+  {{ detail_definition(tree) }}
+  {{ archive_part_definition(tree, archive) }}
+  {{ archive_unique_definition(tree, archive) }}
+{%- for kind in tree.kinds %}
+{%- for ref in [reference.cref, reference.rref] %}
+  inline archive_root::{{kind.name}} archive({{kind.name}}{{ref.suffix}} target) { return archive_root::{{kind.name}}{ {%- call ref.forward() %}target{% endcall -%} }; }
+{%- endfor %}
+{%- endfor %}
+{%- endmacro -%}
+{%- macro archive_definition(archive) -%}
+    {%- for tree in archive.trees %}
+    {%- call in_namespace(tree.namespace) %}
+    {{ forward_definitions(tree) }}
+    {%- endcall %}
+    {%- endfor %}
+    {{ archive_index_definition(archive.shape, archive.namespace, archive.trees) }}
+    {%- for tree in archive.trees %}
+    {%- call in_namespace(tree.namespace) %}
+    {{ archive_definition_for_tree(tree, archive) }}
+    {%- endcall %}
+    {%- endfor %}
+{%- endmacro %}
