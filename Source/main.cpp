@@ -251,10 +251,36 @@ struct FormatInstance {
   }
 };
 */
-#include "ExpressionParser/parser_tree_2_impl.hpp"
-using namespace expression;
+
+
+#include "ExpressionParser/expression_parser.hpp"
+#include <termcolor.hpp>
+
+template<class... Formats>
+struct Format {
+  std::string_view source;
+  std::string_view part;
+  std::tuple<Formats...> formats;
+  Format(std::string_view source, std::string_view part, Formats... formats):source(source),part(part),formats(formats...) {}
+};
+template<class... Formats>
+std::ostream& operator<<(std::ostream& o, Format<Formats...> const& format) {
+  auto start_offset = format.part.begin() - format.source.begin();
+  auto end_offset = format.part.end() - format.source.begin();
+  o << format.source.substr(0, start_offset);
+  std::apply([&](auto const&... formats){ (o << ... << formats); }, format.formats);
+  return o << format.part << termcolor::reset << format.source.substr(end_offset);
+}
+template<class... Formats>
+Format<Formats...> format_substring(std::string_view substring, std::string_view full_string, Formats... formats) {
+  return Format<Formats...>{full_string, substring, std::move(formats)...};
+}
+auto format_error(std::string_view substring, std::string_view full) {
+  return format_substring(substring, full, termcolor::red, termcolor::bold, termcolor::underline);
+}
+
 int main(int argc, char** argv) {
-  located_output::Expression located_expr = located_output::Apply{
+  /*located_output::Expression located_expr = located_output::Apply{
     .lhs = located_output::Identifier{.id = "hi", .position = "hi"},
     .rhs = located_output::Identifier{.id = "wassup", .position = "wassup"},
     .position = "hi wassup"
@@ -273,7 +299,36 @@ int main(int argc, char** argv) {
   });
   std::cout << format(expr) << "\n";
   std::cout << format(x.root()) << "\n";
-  std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";
+  std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";*/
+  while(true) {
+    std::string line;
+    std::getline(std::cin, line);
+    if(line == "q") return 0;
+    std::string_view source = line;
+
+    auto x = expression_parser::parser::expression(source);
+
+    if(auto* error = parser::get_if_error(&x)) {
+      std::cout << "Error: " << error->error << "\nAt: " << format_error(source.substr(error->position.begin() - source.begin()), source) << "\n";
+    } else {
+      auto& success = parser::get_success(x);
+      auto output_archive = archive(success.value.output);
+      auto locator_archive = archive(success.value.locator);
+      std::cout << "Parse result: " << format(locator_archive) << "\n";
+      auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda{
+        .lookup = [&](auto const&) { return std::nullopt; }
+      }, output_archive.root());
+      if(auto* resolve = resolved.get_if_value()) {
+        std::cout << "Resolved!\n";
+      } else {
+        auto const& err = resolved.get_error();
+        for(auto const& bad_id : err.bad_ids) {
+          auto bad_pos = locator_archive[bad_id].position;
+          std::cout << "Bad id: " << format_error(bad_pos, source) << "\n";
+        }
+      }
+    }
+  }
 /*
   expression::Context context;
   compiler::resolution::NameContext name_context;

@@ -1,4 +1,4 @@
-{%- from "Tree/definition.hpp.template" import tree_definition, wrap_namespace %}
+{%- from "Tree/definition.hpp.template" import tree_definition %}
 {%- from "Tree/match.hpp.template" import match_definition %}
 {%- from "Tree/archive.hpp.template" import archive_definition %}
 {%- from "Tree/debug_format.hpp.template" import define_formatter, define_archive_unique_formatter %}

@@ -20,28 +20,42 @@ debug_test: Debug/test_program
 debug: Debug/program
 	gdb Debug/program
 
-Build/program: Build/ExpressionParser/parser_tree_2_impl.o Build/main.o 
-	$(compiler_cmd)  Build/ExpressionParser/parser_tree_2_impl.o Build/main.o  -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O3 -o Build/program
+Build/program: Build/ExpressionParser/parser_tree.o Build/ExpressionParser/parser_tree_impl.o Build/main.o 
+	$(compiler_cmd)  Build/ExpressionParser/parser_tree.o Build/ExpressionParser/parser_tree_impl.o Build/main.o  -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O3 -o Build/program
 
-Debug/program: Debug/ExpressionParser/parser_tree_2_impl.o Debug/main.o 
-	$(compiler_cmd)  Debug/ExpressionParser/parser_tree_2_impl.o Debug/main.o  -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O0 -ggdb -o Debug/program
+Debug/program: Debug/ExpressionParser/parser_tree.o Debug/ExpressionParser/parser_tree_impl.o Debug/main.o 
+	$(compiler_cmd)  Debug/ExpressionParser/parser_tree.o Debug/ExpressionParser/parser_tree_impl.o Debug/main.o  -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O0 -ggdb -o Debug/program
 
-Build/test_program: Build/Tests/test_main.o Build/Tests/parser_test.o Build/Tests/expression_parser_tests.o Build/Tests/combinator_matching.o Build/Expression/expression_tree.o 
-	$(compiler_cmd)  Build/Tests/test_main.o Build/Tests/parser_test.o Build/Tests/expression_parser_tests.o Build/Tests/combinator_matching.o Build/Expression/expression_tree.o  -LDependencies/lib -O3 -o Build/test_program
+Build/test_program: Build/ExpressionParser/parser_tree_impl.o Build/ExpressionParser/parser_tree.o Build/Tests/expression_parser_tests.o Build/Tests/combinator_matching.o Build/Tests/test_main.o Build/Tests/parser_test.o Build/Expression/expression_tree.o 
+	$(compiler_cmd)  Build/ExpressionParser/parser_tree_impl.o Build/ExpressionParser/parser_tree.o Build/Tests/expression_parser_tests.o Build/Tests/combinator_matching.o Build/Tests/test_main.o Build/Tests/parser_test.o Build/Expression/expression_tree.o  -LDependencies/lib -O3 -o Build/test_program
 
-Debug/test_program: Debug/Tests/test_main.o Debug/Tests/parser_test.o Debug/Tests/expression_parser_tests.o Debug/Tests/combinator_matching.o Debug/Expression/expression_tree.o 
-	$(compiler_cmd)  Debug/Tests/test_main.o Debug/Tests/parser_test.o Debug/Tests/expression_parser_tests.o Debug/Tests/combinator_matching.o Debug/Expression/expression_tree.o  -LDependencies/lib -O0 -ggdb -o Debug/test_program
-
-
-Source/ExpressionParser/parser_tree_2_impl.hpp : Source/ExpressionParser/parser_tree_2.py
-	python3 Tools/source_generator.py Source/ExpressionParser/parser_tree_2.py
+Debug/test_program: Debug/ExpressionParser/parser_tree_impl.o Debug/ExpressionParser/parser_tree.o Debug/Tests/expression_parser_tests.o Debug/Tests/combinator_matching.o Debug/Tests/test_main.o Debug/Tests/parser_test.o Debug/Expression/expression_tree.o 
+	$(compiler_cmd)  Debug/ExpressionParser/parser_tree_impl.o Debug/ExpressionParser/parser_tree.o Debug/Tests/expression_parser_tests.o Debug/Tests/combinator_matching.o Debug/Tests/test_main.o Debug/Tests/parser_test.o Debug/Expression/expression_tree.o  -LDependencies/lib -O0 -ggdb -o Debug/test_program
 
 
-Source/ExpressionParser/parser_tree_2_impl.cpp : Source/ExpressionParser/parser_tree_2_impl.hpp
-Source/ExpressionParser/parser_tree_2_impl.inl : Source/ExpressionParser/parser_tree_2_impl.hpp
+Source/Compiler/instruction_context_impl.hpp : Source/Compiler/instruction_context.py
+	python3 Tools/source_generator.py Source/Compiler/instruction_context.py
 
 
-Build/main.o: Source/main.cpp Source/ExpressionParser/parser_tree_2_impl.inl Source/Utility/overloaded.hpp Source/ExpressionParser/parser_tree_2_impl.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Source/Compiler/instruction_tree_impl.hpp : Source/Compiler/instruction_tree.py
+	python3 Tools/source_generator.py Source/Compiler/instruction_tree.py
+
+
+Source/Compiler/instruction_tree_impl.cpp : Source/Compiler/instruction_tree_impl.hpp
+Source/Compiler/instruction_tree_impl.inl : Source/Compiler/instruction_tree_impl.hpp
+Source/ExpressionParser/resolution_context_impl.hpp : Source/ExpressionParser/resolution_context.py
+	python3 Tools/source_generator.py Source/ExpressionParser/resolution_context.py
+
+
+Source/ExpressionParser/parser_tree_impl.hpp : Source/ExpressionParser/parser_tree.py
+	python3 Tools/source_generator.py Source/ExpressionParser/parser_tree.py
+
+
+Source/ExpressionParser/parser_tree_impl.cpp : Source/ExpressionParser/parser_tree_impl.hpp
+Source/ExpressionParser/parser_tree_impl.inl : Source/ExpressionParser/parser_tree_impl.hpp
+
+
+Build/main.o: Source/main.cpp Source/ExpressionParser/parser_tree_impl.inl Source/ExpressionParser/expression_parser.hpp Source/Parser/recursive_macros.hpp Source/Parser/parser.hpp Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/main.cpp -o Build/main.o
 
@@ -49,23 +63,23 @@ Build/TypeTheory/type_theory.o: Source/TypeTheory/type_theory.cpp
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/TypeTheory/type_theory.cpp -o Build/TypeTheory/type_theory.o
 
-Build/Expression/expression_tree.o: Source/Expression/expression_tree.cpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Build/Expression/expression_tree.o: Source/Expression/expression_tree.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Expression/expression_tree.cpp -o Build/Expression/expression_tree.o
 
-Build/Expression/rule_simplification.o: Source/Expression/rule_simplification.cpp Source/Expression/pattern_tree_impl.hpp Source/Expression/rule_simplification.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Expression/evaluation_context.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/indirect.hpp 
+Build/Expression/rule_simplification.o: Source/Expression/rule_simplification.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/evaluation_context.hpp Source/Expression/rule_simplification.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Expression/rule_simplification.cpp -o Build/Expression/rule_simplification.o
 
-Build/Expression/solver_context.o: Source/Expression/solver_context.cpp Source/Expression/pattern_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Expression/solver.hpp Source/Utility/tags.hpp Source/Expression/evaluation_context.hpp Source/Expression/solver_context.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/indirect.hpp 
+Build/Expression/solver_context.o: Source/Expression/solver_context.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/evaluation_context.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp Source/Expression/solver_context.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree_impl.hpp Source/Expression/solver.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Expression/solver_context.cpp -o Build/Expression/solver_context.o
 
-Build/Expression/formatter.o: Source/Expression/formatter.cpp Source/Expression/pattern_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Expression/evaluation_context.hpp Source/Expression/expression_tree_impl.hpp Source/Expression/formatter.hpp Source/Utility/indirect.hpp 
+Build/Expression/formatter.o: Source/Expression/formatter.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/formatter.hpp Source/Expression/evaluation_context.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Expression/formatter.cpp -o Build/Expression/formatter.o
 
-Build/Expression/evaluation_context.o: Source/Expression/evaluation_context.cpp Source/Expression/evaluation_context.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Build/Expression/evaluation_context.o: Source/Expression/evaluation_context.cpp Source/Utility/indirect.hpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/evaluation_context.hpp Source/Utility/tags.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Expression/evaluation_context.cpp -o Build/Expression/evaluation_context.o
 
@@ -77,23 +91,35 @@ Build/WebInterface/session.o: Source/WebInterface/session.cpp
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/WebInterface/session.cpp -o Build/WebInterface/session.o
 
-Build/Compiler/evaluator.o: Source/Compiler/evaluator.cpp Source/Compiler/resolved_tree_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/function.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Compiler/evaluator.hpp Source/Compiler/resolved_tree.hpp Source/Compiler/resolved_tree_explanation.hpp Source/Utility/indirect.hpp 
+Build/Compiler/instructions.o: Source/Compiler/instructions.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Compiler/instruction_context_impl.hpp Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/instruction_tree_explanation.hpp Source/Compiler/instructions.hpp Source/Compiler/instruction_tree_impl.inl Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Compiler/instruction_tree_impl.hpp Source/Utility/indirect.hpp 
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O3 -IDependencies/include -c Source/Compiler/instructions.cpp -o Build/Compiler/instructions.o
+
+Build/Compiler/evaluator.o: Source/Compiler/evaluator.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Expression/pattern_tree_impl.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/resolved_tree.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree_impl.hpp Source/Compiler/resolved_tree_explanation.hpp Source/Expression/expression_tree.hpp Source/Compiler/evaluator.hpp Source/Utility/function.hpp Source/Utility/tags.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/indirect.hpp Source/Compiler/resolved_tree_impl.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Compiler/evaluator.cpp -o Build/Compiler/evaluator.o
 
-Build/Compiler/resolved_tree.o: Source/Compiler/resolved_tree.cpp Source/Compiler/resolved_tree_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/resolved_tree_explanation.hpp Source/Utility/overloaded.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/tags.hpp Source/Compiler/resolved_tree.hpp Source/Utility/indirect.hpp 
+Build/Compiler/resolved_tree.o: Source/Compiler/resolved_tree.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/resolved_tree.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp Source/Compiler/resolved_tree_impl.hpp Source/Compiler/resolved_tree_explanation.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Compiler/resolved_tree.cpp -o Build/Compiler/resolved_tree.o
 
-Build/ExpressionParser/parser_tree_2_impl.o: Source/ExpressionParser/parser_tree_2_impl.cpp Source/ExpressionParser/parser_tree_2_impl.inl Source/Utility/overloaded.hpp Source/ExpressionParser/parser_tree_2_impl.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Build/Compiler/instruction_tree_impl.o: Source/Compiler/instruction_tree_impl.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/instruction_tree_explanation.hpp Source/Utility/result.hpp Source/Compiler/instruction_tree_impl.inl Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Compiler/instruction_tree_impl.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
-	$(compiler_cmd) -O3 -IDependencies/include -c Source/ExpressionParser/parser_tree_2_impl.cpp -o Build/ExpressionParser/parser_tree_2_impl.o
+	$(compiler_cmd) -O3 -IDependencies/include -c Source/Compiler/instruction_tree_impl.cpp -o Build/Compiler/instruction_tree_impl.o
 
-Build/Tests/combinator_matching.o: Source/Tests/combinator_matching.cpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Build/ExpressionParser/parser_tree_impl.o: Source/ExpressionParser/parser_tree_impl.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O3 -IDependencies/include -c Source/ExpressionParser/parser_tree_impl.cpp -o Build/ExpressionParser/parser_tree_impl.o
+
+Build/ExpressionParser/parser_tree.o: Source/ExpressionParser/parser_tree.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O3 -IDependencies/include -c Source/ExpressionParser/parser_tree.cpp -o Build/ExpressionParser/parser_tree.o
+
+Build/Tests/combinator_matching.o: Source/Tests/combinator_matching.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Tests/combinator_matching.cpp -o Build/Tests/combinator_matching.o
 
-Build/Tests/expression_parser_tests.o: Source/Tests/expression_parser_tests.cpp Source/ExpressionParser/parser_tree.hpp Source/Utility/overloaded.hpp Source/ExpressionParser/expression_parser.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/tags.hpp Source/Parser/parser.hpp Source/Parser/recursive_macros.hpp Source/Utility/indirect.hpp 
+Build/Tests/expression_parser_tests.o: Source/Tests/expression_parser_tests.cpp Source/ExpressionParser/parser_tree_impl.inl Source/ExpressionParser/expression_parser.hpp Source/Parser/recursive_macros.hpp Source/Parser/parser.hpp Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O3 -IDependencies/include -c Source/Tests/expression_parser_tests.cpp -o Build/Tests/expression_parser_tests.o
 
@@ -107,7 +133,7 @@ Build/Tests/parser_test.o: Source/Tests/parser_test.cpp Source/Parser/parser.hpp
 
 
 
-Debug/main.o: Source/main.cpp Source/ExpressionParser/parser_tree_2_impl.inl Source/Utility/overloaded.hpp Source/ExpressionParser/parser_tree_2_impl.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Debug/main.o: Source/main.cpp Source/ExpressionParser/parser_tree_impl.inl Source/ExpressionParser/expression_parser.hpp Source/Parser/recursive_macros.hpp Source/Parser/parser.hpp Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/main.cpp -o Debug/main.o
 
@@ -115,23 +141,23 @@ Debug/TypeTheory/type_theory.o: Source/TypeTheory/type_theory.cpp
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/TypeTheory/type_theory.cpp -o Debug/TypeTheory/type_theory.o
 
-Debug/Expression/expression_tree.o: Source/Expression/expression_tree.cpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Debug/Expression/expression_tree.o: Source/Expression/expression_tree.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Expression/expression_tree.cpp -o Debug/Expression/expression_tree.o
 
-Debug/Expression/rule_simplification.o: Source/Expression/rule_simplification.cpp Source/Expression/pattern_tree_impl.hpp Source/Expression/rule_simplification.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Expression/evaluation_context.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/indirect.hpp 
+Debug/Expression/rule_simplification.o: Source/Expression/rule_simplification.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/evaluation_context.hpp Source/Expression/rule_simplification.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Expression/rule_simplification.cpp -o Debug/Expression/rule_simplification.o
 
-Debug/Expression/solver_context.o: Source/Expression/solver_context.cpp Source/Expression/pattern_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Expression/solver.hpp Source/Utility/tags.hpp Source/Expression/evaluation_context.hpp Source/Expression/solver_context.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/indirect.hpp 
+Debug/Expression/solver_context.o: Source/Expression/solver_context.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/evaluation_context.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp Source/Expression/solver_context.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree_impl.hpp Source/Expression/solver.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Expression/solver_context.cpp -o Debug/Expression/solver_context.o
 
-Debug/Expression/formatter.o: Source/Expression/formatter.cpp Source/Expression/pattern_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Expression/evaluation_context.hpp Source/Expression/expression_tree_impl.hpp Source/Expression/formatter.hpp Source/Utility/indirect.hpp 
+Debug/Expression/formatter.o: Source/Expression/formatter.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/formatter.hpp Source/Expression/evaluation_context.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Expression/formatter.cpp -o Debug/Expression/formatter.o
 
-Debug/Expression/evaluation_context.o: Source/Expression/evaluation_context.cpp Source/Expression/evaluation_context.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Debug/Expression/evaluation_context.o: Source/Expression/evaluation_context.cpp Source/Utility/indirect.hpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/evaluation_context.hpp Source/Utility/tags.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Expression/evaluation_context.cpp -o Debug/Expression/evaluation_context.o
 
@@ -143,23 +169,35 @@ Debug/WebInterface/session.o: Source/WebInterface/session.cpp
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/WebInterface/session.cpp -o Debug/WebInterface/session.o
 
-Debug/Compiler/evaluator.o: Source/Compiler/evaluator.cpp Source/Compiler/resolved_tree_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/function.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Compiler/evaluator.hpp Source/Compiler/resolved_tree.hpp Source/Compiler/resolved_tree_explanation.hpp Source/Utility/indirect.hpp 
+Debug/Compiler/instructions.o: Source/Compiler/instructions.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Compiler/instruction_context_impl.hpp Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/instruction_tree_explanation.hpp Source/Compiler/instructions.hpp Source/Compiler/instruction_tree_impl.inl Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Compiler/instruction_tree_impl.hpp Source/Utility/indirect.hpp 
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Compiler/instructions.cpp -o Debug/Compiler/instructions.o
+
+Debug/Compiler/evaluator.o: Source/Compiler/evaluator.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Expression/pattern_tree_impl.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/resolved_tree.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree_impl.hpp Source/Compiler/resolved_tree_explanation.hpp Source/Expression/expression_tree.hpp Source/Compiler/evaluator.hpp Source/Utility/function.hpp Source/Utility/tags.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/indirect.hpp Source/Compiler/resolved_tree_impl.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Compiler/evaluator.cpp -o Debug/Compiler/evaluator.o
 
-Debug/Compiler/resolved_tree.o: Source/Compiler/resolved_tree.cpp Source/Compiler/resolved_tree_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/resolved_tree_explanation.hpp Source/Utility/overloaded.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/tags.hpp Source/Compiler/resolved_tree.hpp Source/Utility/indirect.hpp 
+Debug/Compiler/resolved_tree.o: Source/Compiler/resolved_tree.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/resolved_tree.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp Source/Compiler/resolved_tree_impl.hpp Source/Compiler/resolved_tree_explanation.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Compiler/resolved_tree.cpp -o Debug/Compiler/resolved_tree.o
 
-Debug/ExpressionParser/parser_tree_2_impl.o: Source/ExpressionParser/parser_tree_2_impl.cpp Source/ExpressionParser/parser_tree_2_impl.inl Source/Utility/overloaded.hpp Source/ExpressionParser/parser_tree_2_impl.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Debug/Compiler/instruction_tree_impl.o: Source/Compiler/instruction_tree_impl.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Compiler/instruction_tree_explanation.hpp Source/Utility/result.hpp Source/Compiler/instruction_tree_impl.inl Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Compiler/instruction_tree_impl.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
-	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/ExpressionParser/parser_tree_2_impl.cpp -o Debug/ExpressionParser/parser_tree_2_impl.o
+	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Compiler/instruction_tree_impl.cpp -o Debug/Compiler/instruction_tree_impl.o
 
-Debug/Tests/combinator_matching.o: Source/Tests/combinator_matching.cpp Source/Expression/pattern_tree_impl.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Expression/expression_tree.hpp Source/Utility/tags.hpp Source/Utility/indirect.hpp 
+Debug/ExpressionParser/parser_tree_impl.o: Source/ExpressionParser/parser_tree_impl.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/ExpressionParser/parser_tree_impl.cpp -o Debug/ExpressionParser/parser_tree_impl.o
+
+Debug/ExpressionParser/parser_tree.o: Source/ExpressionParser/parser_tree.cpp Source/ExpressionParser/parser_tree_impl.inl Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
+	@mkdir -p $(@D)
+	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/ExpressionParser/parser_tree.cpp -o Debug/ExpressionParser/parser_tree.o
+
+Debug/Tests/combinator_matching.o: Source/Tests/combinator_matching.cpp Source/Expression/expression_tree.hpp Source/Expression/pattern_tree_impl.hpp Source/Utility/tags.hpp Source/Expression/expression_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Tests/combinator_matching.cpp -o Debug/Tests/combinator_matching.o
 
-Debug/Tests/expression_parser_tests.o: Source/Tests/expression_parser_tests.cpp Source/ExpressionParser/parser_tree.hpp Source/Utility/overloaded.hpp Source/ExpressionParser/expression_parser.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/tags.hpp Source/Parser/parser.hpp Source/Parser/recursive_macros.hpp Source/Utility/indirect.hpp 
+Debug/Tests/expression_parser_tests.o: Source/Tests/expression_parser_tests.cpp Source/ExpressionParser/parser_tree_impl.inl Source/ExpressionParser/expression_parser.hpp Source/Parser/recursive_macros.hpp Source/Parser/parser.hpp Source/Utility/tags.hpp Source/ExpressionParser/resolution_context_impl.hpp Source/ExpressionParser/parser_tree.hpp Source/Utility/result.hpp Source/ExpressionParser/parser_tree_impl.hpp Source/Utility/overloaded.hpp Source/Utility/indirect.hpp 
 	@mkdir -p $(@D)
 	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/Tests/expression_parser_tests.cpp -o Debug/Tests/expression_parser_tests.o
 

@@ -150,11 +150,26 @@ archive_part::{{ tree.kinds[0].name }}
   {{kind.name}} const* {{ classname }}::get_if_{{kind.name|underscore}}() const { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return ({{kind.name}} const*)this; else return nullptr; }
 {%- endcall %}
 {%- endmacro %}
-{%- macro visit_declaration(classname, components) -%}
-    template<class Visitor> auto visit(Visitor&& visitor);
-    template<class Visitor> auto visit(Visitor&& visitor) const;
+{%- macro visitor_return_type(components, ref) -%}
+std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visitor&&, {{ component.name }}{{ ref.suffix }}>{% if not loop.last %}, {% endif %}{% endfor %} >
+{%- endmacro %}
+{%- macro visitor_requirement(components, concept_name, ref) -%}
+	template<class Visitor> concept {{ concept_name }} = requires(Visitor visitor
+	{%- for component in components -%}
+	, {{ component.name }}{{ ref.suffix }} {{component.name|underscore}}
+	{%- endfor -%}
+	) {
+		{%- for component in components %}
+		std::forward<Visitor>(visitor)({% call ref.forward() %}{{ component.name|underscore }}{% endcall %});
+		{%- endfor %}
+		typename {{ visitor_return_type(components, ref) }};
+	};
+{%- endmacro %}
+{%- macro visit_declaration(classname, components, ref_concept, cref_concept) -%}
+    template<{{ ref_concept }} Visitor> auto visit(Visitor&& visitor) -> {{ visitor_return_type(components, reference.ref) }};
+    template<{{ cref_concept }} Visitor> auto visit(Visitor&& visitor) const -> {{ visitor_return_type(components, reference.cref) }};
 {%- call in_extension("inl") %}
-  template<class Visitor> auto {{ classname }}::visit(Visitor&& visitor) {
+  template<{{ ref_concept }} Visitor> auto {{ classname }}::visit(Visitor&& visitor) -> {{ visitor_return_type(components, reference.ref) }} {
     switch(discriminator) {
     {%- for component in components %}
       case {{ component.global_index }}: return std::forward<Visitor>(visitor)(*({{ component.name }}*)this);
@@ -162,7 +177,7 @@ archive_part::{{ tree.kinds[0].name }}
       default: std::terminate();
     }
   }
-  template<class Visitor> auto {{ classname }}::visit(Visitor&& visitor) const {
+  template<{{ cref_concept }} Visitor> auto {{ classname }}::visit(Visitor&& visitor) const -> {{ visitor_return_type(components, reference.cref) }} {
     switch(discriminator) {
     {%- for component in components %}
       case {{ component.global_index }}: return std::forward<Visitor>(visitor)(*({{ component.name }} const*)this);
@@ -197,6 +212,8 @@ archive_part::{{ tree.kinds[0].name }}
 {%- macro archive_part_definition(tree, archive) -%}
 {%- call in_namespace_relative("archive_part") %}
 {%- if tree.multikind %}
+  {{ visitor_requirement(tree.components, "PolymorphicKindVisitor", reference.ref) }}
+  {{ visitor_requirement(tree.components, "PolymorphicKindConstVisitor", reference.cref) }}
   class PolymorphicKind {
     {{ friend_detail(tree) }}
     {%- for kind in tree.kinds %}
@@ -218,11 +235,13 @@ archive_part::{{ tree.kinds[0].name }}
     {%- for component in tree.components %}
     {{ component_getter_declaration("PolymorphicKind", component) }}
     {%- endfor %}
-    {{ visit_declaration("PolymorphicKind", tree.components) }}
+    {{ visit_declaration("PolymorphicKind", tree.components, "PolymorphicKindVisitor", "PolymorphicKindConstVisitor") }}
     {{ visit_kind_declaration("PolymorphicKind", tree.kinds) }}
   };
   {%- endif %}
   {%- for kind in tree.kinds %}
+  {{ visitor_requirement(kind.components, kind.name + "Visitor", reference.ref) }}
+  {{ visitor_requirement(kind.components, kind.name + "ConstVisitor", reference.cref) }}
   class {{ kind.name }} {% if tree.multikind %}: private PolymorphicKind {% endif %}{
 {%- if tree.multikind %}
     friend PolymorphicKind;
@@ -239,7 +258,7 @@ archive_part::{{ tree.kinds[0].name }}
     {%- for component in kind.components %}
     {{ component_getter_declaration(kind.name, component) }}
     {%- endfor %}
-    {{ visit_declaration(kind.name, kind.components) }}
+    {{ visit_declaration(kind.name, kind.components, kind.name + "Visitor", kind.name + "ConstVisitor") }}
     PolymorphicKind& as_poly() { return *(PolymorphicKind*)this; }
     PolymorphicKind const& as_poly() const { return *(PolymorphicKind const*)this; }
   };
@@ -405,7 +424,7 @@ archive_part::{{ tree.kinds[0].name }}
         template<class T> T* position_for_span(std::size_t count) { auto ret = (T*)std::align(alignof(T), sizeof(T), head, size_left); head = (std::uint8_t*)head + count * sizeof(T); size_left -= count * sizeof(T); return ret; }
         Writer(void* head, std::uint64_t size_left, std::uint64_t index_count):head(head), size_left(size_left) {
           auto old_head = head;
-          indexes = position_for_span<{{ archive_root_part(tree) }}*>(index_count);
+          indexes = position_for_span<{{ archive_root_part(tree) }}*>(index_count + 1);
           if(old_head != indexes) std::terminate();
         }
         {%- for kind in tree.kinds %}

@@ -62,16 +62,6 @@ namespace mdb {
       }
     }
   };
-  /*
-  template<class Callback, class FailCallback, class... Vs>
-  Result<std::invoke_result_t<Callback&&, detail::ResultGetValueType<Vs&&>...>, std::common_type_t<detail::ResultGetErrorType<Vs&&>...> > apply_to_results(Callback&& callback, Vs&&... results) {
-    if((results.is_error() || ...)) {
-      return {in_place_error, apply_to_first_non_null<std::common_type_t<detail::ResultGetErrorType<Vs&&>...> >([](auto* err) { return std::move(*err); }, results.get_if_error()...)};
-    } else {
-      return {in_place_value, std::forward<Callback>(callback)(std::forward<Vs>(results).get_value()...)};
-    }
-  }
-  */
   template<class Callback, class V, class E, class OutV = std::invoke_result_t<Callback&&, V&>::ValueType>
   Result<OutV, E> bind(Result<V, E>& result, Callback&& callback) {
     static_assert(std::is_same_v<std::invoke_result_t<Callback&&, V&>::ErrorType, E>, "Error type of bind result must be same as input error type.");
@@ -137,22 +127,6 @@ namespace mdb {
     }
   }
   namespace detail {
-    template<class T>
-    using ResultGetValueType = decltype(std::declval<T>().get_value());
-    template<class T>
-    using ResultGetErrorType = decltype(std::declval<T>().get_error());
-    /*template<class Ret, class Transformer>
-    Ret apply_to_first_non_null(Transformer&& transformer) {
-      std::terminate(); //unreachable
-    }
-    template<class Ret, class Transformer, class Arg, class... Args>
-    Ret apply_to_first_non_null(Transformer&& transformer, Arg* arg, Args*... args) {
-      if(arg) {
-        return std::forward<Transformer>(transformer)(arg);
-      } else {
-        return apply_to_first_non_null(std::forward<Transformer>(transformer), args...);
-      }
-    }*/
     template<class V, class E, class Finisher>
     Result<V, E> gather_map_impl(Finisher&& finisher) {
       return finisher();
@@ -176,6 +150,39 @@ namespace mdb {
     return detail::gather_map_impl<V, E>([&]<class... Args>(Args&&... args) {
       return Result<V, E>{in_place_value, std::forward<Callback>(callback)(std::forward<Args>(args)...)};
     }, std::forward<Getters>(getters)...);
+  }
+  namespace detail {
+    template<class V, class E, class Finisher, class MergeErrors>
+    Result<V, E> multi_error_gather_map_impl_ok(MergeErrors& merge_errors, Finisher&& finisher) {
+      return finisher();
+    }
+    template<class V, class E, class MergeErrors, class... Results>
+    Result<V, E> multi_error_gather_map_impl_bad(MergeErrors& merge_errors, E error, Results&&... results) {
+      ([&] {
+        if(results.holds_error()) {
+          error = merge_errors(std::move(error), std::forward<Results>(results).get_error());
+        }
+      } () , ...);
+      return {in_place_error, std::move(error)};
+    }
+    template<class V, class E, class Finisher, class MergeErrors, class TopResult, class... Results>
+    Result<V, E> multi_error_gather_map_impl_ok(MergeErrors& merge_errors, Finisher&& finisher, TopResult&& result, Results&&... results) {
+      if(result.holds_success()) {
+        return multi_error_gather_map_impl_ok<V, E>(merge_errors, [&]<class... Args>(Args&&... args) {
+          return finisher(std::forward<TopResult>(result).get_value(), std::forward<Args>(args)...);
+        }, std::forward<Results>(results)...);
+      } else {
+        return multi_error_gather_map_impl_bad<V, E>(merge_errors, std::forward<TopResult>(result).get_error(), std::forward<Results>(results)...);
+      }
+    }
+  }
+  template<class Callback, class MergeErrors, class... Results>
+  auto multi_error_gather_map(Callback&& callback, MergeErrors&& merge_errors, Results&&... results) {
+    using V = std::invoke_result_t<Callback&&, decltype(std::forward<Results>(results).get_value())...>;
+    using E = std::common_type_t<typename std::decay_t<Results>::ErrorType...>;
+    return detail::multi_error_gather_map_impl_ok<V, E>(merge_errors, [&]<class... Args>(Args&&... args) {
+      return Result<V, E>{in_place_value, std::forward<Callback>(callback)(std::forward<Args>(args)...)};
+    }, std::forward<Results>(results)...);
   }
 }
 

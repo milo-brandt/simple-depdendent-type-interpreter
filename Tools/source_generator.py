@@ -22,12 +22,29 @@ def passthrough_call(*, caller):
 def move_call(*, caller):
     return "std::move(" + caller() + ")"
 
-jinja_env.globals["reference"] = {
-    "cref": {"suffix": " const&", "const_qualifier": " const", "forward": passthrough_call, "name": "cref"},
-    "ref": {"suffix": " &", "const_qualifier": "", "forward": passthrough_call, "name": "ref"},
-    "rref": {"suffix": "&&", "const_qualifier": "", "forward": move_call, "name": "rref"},
-    "crref": {"suffix": " const&&", "const_qualifier": "", "forward": move_call, "name": "crref"}
+reference_kinds = {
+    "value": {"suffix": "", "const_qualifier": "", "forward": move_call, "forward_as_this": passthrough_call, "name": "value", "forward_suffix": "&&"},
+    "cvalue": {"suffix": " const", "const_qualifier": " const", "forward": move_call, "forward_as_this": passthrough_call, "name": "cvalue", "forward_suffix": "const&&"},
+    "cref": {"suffix": " const&", "const_qualifier": " const", "forward": passthrough_call, "forward_as_this": passthrough_call, "name": "cref", "forward_suffix": ""},
+    "ref": {"suffix": "&", "const_qualifier": "", "forward": passthrough_call, "forward_as_this": passthrough_call, "name": "ref", "forward_suffix": ""},
+    "rref": {"suffix": "&&", "const_qualifier": "", "forward": move_call, "forward_as_this": move_call, "name": "rref", "forward_suffix": ""},
+    "crref": {"suffix": " const&&", "const_qualifier": "", "forward": move_call, "forward_as_this": move_call, "name": "crref", "forward_suffix": ""}
 }
+
+def reference_kind_of(type_name):
+    if type_name[-5:] == "const&":
+        return reference_kinds["cref"]
+    elif type_name[-6:] == "const&&":
+        return reference_kinds["crref"]
+    elif type_name[-1:] == "&":
+        return reference_kinds["ref"]
+    elif type_name[-2:] == "&&":
+        return reference_kinds["rref"]
+    else:
+        return reference_kinds["value"]
+
+jinja_env.globals["reference"] = reference_kinds
+jinja_env.globals["reference_for"] = reference_kind_of
 
 command_string = "!!!FILE_GENERATOR_COMMAND_"
 
@@ -41,11 +58,14 @@ class TemplateCommandSegment:
         self.last_namespace = ""
         self.absolute_includes = set()
         self.relative_includes = set()
-    def add_include(self, include, is_absolute):
-        if is_absolute:
+        self.source_includes = set()
+    def add_include(self, include, kind):
+        if kind == "absolute":
             self.absolute_includes.add(include)
-        else:
+        elif kind == "relative":
             self.relative_includes.add(include)
+        else:
+            self.source_includes.add(include)
     def open_namespace(self, namespace):
         if namespace != "":
             self.content = self.content + "\nnamespace " + namespace + "{\n"
@@ -64,11 +84,12 @@ class TemplateCommandSegment:
     def write_includes(self, filebase, extension):
         my_path = os.path.dirname(filebase + "." + extension)
         absolute_includes = "".join(map(lambda include : "#include <" + include + ">\n", self.absolute_includes));
-        relative_includes = "".join(map(lambda include : "#include \"" + os.path.relpath(include, my_path) + "\"\n", self.relative_includes));
-        return absolute_includes + relative_includes
+        relative_includes = "".join(map(lambda include : "#include \"" + include + "\"\n", self.relative_includes));
+        source_includes = "".join(map(lambda include : "#include \"" + os.path.relpath(include, my_path) + "\"\n", self.source_includes));
+        return absolute_includes + source_includes + relative_includes
     def take_content(self, filebase, extension, context):
         if extension == "cpp" or extension == "inl":
-            self.relative_includes.add(filebase + ".hpp")
+            self.source_includes.add(filebase + ".hpp")
         if extension == "hpp" and "inl" in context.output_pieces:
             self.write("\n#include \"" + os.path.basename(filebase) + ".inl\"\n", "")
 
@@ -117,11 +138,11 @@ class RelativeNamespaceCommand:
     def unact(self, context):
         context.namespace_stack.pop()
 class IncludeCommand:
-    def __init__(self, include, absolute):
+    def __init__(self, include, kind):
         self.include = include
-        self.absolute = absolute
+        self.kind = kind
     def act(self, context):
-        context.get_piece(context.extension_stack[-1]).add_include(self.include, self.absolute)
+        context.get_piece(context.extension_stack[-1]).add_include(self.include, self.kind)
 
 def add_command(command):
     index = len(commands_used)
@@ -141,15 +162,18 @@ def in_relative_namespace_command(namespace, *, caller):
     (start_str, end_str) = add_command_block(RelativeNamespaceCommand(namespace))
     return start_str + caller() + end_str
 def absolute_include_command(include):
-    return add_command(IncludeCommand(include, True))
+    return add_command(IncludeCommand(include, "absolute"))
 def relative_include_command(include):
-    return add_command(IncludeCommand(include, False))
+    return add_command(IncludeCommand(include, "relative"))
+def source_include_command(include):
+    return add_command(IncludeCommand(include, "source"))
 
 jinja_env.globals["in_extension"] = in_extension_command
 jinja_env.globals["in_namespace"] = in_namespace_command
 jinja_env.globals["in_namespace_relative"] = in_relative_namespace_command
 jinja_env.globals["absolute_include"] = absolute_include_command
 jinja_env.globals["relative_include"] = relative_include_command
+jinja_env.globals["source_include"] = source_include_command
 
 def parse_template_output(output, filebase):
     context = TemplateCommandContext()
@@ -174,8 +198,9 @@ def parse_template_output(output, filebase):
     return { extension:piece.take_content(filebase, extension, context) for (extension, piece) in context.output_pieces.items()}
 
 tree_template = jinja_env.get_template('tree.hpp.template')
+type_erasure_template = jinja_env.get_template('type_erasure.hpp.template')
 
-
+# Utilities for writing trees
 class TypeInfo:
     def __init__(self, data):
         self.data = data
@@ -381,7 +406,34 @@ class TreeOutput:
             "file_info": file_info
         })
 
+# Type erasure utilities
+class MemberFunction:
+    def __init__(self, name, *, ret = None, args = None, ref = None):
+        if ret == None:
+            ret = "void"
+        if args == None:
+            args = []
+        if ref == None:
+            ref = "value"
+        self.args = [{
+            "name": name,
+            "type": type
+        } for (type, name) in args]
+        self.name = name
+        self.return_type = ret
+        self.this_ref = reference_kinds[ref]
+class TypeErasedKind:
+    def __init__(self, namespace, name, functions):
+        self.namespace = namespace
+        self.name = name
+        self.functions = functions
+    def write_string(self, file_info):
+        return type_erasure_template.render({
+            "type_erase_info": self,
+            "file_info": file_info
+        })
 
+# File writing utilities
 class FileWriter:
     def __init__(self, spec_file):
         self.outputs = []
@@ -389,7 +441,16 @@ class FileWriter:
             "spec_file": spec_file,
             "generator_file": __file__
         }
-    def write(self, *args):
+    def write(self, *args, absolute_includes = None, relative_includes = None, source_includes = None):
+        if absolute_includes:
+            for include in absolute_includes:
+                self.outputs.append(absolute_include_command(include))
+        if relative_includes:
+            for include in relative_includes:
+                self.outputs.append(relative_include_command(include))
+        if source_includes:
+            for include in source_includes:
+                self.outputs.append(source_include_command(include))
         for arg in args:
             self.outputs.append(arg.write_string(self.file_info))
 
@@ -414,7 +475,9 @@ class FileContext:
             "vector": vector,
             "CompoundShape": CompoundShape,
             "Multitree": Multitree,
-            "TreeOutput": TreeOutput
+            "TreeOutput": TreeOutput,
+            "TypeErasedKind": TypeErasedKind,
+            "MemberFunction": MemberFunction
         }
 
 def process_file(path_to_file):

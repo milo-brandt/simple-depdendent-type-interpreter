@@ -1,0 +1,6 @@
+{%- from "TypeErasure/definition.hpp.template" import type_erased_struct %}
+
+{%- from "head_macros.hpp.template" import make_head %}
+
+{{- make_head(file_info) }}
+{{ type_erased_struct(type_erase_info) }}

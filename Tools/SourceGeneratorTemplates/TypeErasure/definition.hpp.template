@@ -1,0 +1,57 @@
+{%- macro type_erased_struct(info) -%}
+{{ source_include("Source/Utility/tags.hpp") }}
+{%- call in_namespace(info.namespace) %}
+  template<class T> concept {{info.name}}Concept =
+    {%- for func in info.functions %}
+    requires(T{{ func.this_ref.suffix }} this_value{%- for arg in func.args %}, {{arg.type}} {{arg.name}}{%- endfor %}) {
+      ({{ func.return_type }}){%- call func.this_ref.forward_as_this() %}this_value{%- endcall %}.{{func.name}}(
+         {%- for arg in func.args -%}
+         {% call reference_for(arg.type).forward() %}{{arg.name}}{% endcall %}{% if not loop.last %}, {% endif %}
+         {%- endfor %});
+    }{% if not loop.last %} && {% endif %}
+  {%- endfor %};
+  class {{info.name}} {
+    struct AbstractBase {
+      {%- for func in info.functions %}
+      virtual {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}}{{ reference_for(arg.type).forward_suffix }}{%- endfor %}){{ func.this_ref.suffix }} = 0;
+      {%- endfor %}
+      virtual ~AbstractBase() = default;
+    };
+    template<class T> struct Implementation : AbstractBase {
+      T implementation_value;
+      Implementation(T implementation_value):implementation_value(std::forward<T>(implementation_value)) {}
+      {%- for func in info.functions %}
+      virtual {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}}{{ reference_for(arg.type).forward_suffix }} {{arg.name}}{%- endfor %}){{ func.this_ref.suffix }} override {
+        return ({{func.return_type}}){%- call func.this_ref.forward_as_this() %}implementation_value{%- endcall %}.{{ func.name}}({%- for arg in func.args -%}
+        {% call reference_for(arg.type).forward() %}{{arg.name}}{% endcall %}{% if not loop.last %}, {% endif %}
+        {%- endfor %});
+      }
+      {%- endfor %}
+    };
+    std::unique_ptr<AbstractBase> impl;
+  public:
+    template<{{info.name}}Concept T>
+    {{info.name}}(T value):impl(new Implementation<T>{std::move(value)}) {}
+    template<{{info.name}}Concept T>
+    {{info.name}}(mdb::Ref<T> value):impl(new Implementation<T&>{*value.ptr}) {}
+    {{info.name}}({{info.name}}&& other):impl(std::move(other.impl)) {}
+    {{info.name}}& operator=({{info.name}}&& other) { impl = std::move(other.impl); return *this; }
+    {%- for func in info.functions %}
+    {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}} {{arg.name}}{%- endfor %}){{ func.this_ref.suffix }} {
+      return ({% call func.this_ref.forward_as_this() %}*impl{% endcall %}).{{func.name}}({%- for arg in func.args -%}
+      {% call reference_for(arg.type).forward() %}{{arg.name}}{% endcall %}{% if not loop.last %}, {% endif %}
+      {%- endfor %});
+    }
+    {%- endfor %}
+  };
+  template<{%- for func in info.functions %}class {{func.name|camelize}}{% if not loop.last %}, {% endif %}{%- endfor %}>
+  struct {{info.name}}Lambda {
+    {%- for func in info.functions %}
+    {{func.name|camelize}} {{func.name}};
+    {%- endfor %}
+  };
+  template<{%- for func in info.functions %}class {{func.name|camelize}}{% if not loop.last %}, {% endif %}{%- endfor %}>
+  {{- " " + info.name }}Lambda({%- for func in info.functions %}{{func.name|camelize}}{% if not loop.last %}, {% endif %}{%- endfor %}) ->
+  {{- " " + info.name }}Lambda<{%- for func in info.functions %}{{func.name|camelize}}{% if not loop.last %}, {% endif %}{%- endfor %}>;
+{%- endcall %}
+{%- endmacro %}
