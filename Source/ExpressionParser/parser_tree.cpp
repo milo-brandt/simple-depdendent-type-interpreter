@@ -64,7 +64,7 @@ namespace expression_parser {
         return std::visit([&](auto* context) { return lookup(*context, str); }, context.parent);
       }
     }
-    resolved::PatternIdentifier lookup(PatternContext& context, std::string_view str) {
+    std::optional<resolved::PatternIdentifier> lookup_pattern(PatternContext& context, std::string_view str, bool allow_wildcard) {
       for(auto& local : context.declaration_vector) {
         if(local.name == str) {
           return resolved::PatternIdentifier {
@@ -78,7 +78,7 @@ namespace expression_parser {
           .is_local = ret->is_local,
           .var_index = ret->var_index
         };
-      } else {
+      } else if(allow_wildcard) {
         auto new_index = context.next_index++;
         context.declaration_vector.push_back({
           LocalContext{ //leave .parent blank for later
@@ -90,6 +90,8 @@ namespace expression_parser {
           .is_local = true,
           .var_index = new_index
         };
+      } else {
+        return std::nullopt;
       }
     }
     std::optional<resolved::Identifier> lookup(CommandContext& context, std::string_view str) {
@@ -105,6 +107,7 @@ namespace expression_parser {
     }
     constexpr auto merge_errors = [](ResolutionError lhs, ResolutionError rhs) {
       for(auto& err : rhs.bad_ids) { lhs.bad_ids.push_back(std::move(err)); }
+      for(auto& err : rhs.bad_pattern_ids) { lhs.bad_pattern_ids.push_back(std::move(err)); }
       return lhs;
     };
     template<class Callback, class... Ts>
@@ -118,21 +121,27 @@ namespace expression_parser {
       struct Detail {
         Context& context;
         PatternContext pattern_context;
-        resolved::Pattern resolve_impl(output_archive::Pattern const& pattern) {
+        mdb::Result<resolved::Pattern, ResolutionError> resolve_impl(output_archive::Pattern const& pattern, bool allow_wildcard) {
           return pattern.visit(mdb::overloaded{
-            [&](output_archive::PatternApply const& apply) -> resolved::Pattern {
-              return resolved::PatternApply {
-                .lhs = resolve_impl(apply.lhs),
-                .rhs = resolve_impl(apply.rhs)
-              };
+            [&](output_archive::PatternApply const& apply) -> mdb::Result<resolved::Pattern, ResolutionError> {
+              return merged_result([&](auto lhs, auto rhs) -> resolved::Pattern {
+                return resolved::PatternApply{
+                  .lhs = std::move(lhs),
+                  .rhs = std::move(rhs)
+                };
+              }, resolve_impl(apply.lhs, false), resolve_impl(apply.rhs, true));
             },
-            [&](output_archive::PatternIdentifier const& id) -> resolved::Pattern {
-              return lookup(pattern_context, id.id);
+            [&](output_archive::PatternIdentifier const& id) -> mdb::Result<resolved::Pattern, ResolutionError> {
+              if(auto ret = lookup_pattern(pattern_context, id.id, allow_wildcard)) {
+                return resolved::Pattern{std::move(*ret)};
+              } else {
+                return ResolutionError{.bad_pattern_ids = {id.index()}};
+              }
             },
-            [&](output_archive::PatternHole const& hole) -> resolved::Pattern {
-              return resolved::PatternHole{
+            [&](output_archive::PatternHole const& hole) -> mdb::Result<resolved::Pattern, ResolutionError> {
+              return resolved::Pattern{resolved::PatternHole {
                 .var_index = context.next_index++
-              };
+              }};
             }
           });
         }
@@ -144,8 +153,10 @@ namespace expression_parser {
           .parent = &context
         }
       };
-      auto ret = detail.resolve_impl(pattern);
-      return std::visit([&](auto* context) { return then(*context, detail.pattern_context.next_index, std::move(ret)); }, detail.pattern_context.link_vector());
+      auto ret = detail.resolve_impl(pattern, false);
+      return std::visit([&](auto* context) {
+        return then(*context, detail.pattern_context.next_index, std::move(ret));
+      }, detail.pattern_context.link_vector());
     }
     mdb::Result<resolved::Command, ResolutionError> resolve_impl(CommandContext& command_context, output_archive::Command const& command);
     template<class Context>
@@ -195,7 +206,7 @@ namespace expression_parser {
           if(auto output = lookup(context, identifier.id)) {
             return resolved::Expression{*output};
           } else {
-            return ResolutionError{{identifier.index()}};
+            return ResolutionError{.bad_ids = {identifier.index()}};
           }
         },
         [&](output_archive::Hole const& hole) -> mdb::Result<resolved::Expression, ResolutionError> {
@@ -271,14 +282,14 @@ namespace expression_parser {
           return ret;
         },
         [&](output_archive::Rule const& rule) -> mdb::Result<resolved::Command, ResolutionError> {
-          return resolve_pattern(command_context, command_context.next_index, rule.pattern, [&](auto& inner_context, std::uint64_t inner_stack_depth, resolved::Pattern pattern) {
-            return map(resolve_impl(inner_context, inner_stack_depth, rule.replacement), [&](resolved::Expression expr) -> resolved::Command {
+          return resolve_pattern(command_context, command_context.next_index, rule.pattern, [&](auto& inner_context, std::uint64_t inner_stack_depth, mdb::Result<resolved::Pattern, ResolutionError> pattern) {
+            return merged_result([&](resolved::Pattern pattern, resolved::Expression replacement) -> resolved::Command {
               return resolved::Rule{
                 .pattern = std::move(pattern),
-                .replacement = std::move(expr),
+                .replacement = std::move(replacement),
                 .args_in_pattern = inner_stack_depth - command_context.next_index
               };
-            });
+            }, std::move(pattern), resolve_impl(inner_context, inner_stack_depth, rule.replacement));
           });
         },
         [&](output_archive::Axiom const& axiom) -> mdb::Result<resolved::Command, ResolutionError> {
@@ -291,25 +302,29 @@ namespace expression_parser {
           return ret;
         },
         [&](output_archive::Let const& let) -> mdb::Result<resolved::Command, ResolutionError> {
-          auto value_result = resolve_impl(command_context, command_context.next_index, let.value);
-          if(let.type) {
-            auto type_result = resolve_impl(command_context, command_context.next_index, *let.type);
-            return merged_result([&](resolved::Expression body, resolved::Expression type) -> resolved::Command {
-              return resolved::Let{
-                .value = std::move(body),
-                .type = std::move(type)
-              };
-            }, std::move(value_result), std::move(type_result));
-          } else {
-            if(value_result.holds_success()) {
-              return resolved::Command{resolved::Let{
-                .value = std::move(value_result.get_value()),
-                .type = std::nullopt
-              }};
+          auto ret = [&] () -> mdb::Result<resolved::Command, ResolutionError> {
+            auto value_result = resolve_impl(command_context, command_context.next_index, let.value);
+            if(let.type) {
+              auto type_result = resolve_impl(command_context, command_context.next_index, *let.type);
+              return merged_result([&](resolved::Expression body, resolved::Expression type) -> resolved::Command {
+                return resolved::Let{
+                  .value = std::move(body),
+                  .type = std::move(type)
+                };
+              }, std::move(value_result), std::move(type_result));
             } else {
-              return std::move(value_result.get_error());
+              if(value_result.holds_success()) {
+                return resolved::Command{resolved::Let{
+                  .value = std::move(value_result.get_value()),
+                  .type = std::nullopt
+                }};
+              } else {
+                return std::move(value_result.get_error());
+              }
             }
-          }
+          } ();
+          command_context.add_name(let.name);
+          return ret;
         }
       });
     }

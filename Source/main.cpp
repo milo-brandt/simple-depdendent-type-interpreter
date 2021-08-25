@@ -316,15 +316,25 @@ int main(int argc, char** argv) {
       auto locator_archive = archive(success.value.locator);
       std::cout << "Parse result: " << format(locator_archive) << "\n";
       auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda{
-        .lookup = [&](auto const&) { return std::nullopt; }
+        .lookup = [&](std::string_view str) -> std::optional<std::uint64_t> {
+          if(str == "Type") {
+            return 0;
+          } else {
+            return std::nullopt;
+          }
+        }
       }, output_archive.root());
       if(auto* resolve = resolved.get_if_value()) {
-        std::cout << "Resolved!\n";
+        std::cout << "Resolved: " << format(*resolve) << "\n";
       } else {
         auto const& err = resolved.get_error();
         for(auto const& bad_id : err.bad_ids) {
           auto bad_pos = locator_archive[bad_id].position;
           std::cout << "Bad id: " << format_error(bad_pos, source) << "\n";
+        }
+        for(auto const& bad_id : err.bad_pattern_ids) {
+          auto bad_pos = locator_archive[bad_id].position;
+          std::cout << "Bad pattern id: " << format_error(bad_pos, source) << "\n";
         }
       }
     }
