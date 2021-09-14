@@ -5,8 +5,8 @@
 
 namespace expression {
   struct Rule {
-    pattern::Tree pattern;
-    tree::Tree replacement;
+    pattern::Pattern pattern;
+    tree::Expression replacement;
   };
   struct ExternalInfo {
     bool is_axiom;
@@ -17,18 +17,18 @@ namespace expression {
     std::uint64_t arrow_type_codomain;
     std::uint64_t type_constant_function;
     std::uint64_t arrow_type_codomain_codomain;
-    tree::Tree arrow_type();
+    tree::Expression arrow_type();
   };
   struct Context {
     std::vector<Rule> rules;
     std::vector<ExternalInfo> external_info;
     Primitives primitives;
     Context();
-    std::uint64_t name_expression(tree::Tree);
+    std::uint64_t name_expression(tree::Expression);
     std::uint64_t add_axiom();
     std::uint64_t add_declaration();
-    tree::Tree reduce(tree::Tree tree);
-    tree::Tree reduce_once_at_root(tree::Tree tree);
+    tree::Expression reduce(tree::Expression tree);
+    tree::Expression reduce_once_at_root(tree::Expression tree);
   };
 }
 

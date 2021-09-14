@@ -3,138 +3,215 @@
 
 namespace compiler::instruction {
   namespace {
-    constexpr auto merge_errors = [](Error&& lhs, Error&& rhs) {
-      for(auto err : rhs.unrecognized_ids) lhs.unrecognized_ids.push_back(std::move(err));
-      return std::move(lhs);
-    };
-    template<class Callback, class... Results>
-    auto merged_gather_map(Callback&& callback, Results&&... results) {
-      return multi_error_gather_map(std::forward<Callback>(callback), merge_errors, std::forward<Results>(results)...);
-    }
-    struct EmbedIndex { std::uint64_t index; };
-    struct ExternalIndex { std::uint64_t index; };
-    using LocalEntry = std::variant<EmbedIndex, ExternalIndex>;
-    namespace archive = expression_parser::output::archive_part;
-    namespace archive_index = expression_parser::archive_index;
-
-    struct ResolutionData {
-      Context global_context;
-      std::unordered_map<std::string, LocalEntry> locals;
-      std::uint64_t stack_depth = 0;
-      std::vector<located_output::Command>* command_target;
-      mdb::Result<located_output::Expression, Error> resolve(archive::Expression const& expression);
-      mdb::Result<std::monostate, Error> resolve(archive::Command const& expression);
-      located_output::Local add_stack_command(located_output::Command command) {
-        command_target->push_back(std::move(command));
-        return located_output::Local{.local_index = stack_depth++ };
+    namespace resolved_archive = expression_parser::resolved::archive_part;
+    struct InstructionContext {
+      std::vector<std::uint64_t> locals_stack;
+      std::uint64_t output_stack_size = 0;
+      std::vector<located_output::Command> commands;
+      located_output::Expression type() {
+        return located_output::PrimitiveExpression{Primitive::type};
       }
-      template<class Callback>
-      void for_all(located_output::Expression type, Callback&& callback) {
-        std::vector<located_output::Command> new_commands;
-        auto old_commands = command_target;
-        command_target = &new_commands;
-        auto cleanup_switch = [&] {
-          command_target = old_commands;
-          command_target->push_back(located_output::ForAll{
-            .type = std::move(type),
-            .commands = std::move(new_commands)
-          });
-        };
-        auto run_inner = [&] () -> decltype(auto) {
-          return callback(located_output::Local{.local_index = stack_depth++});
-        };
-        if constexpr(std::is_void_v<decltype(run_inner())>) {
-          run_inner();
-          cleanup_switch();
-        } else {
-          decltype(auto) ret = run_inner();
-          cleanup_switch();
-          return ret;
-        }
-      }
-      located_output::Expression type_axiom() {
-        return located_output::PrimitiveExpression{ Primitive::type };
-      }
-      located_output::Expression make_hole_of_type(located_output::Expression hole_type, Explanation explanation) {
-        command_target->push_back(located_output::DeclareHole{
-          .type = std::move(hole_type),
-          .source = explanation
-        });
-        return located_output::Embed{
-          .embed_index = stack_depth++,
-          .source = explanation
-        };
-      }
-      located_output::Expression arrow_between(located_output::Expression domain, located_output::Expression codomain) {
+      located_output::Expression arrow(located_output::Expression domain, located_output::Expression codomain) {
         return located_output::Apply{
           located_output::Apply{
-            located_output::PrimitiveExpression{
-              Primitive::arrow
-            },
-            domain
+            located_output::PrimitiveExpression{Primitive::arrow},
+            std::move(domain)
           },
-          codomain
+          std::move(codomain)
         };
       }
-      located_output::Expression arrow_between_const(located_output::Expression domain, located_output::Expression codomain) {
-        auto domain_local = add_stack_command(located_output::Let{
-          .value = std::move(domain),
-          .type = located_output::PrimitiveExpression{Primitive::type},
-        });
-        auto codomain_declaration = add_stack_command(located_output::Declare{
-          .type = located_output::TypeFamilyOver{domain_local}
-        });
-        for_all(located_output::TypeFamilyOver{domain_local}, [&](auto arg) {
-          command_target->push_back(located_output::Rule{
-            .pattern = located_output::Apply{
-              .lhs = codomain_declaration,
-              .rhs = arg
-            },
-            .replacement = std::move(codomain)
-          });
-        });
-        return arrow_between(std::move(domain_local), std::move(codomain_declaration));
+      located_output::Local resolved_local(std::uint64_t index) {
+        return located_output::Local{
+          .local_index = locals_stack[index]
+        };
       }
+      located_output::Local result_of(located_output::Command command) {
+        commands.push_back(std::move(command));
+        return located_output::Local{
+          .local_index = output_stack_size++
+        };
+      }
+      void local_result_of(located_output::Command command) {
+        commands.push_back(std::move(command));
+        locals_stack.push_back(output_stack_size++);
+      }
+      located_output::Local name_value(located_output::Expression expr) {
+        return result_of(located_output::Let{
+          .value = std::move(expr),
+        });
+      }
+      template<class Callback>
+      void for_all(located_output::Expression base_type, Callback&& callback) {
+        std::vector<located_output::Command> old_commands;
+        std::swap(commands, old_commands);
+        auto old_stack_size = output_stack_size;
+        locals_stack.push_back(output_stack_size);
+        callback(located_output::Local{
+          .local_index = output_stack_size++
+        });
+        locals_stack.pop_back();
+        output_stack_size = old_stack_size;
+        auto for_all_command = located_output::ForAll{
+          .type = std::move(base_type),
+          .commands = std::move(commands)
+        };
+        std::swap(commands, old_commands);
+        commands.push_back(std::move(for_all_command));
+      }
+      located_output::Program as_program(located_output::Expression value) {
+        return located_output::ProgramRoot {
+          .commands = std::move(commands),
+          .value = std::move(value)
+        };
+      }
+      located_output::Expression compile(resolved_archive::Pattern const& pattern);
+      located_output::Expression compile(resolved_archive::Expression const& expression);
+      void compile(resolved_archive::Command const& command);
     };
-    mdb::Result<located_output::Expression, Error> ResolutionData::resolve(expression_parser::output::archive_part::Expression const& expression) {
-      using Ret = mdb::Result<located_output::Expression, Error>;
-      return expression.visit(mdb::overloaded{
-        [&](archive::Apply const& apply) -> Ret {
-          return merged_gather_map([&] (located_output::Expression&& lhs, located_output::Expression&& rhs) -> located_output::Expression {
-            return located_output::Apply{
-              .lhs = std::move(lhs),
-              .rhs = std::move(rhs),
-              .source = -17
-            };
-          }, resolve(apply.lhs), resolve(apply.rhs));
+    located_output::Expression InstructionContext::compile(resolved_archive::Pattern const& pattern) {
+      return pattern.visit(mdb::overloaded{
+        [&](resolved_archive::PatternApply const& apply) -> located_output::Expression {
+          return located_output::Apply{
+            .lhs = compile(apply.lhs),
+            .rhs = compile(apply.rhs)
+          };
         },
-        [&](archive::Lambda const& lambda) -> Ret {
-          auto body = resolve(lambda.body);
-          if(body.holds_error() && !lambda.type) {
-            return std::move(body); //forward the error if it's the only thing in play
+        [&](resolved_archive::PatternIdentifier const& id) -> located_output::Expression {
+          if(id.is_local) {
+            return resolved_local(id.var_index);
+          } else {
+            return located_output::Embed{ .embed_index = id.var_index };
           }
-          auto type = [&] () -> Ret {
+        },
+        [&](resolved_archive::PatternHole const& hole) -> located_output::Expression {
+          return resolved_local(hole.var_index);
+        }
+      });
+    }
+    located_output::Expression InstructionContext::compile(resolved_archive::Expression const& expression) {
+      return expression.visit(mdb::overloaded{
+        [&](resolved_archive::Apply const& apply) -> located_output::Expression {
+          return located_output::Apply {
+            .lhs = compile(apply.lhs),
+            .rhs = compile(apply.rhs)
+          };
+        },
+        [&](resolved_archive::Lambda const& lambda) -> located_output::Expression {
+          auto domain = [&] {
             if(lambda.type) {
-              return resolve(*lambda.type);
+              return name_value(compile(*lambda.type));
             } else {
-              return make_hole_of_type(type_axiom(), -17);
+              return result_of(located_output::DeclareHole{
+                .type = type()
+              });
             }
           } ();
-          return merged_gather_map([&] (located_output::Expression&& body, located_output::Expression&& type) -> located_output::Expression {
-            auto domain_local = add_stack_command(located_output::Let{
-              .value = std::move(type),
-              .type = located_output::PrimitiveExpression{Primitive::type},
+          auto codomain = result_of(located_output::DeclareHole{
+            .type = located_output::TypeFamilyOver{domain}
+          });
+          auto lambda_type = arrow(domain, codomain);
+          auto ret = result_of(located_output::Declare{
+            .type = std::move(lambda_type)
+          });
+          for_all(domain, [&](located_output::Local arg) {
+            commands.push_back(located_output::Rule{
+              .pattern = located_output::Apply{
+                .lhs = ret,
+                .rhs = arg
+              },
+              .replacement = compile(lambda.body)
             });
-            auto codomain_hole = make_hole_of_type(located_output::TypeFamilyOver{domain_local}, -17);
-            auto lambda_declaration = add_stack_command(located_output::Declare{
-              .type = arrow_between(domain_local, codomain_hole)
+          });
+          return ret;
+        },
+        [&](resolved_archive::Identifier const& id) -> located_output::Expression {
+          if(id.is_local) {
+            return resolved_local(id.var_index);
+          } else {
+            return located_output::Embed{ .embed_index = id.var_index };
+          }
+        },
+        [&](resolved_archive::Hole const& hole) -> located_output::Expression {
+          return result_of(located_output::DeclareHole{
+            .type = result_of(located_output::DeclareHole{
+              .type = type()
+            })
+          });
+        },
+        [&](resolved_archive::Arrow const& arrow) -> located_output::Expression {
+          auto domain = name_value(compile(arrow.domain));
+          auto codomain = result_of(located_output::Declare{
+            .type = located_output::TypeFamilyOver{domain}
+          });
+          for_all(domain, [&](located_output::Local arg) {
+            commands.push_back(located_output::Rule{
+              .pattern = located_output::Apply{
+                .lhs = codomain,
+                .rhs = arg
+              },
+              .replacement = compile(arrow.codomain)
             });
-
-          }, std::move(body), std::move(type));
+          });
+          return this->arrow(domain, codomain);
+        },
+        [&](resolved_archive::Block const& block) -> located_output::Expression {
+          for(auto const& command : block.statements) {
+            compile(command);
+          }
+          return compile(block.value);
+        }
+      });
+    }
+    void InstructionContext::compile(resolved_archive::Command const& command) {
+      return command.visit(mdb::overloaded{
+        [&](resolved_archive::Declare const& declare) {
+          local_result_of(located_output::Declare{
+            .type = compile(declare.type)
+          });
+        },
+        [&](resolved_archive::Rule const& rule) {
+          struct ForAllCallback {
+            InstructionContext& me;
+            resolved_archive::Rule const& rule;
+            std::uint64_t args_left;
+            void act() {
+              if(args_left-- > 0) {
+                me.for_all(me.result_of(located_output::DeclareHole{
+                  .type = me.type()
+                }), *this);
+              } else {
+                me.commands.push_back(located_output::Rule{
+                  .pattern = me.compile(rule.pattern),
+                  .replacement = me.compile(rule.replacement)
+                });
+              }
+            }
+            void operator()(located_output::Local&&) { act(); }
+          };
+          ForAllCallback{*this, rule, rule.args_in_pattern}.act();
+        },
+        [&](resolved_archive::Axiom const& axiom) {
+          local_result_of(located_output::Axiom{
+            .type = compile(axiom.type)
+          });
+        },
+        [&](resolved_archive::Let const& let) {
+          local_result_of(located_output::Let{
+            .value = compile(let.value),
+            .type = [&]() -> std::optional<located_output::Expression> {
+              if(let.type) {
+                return compile(*let.type);
+              } else {
+                return std::nullopt;
+              }
+            } ()
+          });
         }
       });
     }
   }
-  mdb::Result<located_output::Program, Error> resolve(expression_parser::output::archive_part::Expression const& expression, Context global_context) {
+  located_output::Program make_instructions(expression_parser::resolved::archive_part::Expression const& expression) {
+    InstructionContext detail;
+    return detail.as_program(detail.compile(expression));
   }
 }

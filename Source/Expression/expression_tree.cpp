@@ -2,7 +2,7 @@
 #include <algorithm>
 
 namespace expression {
-  bool term_matches(tree::Tree const& term, pattern::Tree const& pattern) {
+  bool term_matches(tree::Expression const& term, pattern::Pattern const& pattern) {
     return pattern.visit(mdb::overloaded{
       [&](pattern::Apply const& apply) {
         if(auto* app = term.get_if_apply()) {
@@ -13,7 +13,7 @@ namespace expression {
       },
       [&](pattern::Fixed const& fixed) {
         if(auto* ext = term.get_if_external()) {
-          return ext->index == fixed.index;
+          return ext->external_index == fixed.external_index;
         } else {
           return false;
         }
@@ -24,8 +24,32 @@ namespace expression {
     });
   }
   namespace {
+    tree::Expression trivial_replacement_for_impl(pattern::Pattern const& pat, std::uint64_t& index) {
+      return pat.visit(mdb::overloaded{
+        [&](pattern::Apply const& apply) -> tree::Expression {
+            auto lhs = trivial_replacement_for_impl(apply.lhs, index);
+            auto rhs = trivial_replacement_for_impl(apply.rhs, index);
+            return tree::Apply{
+              .lhs = std::move(lhs),
+              .rhs = std::move(rhs)
+            };
+        },
+        [&](pattern::Fixed const& fixed) -> tree::Expression {
+          return tree::External{fixed.external_index};
+        },
+        [&](pattern::Wildcard const&) -> tree::Expression {
+          return tree::Arg{index++};
+        }
+      });
+    }
+  }
+  tree::Expression trivial_replacement_for(pattern::Pattern const& pat) { //mostly for printing
+    std::uint64_t index = 0;
+    return trivial_replacement_for_impl(pat, index);
+  }
+  namespace {
     template<class T, class Callback>
-    void destructure_match_impl(T term, pattern::Tree const& pattern, Callback&& insert) {
+    void destructure_match_impl(T term, pattern::Pattern const& pattern, Callback&& insert) {
       pattern.visit(mdb::overloaded{
         [&](pattern::Apply const& apply) {
           if(auto* app = term.get_if_apply()) {
@@ -42,82 +66,84 @@ namespace expression {
       });
     }
   }
-  std::vector<tree::Tree*> destructure_match_ref(tree::Tree& term, pattern::Tree const& pattern) {
-    std::vector<tree::Tree*> ret;
-    destructure_match_impl<tree::Tree&>(term, pattern, [&](tree::Tree& term) { ret.push_back(&term); });
+  std::vector<tree::Expression*> destructure_match_ref(tree::Expression& term, pattern::Pattern const& pattern) {
+    std::vector<tree::Expression*> ret;
+    destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(&term); });
     return ret;
   }
-  std::vector<tree::Tree const*> destructure_match_ref(tree::Tree const& term, pattern::Tree const& pattern) {
-    std::vector<tree::Tree const*> ret;
-    destructure_match_impl<tree::Tree const&>(term, pattern, [&](tree::Tree const& term) { ret.push_back(&term); });
+  std::vector<tree::Expression const*> destructure_match_ref(tree::Expression const& term, pattern::Pattern const& pattern) {
+    std::vector<tree::Expression const*> ret;
+    destructure_match_impl<tree::Expression const&>(term, pattern, [&](tree::Expression const& term) { ret.push_back(&term); });
     return ret;
   }
-  std::vector<tree::Tree> destructure_match(tree::Tree term, pattern::Tree const& pattern) {
-    std::vector<tree::Tree> ret;
-    destructure_match_impl<tree::Tree&>(term, pattern, [&](tree::Tree& term) { ret.push_back(std::move(term)); });
+  std::vector<tree::Expression> destructure_match(tree::Expression term, pattern::Pattern const& pattern) {
+    std::vector<tree::Expression> ret;
+    destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(std::move(term)); });
     return ret;
   }
-  std::vector<path::Path> captures_of_pattern(pattern::Tree const& pattern) {
-    struct Impl {
-      std::vector<path::Path> ret;
-      path::Path path;
-      void collect(pattern::Tree const& pattern) {
-        pattern.visit(mdb::overloaded{
-          [&](pattern::Apply const& apply) {
-            path_append(path, &tree::Apply::lhs);
-            collect(apply.lhs);
-            path.steps.pop_back();
-            path_append(path, &tree::Apply::rhs);
-            collect(apply.rhs);
-            path.steps.pop_back();
-          },
-          [&](pattern::Fixed const& fixed) {},
-          [&](pattern::Wildcard const&) {
-            ret.push_back(path);
-          }
-        });
+  std::vector<tree::Expression*> find_all_matches(tree::Expression& term, pattern::Pattern const& pattern) {
+    struct Detail {
+      std::vector<tree::Expression*> ret;
+      pattern::Pattern const& pattern;
+      void search(tree::Expression& expression) {
+        if(term_matches(expression, pattern)) {
+          ret.push_back(&expression);
+        }
+        if(auto* apply = expression.get_if_apply()) {
+          search(apply->lhs);
+          search(apply->rhs);
+        }
       }
     };
-    Impl impl{};
-    impl.collect(pattern);
-    return std::move(impl.ret);
+    Detail detail{.pattern = pattern};
+    detail.search(term);
+    return std::move(detail.ret);
   }
-  std::vector<path::Path> find_all_matches(tree::Tree const& term, pattern::Tree const& pattern) {
-    std::vector<path::Path> ret;
-    for(auto position : recursive_range(term)) {
-      if(term_matches(position.value, pattern)) {
-        ret.push_back(position.path);
+  std::vector<tree::Expression const*> find_all_matches(tree::Expression const& term, pattern::Pattern const& pattern) {
+    struct Detail {
+      std::vector<tree::Expression const*> ret;
+      pattern::Pattern const& pattern;
+      void search(tree::Expression const& expression) {
+        if(term_matches(expression, pattern)) {
+          ret.push_back(&expression);
+        }
+        if(auto* apply = expression.get_if_apply()) {
+          search(apply->lhs);
+          search(apply->rhs);
+        }
       }
-    }
-    return ret;
+    };
+    Detail detail{.pattern = pattern};
+    detail.search(term);
+    return std::move(detail.ret);
   }
-  tree::Tree substitute_into_replacement(std::vector<tree::Tree> const& terms, tree::Tree const& replacement) {
+
+  tree::Expression substitute_into_replacement(std::vector<tree::Expression> const& terms, tree::Expression const& replacement) {
     return replacement.visit(mdb::overloaded{
-      [&](tree::Apply const& apply) -> tree::Tree {
+      [&](tree::Apply const& apply) -> tree::Expression {
         return tree::Apply{
           .lhs = substitute_into_replacement(terms, apply.lhs),
           .rhs = substitute_into_replacement(terms, apply.rhs)
         };
       },
-      [&](tree::External const& external) -> tree::Tree {
+      [&](tree::External const& external) -> tree::Expression {
         return external; //copy
       },
-      [&](tree::Arg const& arg) -> tree::Tree {
-        if(arg.index < terms.size()) {
-          return terms[arg.index]; //copy
+      [&](tree::Arg const& arg) -> tree::Expression {
+        if(arg.arg_index < terms.size()) {
+          return terms[arg.arg_index]; //copy
         } else {
           throw NotEnoughArguments{};
         }
       }
     });
   }
-  void replace_with_substitution_at(tree::Tree& term, path::Path const& path, pattern::Tree const& pattern, tree::Tree const& replacement) {
-    tree::Tree& inner_term = path_lookup(term, path);
-    auto captures = destructure_match(std::move(inner_term), pattern);
-    inner_term = substitute_into_replacement(captures, replacement);
+  void replace_with_substitution_at(tree::Expression* term, pattern::Pattern const& pattern, tree::Expression const& replacement) {
+    auto captures = destructure_match(std::move(*term), pattern);
+    *term = substitute_into_replacement(captures, replacement);
   }
 
-  RefUnfolding unfold_ref(tree::Tree const& tree) {
+  RefUnfolding unfold_ref(tree::Expression const& tree) {
     RefUnfolding ret{
       .head = &tree
     };
@@ -128,7 +154,7 @@ namespace expression {
     std::reverse(ret.args.begin(), ret.args.end());
     return ret;
   }
-  Unfolding unfold(tree::Tree tree) {
+  Unfolding unfold(tree::Expression tree) {
     Unfolding ret{
       .head = std::move(tree)
     };

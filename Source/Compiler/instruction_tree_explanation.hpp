@@ -8,6 +8,13 @@ namespace compiler::instruction {
   enum class Primitive {
     type, arrow
   };
+  inline std::ostream& operator<<(std::ostream& o, Primitive primitive) {
+    switch(primitive) {
+      case Primitive::type: return o << "type";
+      case Primitive::arrow: return o << "arrow";
+      default: return o << "(invalid primitive)";
+    }
+  }
 }
 
 #endif

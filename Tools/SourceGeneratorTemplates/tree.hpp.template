@@ -25,6 +25,8 @@
     {{ define_archive_unique_formatter(tree.namespace + "::archive_root", tree) }}
 {%- endfor %}
 {%- endif %}
+{%- if multitrees %}
 {%- for multitree in multitrees %}
     {{ define_multitree(multitree) }}
 {%- endfor %}
+{%- endif %}

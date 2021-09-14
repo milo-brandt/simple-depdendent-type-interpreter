@@ -36,7 +36,7 @@ namespace mdb {
     template<class T, class... ConstructArgs> requires (can_call<T> && ... && std::is_constructible_v<T, ConstructArgs&&>)
     function(in_place_type_t<T>, ConstructArgs&&... args):data(new ImplSpecific<T>{std::forward<ConstructArgs>(args)...}) {}
 
-    Ret operator()(Args... args) {
+    Ret operator()(Args... args) const {
       return (*data)(std::forward<Args>(args)...);
     }
   };

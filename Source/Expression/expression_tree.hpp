@@ -5,39 +5,42 @@
 #include "pattern_tree_impl.hpp"
 
 namespace expression {
-  bool term_matches(tree::Tree const&, pattern::Tree const&);
+  bool term_matches(tree::Expression const&, pattern::Pattern const&);
   struct NoMatchException : std::runtime_error {
     NoMatchException():std::runtime_error("Attempted to destructure non-existant match.") {}
   };
 
-  std::vector<tree::Tree*> destructure_match_ref(tree::Tree&, pattern::Tree const&); //throws if not matching
-  std::vector<tree::Tree const*> destructure_match_ref(tree::Tree const&, pattern::Tree const&); //throws if not matching
-  std::vector<tree::Tree> destructure_match(tree::Tree, pattern::Tree const&); //throws if not matching
-  std::vector<path::Path> captures_of_pattern(pattern::Tree const&);
-  std::vector<path::Path> find_all_matches(tree::Tree const&, pattern::Tree const&);
+  tree::Expression trivial_replacement_for(pattern::Pattern const&); //mostly for printing!
+
+  std::vector<tree::Expression*> destructure_match_ref(tree::Expression&, pattern::Pattern const&); //throws if not matching
+  std::vector<tree::Expression const*> destructure_match_ref(tree::Expression const&, pattern::Pattern const&); //throws if not matching
+  std::vector<tree::Expression> destructure_match(tree::Expression, pattern::Pattern const&); //throws if not matching
+
+  std::vector<tree::Expression*> find_all_matches(tree::Expression&, pattern::Pattern const&);
+  std::vector<tree::Expression const*> find_all_matches(tree::Expression const&, pattern::Pattern const&);
 
   struct NotEnoughArguments : std::runtime_error {
     NotEnoughArguments():std::runtime_error("Not enough arguments to substitute into replacement.") {}
   };
 
-  tree::Tree substitute_into_replacement(std::vector<tree::Tree> const& terms, tree::Tree const& replacement); //args are replaced
-  void replace_with_substitution_at(tree::Tree& term, path::Path const& path, pattern::Tree const& pattern, tree::Tree const& replacement);
+  tree::Expression substitute_into_replacement(std::vector<tree::Expression> const& terms, tree::Expression const& replacement); //args are replaced
+  void replace_with_substitution_at(tree::Expression* position, pattern::Pattern const& pattern, tree::Expression const& replacement);
 
   struct TypedValue {
-    tree::Tree value;
-    tree::Tree type;
+    tree::Expression value;
+    tree::Expression type;
   };
 
   struct RefUnfolding {
-    tree::Tree const* head;
-    std::vector<tree::Tree const*> args;
+    tree::Expression const* head;
+    std::vector<tree::Expression const*> args;
   };
-  RefUnfolding unfold_ref(tree::Tree const&);
+  RefUnfolding unfold_ref(tree::Expression const&);
   struct Unfolding {
-    tree::Tree head;
-    std::vector<tree::Tree> args;
+    tree::Expression head;
+    std::vector<tree::Expression> args;
   };
-  Unfolding unfold(tree::Tree);
+  Unfolding unfold(tree::Expression);
 }
 
 #endif

@@ -1,0 +1,6 @@
+define print_expr
+  call (void)debug_print_expr($arg0)
+end
+define print_pat
+  call (void)debug_print_pattern($arg0)
+end

@@ -254,7 +254,15 @@ struct FormatInstance {
 
 
 #include "ExpressionParser/expression_parser.hpp"
+#include "Compiler/instructions.hpp"
+#include "Compiler/evaluator.hpp"
+#include "Expression/evaluation_context.hpp"
+#include "Expression/expression_debug_format.hpp"
+#include "Expression/solver.hpp"
+#include "Expression/standard_solver_context.hpp"
+
 #include <termcolor.hpp>
+#include <algorithm>
 
 template<class... Formats>
 struct Format {
@@ -279,6 +287,80 @@ auto format_error(std::string_view substring, std::string_view full) {
   return format_substring(substring, full, termcolor::red, termcolor::bold, termcolor::underline);
 }
 
+void debug_print_expr(expression::tree::Expression const& expr) {
+  std::cout << expression::raw_format(expr) << "\n";
+}
+void debug_print_pattern(expression::pattern::Pattern const& pat) {
+  std::cout << expression::raw_format(expression::trivial_replacement_for(pat)) << "\n";
+}
+std::optional<expression::Rule> convert_to_rule(expression::tree::Expression const& pattern, expression::tree::Expression const& replacement, expression::Context const& context, std::unordered_set<std::uint64_t> const& indeterminates) {
+  struct Detail {
+    expression::Context const& context;
+    std::unordered_set<std::uint64_t> const& indeterminates;
+    std::unordered_map<std::uint64_t, std::uint64_t> arg_convert;
+    std::optional<expression::pattern::Pattern> convert_to_pattern(expression::tree::Expression const& expr, bool spine) {
+      return expr.visit(mdb::overloaded{
+        [&](expression::tree::Apply const& apply) -> std::optional<expression::pattern::Pattern> {
+          if(auto lhs = convert_to_pattern(apply.lhs, spine)) {
+            if(auto rhs = convert_to_pattern(apply.rhs, false)) {
+              return expression::pattern::Apply{
+                .lhs = std::move(*lhs),
+                .rhs = std::move(*rhs)
+              };
+            }
+          }
+          return std::nullopt;
+        },
+        [&](expression::tree::External const& external) -> std::optional<expression::pattern::Pattern> {
+          if(context.external_info[external.external_index].is_axiom != spine && !indeterminates.contains(external.external_index)) {
+            return expression::pattern::Fixed{external.external_index};
+          } else {
+            return std::nullopt;
+          }
+        },
+        [&](expression::tree::Arg const& arg) -> std::optional<expression::pattern::Pattern> {
+          if(arg_convert.contains(arg.arg_index)) return std::nullopt;
+          auto index = arg_convert.size();
+          arg_convert.insert(std::make_pair(arg.arg_index, index));
+          return expression::pattern::Wildcard{};
+        }
+      });
+    }
+    std::optional<expression::tree::Expression> remap_replacement(expression::tree::Expression const& expr) {
+      return expr.visit(mdb::overloaded{
+        [&](expression::tree::Apply const& apply) -> std::optional<expression::tree::Expression> {
+          if(auto lhs = remap_replacement(apply.lhs)) {
+            if(auto rhs = remap_replacement(apply.rhs)) {
+              return expression::tree::Apply{
+                .lhs = std::move(*lhs),
+                .rhs = std::move(*rhs)
+              };
+            }
+          }
+          return std::nullopt;
+        },
+        [&](expression::tree::External const& external) -> std::optional<expression::tree::Expression> {
+          return external;
+        },
+        [&](expression::tree::Arg const& arg) -> std::optional<expression::tree::Expression> {
+          if(arg_convert.contains(arg.arg_index)) {
+            return expression::tree::Arg{arg_convert.at(arg.arg_index)};
+          } else {
+            return std::nullopt;
+          }
+        }
+      });
+    }
+  };
+  Detail detail{context, indeterminates};
+  if(auto pat = detail.convert_to_pattern(pattern, true)) {
+    if(auto rep = detail.remap_replacement(replacement)) {
+      return expression::Rule{std::move(*pat), std::move(*rep)};
+    }
+  }
+  return std::nullopt;
+}
+//block { axiom Nat : Type; axiom zero : Nat; declare f : Nat -> Nat; rule f zero = zero; f }
 int main(int argc, char** argv) {
   /*located_output::Expression located_expr = located_output::Apply{
     .lhs = located_output::Identifier{.id = "hi", .position = "hi"},
@@ -300,6 +382,37 @@ int main(int argc, char** argv) {
   std::cout << format(expr) << "\n";
   std::cout << format(x.root()) << "\n";
   std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";*/
+  expression::Context expression_context;
+  compiler::evaluate::EvaluateContext evaluator {
+    .arrow_axiom = { .value = expression::tree::External{ expression_context.primitives.arrow }, .type = expression_context.primitives.arrow_type() },
+    .type_axiom = { .value = expression::tree::External{ expression_context.primitives.type }, .type = expression::tree::External{ expression_context.primitives.type } },
+    .type_family_over = [&] (expression::tree::Expression expr) {
+      return expression::TypedValue{
+        .value = expression::tree::Apply{
+          .lhs = expression::tree::Apply{
+            .lhs = expression::tree::External{ expression_context.primitives.arrow },
+            .rhs = std::move(expr)
+          },
+          .rhs = expression::tree::External{ expression_context.primitives.type_constant_function }
+        },
+        .type = expression::tree::External{ expression_context.primitives.type }
+      };
+    },
+    .embed = [&] (std::uint64_t index) -> expression::TypedValue {
+      if(index == 0) {
+        return { .value = expression::tree::External{ expression_context.primitives.type }, .type = expression::tree::External{ expression_context.primitives.type } };
+      } else {
+        return { .value = expression::tree::External{ expression_context.primitives.arrow}, .type = expression_context.primitives.arrow_type() };
+      }
+    },
+    .allocate_variable = [&](bool is_axiom) -> std::uint64_t {
+      if(is_axiom) {
+        return expression_context.add_axiom();
+      } else {
+        return expression_context.add_declaration();
+      }
+    }
+  };
   while(true) {
     std::string line;
     std::getline(std::cin, line);
@@ -319,6 +432,8 @@ int main(int argc, char** argv) {
         .lookup = [&](std::string_view str) -> std::optional<std::uint64_t> {
           if(str == "Type") {
             return 0;
+          } else if(str == "arrow") {
+            return 1;
           } else {
             return std::nullopt;
           }
@@ -326,6 +441,107 @@ int main(int argc, char** argv) {
       }, output_archive.root());
       if(auto* resolve = resolved.get_if_value()) {
         std::cout << "Resolved: " << format(*resolve) << "\n";
+        auto resolve_archive = archive(std::move(*resolve));
+        auto instructions = compiler::instruction::make_instructions(resolve_archive.root());
+        std::cout << "Instructions: " << format(instructions.output) << "\n";
+        auto instruction_archive = archive(instructions.output);
+        auto eval_result = compiler::evaluate::evaluate_tree(instruction_archive.root().get_program_root(), evaluator);
+
+        expression::solver::StandardSolverContext solver_context {
+          .evaluation = expression_context
+        };
+        expression::solver::Solver solver(mdb::ref(solver_context));
+
+        std::cout << "Variables:";
+        for(auto const& var : eval_result.variables) {
+          std::cout << " " << var;
+          solver.register_variable(var);
+          solver_context.indeterminates.insert(var);
+        }
+        std::cout << "\n";
+        std::vector<std::pair<std::uint64_t, std::uint64_t> > casts;
+        std::uint64_t cast_index = 0;
+        for(auto const& cast : eval_result.casts) {
+          solver_context.indeterminates.insert(cast.variable);
+          std::cout << "Cast (depth " << cast.depth << ") " << expression::raw_format(cast.source) << " from " << expression::raw_format(cast.source_type) << " to " << expression::raw_format(cast.target_type) << " as " << cast.variable << "\n";
+          auto index = solver.add_equation(cast.depth, cast.source_type, cast.target_type);
+          casts.emplace_back(index, cast_index);
+          ++cast_index;
+        }
+        std::vector<std::pair<std::uint64_t, std::uint64_t> > rules;
+        std::uint64_t rule_index = 0;
+        for(auto const& rule : eval_result.rules) {
+          std::cout << "Rule (depth " << rule.depth << ") " << expression::raw_format(rule.pattern) << " from " << expression::raw_format(rule.pattern_type) << " to " << expression::raw_format(rule.replacement_type) << " as " << expression::raw_format(rule.replacement) << "\n";
+          auto index = solver.add_equation(rule.depth, rule.pattern_type, rule.replacement_type);
+          rules.emplace_back(index, rule_index);
+          ++rule_index;
+        }
+        //Hard thing: How to know when rules are allowable?
+        std::cout << "Result: " << expression::raw_format(eval_result.result.value) << " of type " << expression::raw_format(eval_result.result.type) << "\n";
+
+        auto rule_count = expression_context.rules.size();
+
+        while([&] {
+          bool progress = false;
+          progress |= solver.try_to_make_progress();
+          auto cast_erase = std::remove_if(casts.begin(), casts.end(), [&](auto cast_info) {
+            auto [equation_index, cast_index] = cast_info;
+            if(solver.is_equation_satisfied(equation_index)) {
+              auto const& cast = eval_result.casts[cast_index];
+              solver_context.define_variable(cast.variable, cast.depth, cast.source);
+              return true;
+            } else {
+              return false;
+            }
+          });
+          if(cast_erase != casts.end()) {
+            casts.erase(cast_erase, casts.end());
+            progress = true;
+          } //block { axiom One : Type; axiom one : One; declare id : One -> One; rule id one = one; id }
+          auto rule_erase = std::remove_if(rules.begin(), rules.end(), [&](auto rule_info) {
+            auto [equation_index, rule_index] = rule_info;
+            if(solver.is_equation_satisfied(equation_index)) {
+              auto& rule = eval_result.rules[rule_index];
+              rule.pattern = expression_context.reduce(std::move(rule.pattern));
+              rule.replacement = expression_context.reduce(std::move(rule.replacement));
+              if(auto new_rule = convert_to_rule(rule.pattern, rule.replacement, expression_context, solver_context.indeterminates)) {
+                expression_context.rules.push_back(std::move(*new_rule));
+                return true;
+              }
+            }
+            return false;
+          }); //block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; declare double : Nat -> Nat; rule double zero = zero; rule double (succ n) = succ (succ (double n)); double }
+          if(rule_erase != rules.end()) {
+            rules.erase(rule_erase, rules.end());
+            progress = true;
+          }
+
+          return progress;
+        }());
+        if(casts.empty()) {
+          std::cout << "Casts okay!\n";
+        }
+        if(solver.is_fully_satisfied()) {
+          std::cout << "Solver satisfied!\n";
+        } else {
+          for(auto const& [lhs, rhs] : solver.get_equations()) {
+            std::cout << expression::raw_format(lhs) << " =?= " << expression::raw_format(rhs) << "\n";
+          }
+        }
+        if(rules.empty()) {
+          std::cout << "Rules okay!\n";
+        } else {
+          for(auto [equation_index, rule_index] : rules) {
+            auto const& rule = eval_result.rules[rule_index];
+            std::cout << "Rule failed (depth " << rule.depth << ") " << expression::raw_format(rule.pattern) << " from " << expression::raw_format(rule.pattern_type) << " to " << expression::raw_format(rule.replacement_type) << " as " << expression::raw_format(rule.replacement) << "\n";
+          }
+        }
+
+        for(auto i = rule_count; i < expression_context.rules.size(); ++i) {
+          auto const& rule = expression_context.rules[i];
+          std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+        }
+        std::cout << "Final: " << expression::raw_format(expression_context.reduce(eval_result.result.value)) << " of type " << expression::raw_format(expression_context.reduce(eval_result.result.type)) << "\n";
       } else {
         auto const& err = resolved.get_error();
         for(auto const& bad_id : err.bad_ids) {
@@ -604,3 +820,7 @@ int main(int argc, char** argv) {
     }
   }*/
 }
+
+/*
+block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; declare add : Nat -> Nat -> Nat; rule add zero x = x; rule add (succ x) y = succ (add x y); declare mul : Nat -> Nat -> Nat; rule mul zero x = zero; rule mul (succ x) y = add y (mul x y); mul }
+*/

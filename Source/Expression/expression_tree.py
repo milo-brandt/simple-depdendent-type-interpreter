@@ -1,40 +1,32 @@
-import os;
+# Source Generator
 
-specification = {
-    "shapes": {
-        "expression_shape": {
-            "components": {
-                "Apply": [
-                    ("lhs", "Self"),
-                    ("rhs", "Self")
-                ],
-                "External": [],
-                "Arg": []
-            }
-        }
-    },
-    "paths": {
-        "expression::path::Path": "expression_shape"
-    },
-    "trees": {
-        "expression::tree::Tree": {
-            "shape": "expression_shape",
-            "path": "expression::path::Path",
-            "data": {
-                "Apply": [],
-                "External": [
-                    ("index", "std::uint64_t")
-                ],
-                "Arg": [
-                    ("index", "std::uint64_t")
-                ]
-            }
-        }
-    },
-    "files": {
-        "this_impl.hpp": [
-            "expression::path::Path",
-            "expression::tree::Tree"
+shape = CompoundShape({
+    "Expression": {
+        "Apply": [
+            ("lhs", "Expression"),
+            ("rhs", "Expression")
+        ],
+        "Arg": [],
+        "External": [],
+    }
+})
+output = shape.generate_instance(namespace = "expression::tree", data = {
+    "Expression": {
+        "Apply": [],
+        "Arg": [
+            ("arg_index", "std::uint64_t")
+        ],
+        "External": [
+            ("external_index", "std::uint64_t")
         ]
     }
-}
+})
+tree_def = TreeOutput(
+    trees = [output]
+)
+
+main_output = get_output("THIS_impl")
+
+main_output.write(
+    tree_def
+)

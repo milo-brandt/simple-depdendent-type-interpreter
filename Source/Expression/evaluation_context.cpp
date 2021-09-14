@@ -38,7 +38,7 @@ namespace expression {
       }
     });
   }
-  tree::Tree Primitives::arrow_type() {
+  tree::Expression Primitives::arrow_type() {
     return tree::Apply{
       .lhs = tree::Apply{
         .lhs = tree::External{arrow},
@@ -47,28 +47,28 @@ namespace expression {
       .rhs = tree::External{arrow_type_codomain}
     };
   }
-  tree::Tree Context::reduce(tree::Tree tree) {
+  tree::Expression Context::reduce(tree::Expression tree) {
   REDUCTION_START:
     for(auto const& rule : rules) {
       auto vec = find_all_matches(tree, rule.pattern);
       if(!vec.empty()) {
-        replace_with_substitution_at(tree, vec[0], rule.pattern, rule.replacement);
+        replace_with_substitution_at(vec[0], rule.pattern, rule.replacement);
         goto REDUCTION_START;
       }
     }
     return tree;
   }
-  tree::Tree Context::reduce_once_at_root(tree::Tree tree) {
+  tree::Expression Context::reduce_once_at_root(tree::Expression tree) {
   ROOT_REDUCTION_START:
     for(auto const& rule : rules) {
       if(term_matches(tree, rule.pattern)) {
-        replace_with_substitution_at(tree, {}, rule.pattern, rule.replacement);
+        replace_with_substitution_at(&tree, rule.pattern, rule.replacement);
         goto ROOT_REDUCTION_START;
       }
     }
     return tree;
   }
-  std::uint64_t Context::name_expression(tree::Tree term) {
+  std::uint64_t Context::name_expression(tree::Expression term) {
     auto index = external_info.size();
     external_info.push_back({ .is_axiom = false });
     rules.push_back({

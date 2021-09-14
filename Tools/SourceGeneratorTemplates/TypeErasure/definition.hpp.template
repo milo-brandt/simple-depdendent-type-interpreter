@@ -13,7 +13,7 @@
   class {{info.name}} {
     struct AbstractBase {
       {%- for func in info.functions %}
-      virtual {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}}{{ reference_for(arg.type).forward_suffix }}{%- endfor %}){{ func.this_ref.suffix }} = 0;
+      virtual {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}}{{ reference_for(arg.type).forward_suffix }}{% if not loop.last %}, {% endif %}{%- endfor %}){{ func.this_ref.suffix }} = 0;
       {%- endfor %}
       virtual ~AbstractBase() = default;
     };
@@ -21,7 +21,7 @@
       T implementation_value;
       Implementation(T implementation_value):implementation_value(std::forward<T>(implementation_value)) {}
       {%- for func in info.functions %}
-      virtual {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}}{{ reference_for(arg.type).forward_suffix }} {{arg.name}}{%- endfor %}){{ func.this_ref.suffix }} override {
+      virtual {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}}{{ reference_for(arg.type).forward_suffix }} {{arg.name}}{% if not loop.last %}, {% endif %}{%- endfor %}){{ func.this_ref.suffix }} override {
         return ({{func.return_type}}){%- call func.this_ref.forward_as_this() %}implementation_value{%- endcall %}.{{ func.name}}({%- for arg in func.args -%}
         {% call reference_for(arg.type).forward() %}{{arg.name}}{% endcall %}{% if not loop.last %}, {% endif %}
         {%- endfor %});
@@ -37,7 +37,7 @@
     {{info.name}}({{info.name}}&& other):impl(std::move(other.impl)) {}
     {{info.name}}& operator=({{info.name}}&& other) { impl = std::move(other.impl); return *this; }
     {%- for func in info.functions %}
-    {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}} {{arg.name}}{%- endfor %}){{ func.this_ref.suffix }} {
+    {{func.return_type}} {{ func.name }}({% for arg in func.args %}{{arg.type}} {{arg.name}}{% if not loop.last %}, {% endif %}{%- endfor %}){{ func.this_ref.suffix }} {
       return ({% call func.this_ref.forward_as_this() %}*impl{% endcall %}).{{func.name}}({%- for arg in func.args -%}
       {% call reference_for(arg.type).forward() %}{{arg.name}}{% endcall %}{% if not loop.last %}, {% endif %}
       {%- endfor %});

@@ -29,7 +29,7 @@ shape = CompoundShape({
         ],
         "Let": [
             ("value", "Expression"),
-            ("type", "Expression")
+            ("type", optional("Expression"))
         ],
         "ForAll": [
             ("type", "Expression"),
