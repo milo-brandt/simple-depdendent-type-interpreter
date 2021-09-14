@@ -286,6 +286,9 @@ Format<Formats...> format_substring(std::string_view substring, std::string_view
 auto format_error(std::string_view substring, std::string_view full) {
   return format_substring(substring, full, termcolor::red, termcolor::bold, termcolor::underline);
 }
+auto format_info(std::string_view substring, std::string_view full) {
+  return format_substring(substring, full, termcolor::green, termcolor::bold);
+}
 
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
@@ -490,7 +493,7 @@ int main(int argc, char** argv) {
           auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
           auto const& locator_pos = locator_archive[locator_index];
           auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-          std::cout << "Position: " << format_error(str_pos, source) << "\n";
+          std::cout << "Position: " << format_info(str_pos, source) << "\n";
         }
         std::cout << "\n";
         std::vector<std::pair<std::uint64_t, std::uint64_t> > casts;

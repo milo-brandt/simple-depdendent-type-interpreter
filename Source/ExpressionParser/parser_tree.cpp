@@ -142,7 +142,7 @@ namespace expression_parser {
             },
             [&](output_archive::PatternHole const& hole) -> mdb::Result<resolved::Pattern, ResolutionError> {
               return resolved::Pattern{resolved::PatternHole {
-                .var_index = context.next_index++
+                .var_index = pattern_context.next_index++
               }};
             }
           });
