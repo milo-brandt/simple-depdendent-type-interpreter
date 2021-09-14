@@ -124,12 +124,14 @@ namespace expression_parser {
         mdb::Result<resolved::Pattern, ResolutionError> resolve_impl(output_archive::Pattern const& pattern, bool allow_wildcard) {
           return pattern.visit(mdb::overloaded{
             [&](output_archive::PatternApply const& apply) -> mdb::Result<resolved::Pattern, ResolutionError> {
+              auto lhs = resolve_impl(apply.lhs, false);
+              auto rhs = resolve_impl(apply.rhs, true);
               return merged_result([&](auto lhs, auto rhs) -> resolved::Pattern {
                 return resolved::PatternApply{
                   .lhs = std::move(lhs),
                   .rhs = std::move(rhs)
                 };
-              }, resolve_impl(apply.lhs, false), resolve_impl(apply.rhs, true));
+              }, std::move(lhs), std::move(rhs));
             },
             [&](output_archive::PatternIdentifier const& id) -> mdb::Result<resolved::Pattern, ResolutionError> {
               if(auto ret = lookup_pattern(pattern_context, id.id, allow_wildcard)) {
