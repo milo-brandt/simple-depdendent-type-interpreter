@@ -293,6 +293,10 @@ void debug_print_expr(expression::tree::Expression const& expr) {
 void debug_print_pattern(expression::pattern::Pattern const& pat) {
   std::cout << expression::raw_format(expression::trivial_replacement_for(pat)) << "\n";
 }
+void debug_print_rule(expression::Rule const& rule) {
+  std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+}
+
 std::optional<expression::Rule> convert_to_rule(expression::tree::Expression const& pattern, expression::tree::Expression const& replacement, expression::Context const& context, std::unordered_set<std::uint64_t> const& indeterminates) {
   struct Detail {
     expression::Context const& context;
@@ -411,6 +415,9 @@ int main(int argc, char** argv) {
       } else {
         return expression_context.add_declaration();
       }
+    },
+    .reduce = [&](expression::tree::Expression term) {
+      return expression_context.reduce(std::move(term));
     }
   };
   while(true) {
@@ -445,6 +452,7 @@ int main(int argc, char** argv) {
         auto instructions = compiler::instruction::make_instructions(resolve_archive.root());
         std::cout << "Instructions: " << format(instructions.output) << "\n";
         auto instruction_archive = archive(instructions.output);
+        auto instruction_locator = archive(instructions.locator);
         auto eval_result = compiler::evaluate::evaluate_tree(instruction_archive.root().get_program_root(), evaluator);
 
         expression::solver::StandardSolverContext solver_context {
@@ -452,11 +460,37 @@ int main(int argc, char** argv) {
         };
         expression::solver::Solver solver(mdb::ref(solver_context));
 
-        std::cout << "Variables:";
-        for(auto const& var : eval_result.variables) {
-          std::cout << " " << var;
-          solver.register_variable(var);
-          solver_context.indeterminates.insert(var);
+        std::cout << "Variables:\n";
+        for(auto const& [var, reason] : eval_result.variables) {
+          std::cout << std::visit(mdb::overloaded{
+            [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
+            [&](compiler::evaluate::variable_explanation::ApplyCodomain const&) { return "ApplyCodomain: "; },
+            [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "ApplyLHSCast: "; },
+            [&](compiler::evaluate::variable_explanation::ExplicitHole const&) { return "ExplicitHole: "; },
+            [&](compiler::evaluate::variable_explanation::Declaration const&) { return "Declaration: "; },
+            [&](compiler::evaluate::variable_explanation::Axiom const&) { return "Axiom: "; },
+            [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "TypeFamilyCast: "; },
+            [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "HoleTypeCast: "; },
+            [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "DeclareTypeCast: "; },
+            [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "AxiomTypeCast: "; },
+            [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "LetTypeCast: "; },
+            [&](compiler::evaluate::variable_explanation::LetCast const&) { return "LetCast: "; },
+            [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "ForAllTypeCast: "; }
+          }, reason) << var << "\n";
+          if(is_variable(reason))
+            solver.register_variable(var);
+          if(is_indeterminate(reason))
+            solver_context.indeterminates.insert(var);
+
+          auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
+            return reason.index;
+          }, reason);
+
+          auto const& pos = instruction_locator[index];
+          auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
+          auto const& locator_pos = locator_archive[locator_index];
+          auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+          std::cout << "Position: " << format_error(str_pos, source) << "\n";
         }
         std::cout << "\n";
         std::vector<std::pair<std::uint64_t, std::uint64_t> > casts;
@@ -823,4 +857,13 @@ int main(int argc, char** argv) {
 
 /*
 block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; declare add : Nat -> Nat -> Nat; rule add zero x = x; rule add (succ x) y = succ (add x y); declare mul : Nat -> Nat -> Nat; rule mul zero x = zero; rule mul (succ x) y = add y (mul x y); mul }
+*/
+
+/*
+block { axiom String : Type; axiom One : Type; axiom Parser : Type -> Type; axiom Recognize : (T: Type) -> String -> Parser T -> Parser T; axiom Accept : (T : Type) -> T -> Parser T; axiom dot : String; f Recognize _ dot \\ Recognize _ dot \\ Accept _ Type }
+*/
+/*
+block { axiom Id : Type -> Type; axiom pure : (T : Type) -> T -> Id T; declare extract : (T : Type) -> Id T -> T; rule extract T (pure T x) = x; extract }
+block { axiom Id : Type -> Type; axiom pure : (T : Type) -> T -> Id T; pure }
+
 */

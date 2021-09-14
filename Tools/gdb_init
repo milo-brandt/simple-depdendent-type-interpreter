@@ -4,3 +4,6 @@ end
 define print_pat
   call (void)debug_print_pattern($arg0)
 end
+define print_rule
+  call (void)debug_print_rule($arg0)
+end

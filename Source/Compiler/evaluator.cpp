@@ -5,16 +5,14 @@ namespace compiler::evaluate {
   EvaluateResult evaluate_tree(instruction_archive::ProgramRoot const& root, EvaluateContext& context) {
     struct Detail {
       EvaluateContext& context;
-      //std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
-      std::vector<std::uint64_t> variables;
+      std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
       std::vector<Cast> casts;
       std::vector<Rule> rules;
       std::vector<expression::TypedValue> locals;
 
-      expression::tree::Expression make_variable(std::uint64_t depth, bool is_variable = true, bool is_axiom = false/*, variable_explanation::Any explanation*/) {
-        auto var = context.allocate_variable(is_axiom);
-        if(is_variable) variables.push_back(var);
-        //variables.insert(std::make_pair(var, std::move(explanation)));
+      expression::tree::Expression make_variable(std::uint64_t depth, variable_explanation::Any explanation) {
+        auto var = context.allocate_variable(variable_explanation::is_axiom(explanation));
+        variables.insert(std::make_pair(var, std::move(explanation)));
         expression::tree::Expression ret = expression::tree::External{var};
         for(std::size_t i = 0; i < depth; ++i) {
           ret = expression::tree::Apply{std::move(ret), expression::tree::Arg{i}};
@@ -30,9 +28,9 @@ namespace compiler::evaluate {
           std::move(codomain)
         };
       }
-      expression::tree::Expression cast(expression::TypedValue input, expression::tree::Expression new_type, std::uint64_t depth) {
-        if(input.type == new_type) return std::move(input.value);
-        auto cast_var = make_variable(depth, false);
+      expression::tree::Expression cast(expression::TypedValue input, expression::tree::Expression new_type, std::uint64_t depth, variable_explanation::Any cast_var_explanation) {
+        if(context.reduce(input.type) == context.reduce(new_type)) return std::move(input.value);
+        auto cast_var = make_variable(depth, cast_var_explanation);
         auto var = expression::unfold_ref(cast_var).head->get_external().external_index;
         casts.push_back({
           .depth = depth,
@@ -43,8 +41,8 @@ namespace compiler::evaluate {
         });
         return cast_var;
       }
-      expression::TypedValue cast_typed(expression::TypedValue input, expression::tree::Expression new_type, std::uint64_t depth) {
-        auto new_value = cast(std::move(input), new_type, depth);
+      expression::TypedValue cast_typed(expression::TypedValue input, expression::tree::Expression new_type, std::uint64_t depth, variable_explanation::Any cast_var_explanation) {
+        auto new_value = cast(std::move(input), new_type, depth, cast_var_explanation);
         return {
           .value = std::move(new_value),
           .type = std::move(new_type)
@@ -56,19 +54,36 @@ namespace compiler::evaluate {
             auto lhs = evaluate(apply.lhs, depth);
             auto rhs = evaluate(apply.rhs, depth);
             auto [lhs_value, lhs_domain, lhs_codomain, rhs_value] = [&]() -> std::tuple<expression::tree::Expression, expression::tree::Expression, expression::tree::Expression, expression::tree::Expression> {
-              if(auto* lhs_apply = lhs.type.get_if_apply()) {
+              auto lhs_type = context.reduce(lhs.type);
+              if(auto* lhs_apply = lhs_type.get_if_apply()) {
                 if(auto* inner_apply = lhs_apply->lhs.get_if_apply()) {
                   if(inner_apply->lhs == context.arrow_axiom.value) {
                     auto domain = inner_apply->rhs;
-                    return std::make_tuple(std::move(lhs.value), std::move(inner_apply->rhs), std::move(lhs_apply->rhs), cast(std::move(rhs), std::move(domain), depth));
+                    return std::make_tuple(
+                      std::move(lhs.value),
+                      std::move(inner_apply->rhs),
+                      std::move(lhs_apply->rhs),
+                      cast(
+                        std::move(rhs),
+                        std::move(domain),
+                        depth,
+                        variable_explanation::ApplyRHSCast{depth, apply.index()}
+                      )
+                    );
                   }
                 }
               }
-              auto cast_value = make_variable(depth, false/*, variable_explanation::ApplyCastLHS{position}*/);
+              auto cast_value = make_variable(
+                depth,
+                variable_explanation::ApplyLHSCast{depth, apply.index()}
+              );
               auto cast_var = expression::unfold_ref(cast_value).head->get_external().external_index;
 
               auto domain = rhs.type;
-              auto codomain = make_variable(depth/*, variable_explanation::ApplyCodomain{position}*/);
+              auto codomain = make_variable(
+                depth,
+                variable_explanation::ApplyCodomain{depth, apply.index()}
+              );
               casts.push_back({
                 .depth = depth,
                 .variable = cast_var,
@@ -76,7 +91,12 @@ namespace compiler::evaluate {
                 .source = std::move(lhs.value),
                 .target_type = arrow_type(domain, codomain)
               });
-              return std::make_tuple(std::move(cast_value), std::move(domain), std::move(codomain), std::move(rhs.value));
+              return std::make_tuple(
+                std::move(cast_value),
+                std::move(domain),
+                std::move(codomain),
+                std::move(rhs.value)
+              );
             } ();
             return expression::TypedValue{
               .value = expression::tree::Apply{lhs_value, rhs_value},
@@ -97,7 +117,12 @@ namespace compiler::evaluate {
             std::terminate();
           },
           [&](instruction_archive::TypeFamilyOver const& type_family) {
-            return context.type_family_over(cast(evaluate(type_family.type, depth), context.type_axiom.value, depth));
+            return context.type_family_over(cast(
+              evaluate(type_family.type, depth),
+              context.type_axiom.value,
+              depth,
+              variable_explanation::TypeFamilyCast{depth, type_family.index()}
+            ));
           }
         });
       }
@@ -105,20 +130,35 @@ namespace compiler::evaluate {
         command.visit(mdb::overloaded{
           [&](instruction_archive::DeclareHole const& hole) {
             locals.push_back(expression::TypedValue{
-              .value = make_variable(depth),
-              .type = cast(evaluate(hole.type, depth), context.type_axiom.value, depth)
+              .value = make_variable(depth, variable_explanation::ExplicitHole{depth, hole.index()}),
+              .type = cast(
+                evaluate(hole.type, depth),
+                context.type_axiom.value,
+                depth,
+                variable_explanation::HoleTypeCast{depth, hole.index()}
+              )
             });
           },
           [&](instruction_archive::Declare const& declare) {
             locals.push_back(expression::TypedValue{
-              .value = make_variable(depth, false),
-              .type = cast(evaluate(declare.type, depth), context.type_axiom.value, depth)
+              .value = make_variable(depth, variable_explanation::Declaration{depth, declare.index()}),
+              .type = cast(
+                evaluate(declare.type, depth),
+                context.type_axiom.value,
+                depth,
+                variable_explanation::DeclareTypeCast{depth, declare.index()}
+              )
             });
           },
           [&](instruction_archive::Axiom const& axiom) {
             locals.push_back(expression::TypedValue{
-              .value = make_variable(depth, false, true),
-              .type = cast(evaluate(axiom.type, depth), context.type_axiom.value, depth)
+              .value = make_variable(depth, variable_explanation::Axiom{depth, axiom.index()}),
+              .type = cast(
+                evaluate(axiom.type, depth),
+                context.type_axiom.value,
+                depth,
+                variable_explanation::AxiomTypeCast{depth, axiom.index()}
+              )
             });
           },
           [&](instruction_archive::Rule const& rule) {
@@ -136,8 +176,14 @@ namespace compiler::evaluate {
             if(let.type) {
               locals.push_back(cast_typed(
                 evaluate(let.value, depth),
-                cast(evaluate(*let.type, depth), context.type_axiom.value, depth),
-                depth
+                cast(
+                  evaluate(*let.type, depth),
+                  context.type_axiom.value,
+                  depth,
+                  variable_explanation::LetTypeCast{depth, let.index()}
+                ),
+                depth,
+                variable_explanation::LetCast{depth, let.index()}
               ));
             } else {
               locals.push_back(evaluate(let.value, depth));
@@ -147,7 +193,12 @@ namespace compiler::evaluate {
             auto local_size = locals.size();
             locals.push_back({
               .value = expression::tree::Arg{ .arg_index = depth },
-              .type = cast(evaluate(for_all.type, depth), context.type_axiom.value, depth)
+              .type = cast(
+                evaluate(for_all.type, depth),
+                context.type_axiom.value,
+                depth,
+                variable_explanation::ForAllTypeCast{depth, for_all.index()}
+              )
             });
             for(auto const& command : for_all.commands) {
               evaluate(command, depth + 1);
