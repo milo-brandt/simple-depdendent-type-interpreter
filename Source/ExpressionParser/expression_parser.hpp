@@ -71,6 +71,10 @@ namespace expression_parser {
     };
 
     constexpr auto basic_expression = bind_fold(term, apply_collector);
+    constexpr auto rassoc_expression = loose_sequence(
+      symbol("\\\\"),
+      expression
+    );
     constexpr auto lambda_expression = map(loose_capture(loose_sequence(
       symbol("\\"),
       optional(identifier),
@@ -195,6 +199,7 @@ namespace expression_parser {
 
     MB_DEFINE_RECURSIVE_PARSER(term, branch(
       std::make_pair(loose_symbol("("), loose_sequence(loose_symbol("("), expression, loose_symbol(")"))),
+      std::make_pair(loose_symbol("\\\\"), rassoc_expression),
       std::make_pair(loose_symbol("\\"), lambda_expression),
       std::make_pair(symbol("block"), block_expression),
       std::make_pair(always_match, map(loosen(identifier), [](std::string_view identifier) -> located_output::Expression {
