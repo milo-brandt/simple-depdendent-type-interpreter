@@ -50,6 +50,7 @@ namespace expression::solver {
   }
   void StandardSolverContext::define_variable(std::uint64_t variable, std::uint64_t arg_count, tree::Expression replacement) {
     assert(indeterminates.contains(variable));
+    indeterminates.erase(variable);
     evaluation.rules.push_back({
       .pattern = make_pattern_for(variable, arg_count),
       .replacement = std::move(replacement)

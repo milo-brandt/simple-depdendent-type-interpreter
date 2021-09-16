@@ -1565,7 +1565,7 @@ namespace expression_parser::output::archive_part{
     friend Hole;
     friend Arrow;
     friend Block;
-    Expression(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Expression(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Expression() {}
   public:
     Expression(Expression const&) = delete;
@@ -1605,8 +1605,8 @@ namespace expression_parser::output::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Lambda;
     friend Let;
+    friend Lambda;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -1636,7 +1636,7 @@ namespace expression_parser::output::archive_part{
     friend PatternApply;
     friend PatternIdentifier;
     friend PatternHole;
-    Pattern(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Pattern(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Pattern() {}
   public:
     Pattern(Pattern const&) = delete;
@@ -1682,7 +1682,7 @@ namespace expression_parser::output::archive_part{
     friend Rule;
     friend Axiom;
     friend Let;
-    Command(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Command(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Command() {}
   public:
     Command(Command const&) = delete;
@@ -2356,7 +2356,7 @@ namespace expression_parser::locator::archive_part{
     friend Hole;
     friend Arrow;
     friend Block;
-    Expression(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Expression(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Expression() {}
   public:
     Expression(Expression const&) = delete;
@@ -2396,8 +2396,8 @@ namespace expression_parser::locator::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Lambda;
     friend Let;
+    friend Lambda;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -2427,7 +2427,7 @@ namespace expression_parser::locator::archive_part{
     friend PatternApply;
     friend PatternIdentifier;
     friend PatternHole;
-    Pattern(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Pattern(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Pattern() {}
   public:
     Pattern(Pattern const&) = delete;
@@ -2473,7 +2473,7 @@ namespace expression_parser::locator::archive_part{
     friend Rule;
     friend Axiom;
     friend Let;
-    Command(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Command(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Command() {}
   public:
     Command(Command const&) = delete;
@@ -3153,7 +3153,7 @@ namespace expression_parser::resolved::archive_part{
     friend Hole;
     friend Arrow;
     friend Block;
-    Expression(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Expression(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Expression() {}
   public:
     Expression(Expression const&) = delete;
@@ -3193,8 +3193,8 @@ namespace expression_parser::resolved::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Lambda;
     friend Let;
+    friend Lambda;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -3224,7 +3224,7 @@ namespace expression_parser::resolved::archive_part{
     friend PatternApply;
     friend PatternIdentifier;
     friend PatternHole;
-    Pattern(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Pattern(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Pattern() {}
   public:
     Pattern(Pattern const&) = delete;
@@ -3270,7 +3270,7 @@ namespace expression_parser::resolved::archive_part{
     friend Rule;
     friend Axiom;
     friend Let;
-    Command(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    Command(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index){}
     ~Command() {}
   public:
     Command(Command const&) = delete;

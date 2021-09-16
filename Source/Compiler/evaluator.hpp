@@ -2,6 +2,7 @@
 #define COMPILER_EVALUATOR_HPP
 
 #include "instructions.hpp"
+#include "pattern_outline.hpp"
 #include "../Expression/evaluation_context.hpp"
 #include "../Utility/function.hpp"
 #include <unordered_map>
@@ -86,6 +87,20 @@ namespace compiler::evaluate {
     inline bool is_variable(Any const& any) { return std::holds_alternative<ApplyCodomain>(any) || std::holds_alternative<ExplicitHole>(any); }
     inline bool is_indeterminate(Any const& any) { return !is_axiom(any) && !is_declaration(any); }
   };
+  namespace pattern_variable_explanation {
+    namespace archive_index = pattern::archive_index;
+    struct ApplyCast { //always casts argument, never function
+      std::uint64_t arg_index;
+      archive_index::Segment index;
+    };
+    struct CapturePoint {
+      archive_index::CapturePoint index;
+    };
+    struct CapturePointType {
+      archive_index::CapturePoint index;
+    };
+    using Any = std::variant<ApplyCast, CapturePoint, CapturePointType>;
+  };
   struct EvaluateResult {
     std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
     std::vector<Cast> casts;
@@ -93,6 +108,12 @@ namespace compiler::evaluate {
     expression::TypedValue result;
   };
   EvaluateResult evaluate_tree(instruction::output::archive_part::ProgramRoot const& tree, expression::Context& expression_context, mdb::function<expression::TypedValue(std::uint64_t)> embed);
+  struct PatternEvaluateResult {
+    std::unordered_map<std::uint64_t, pattern_variable_explanation::Any> variables;
+    std::vector<Cast> casts;
+    std::vector<std::uint64_t> capture_point_variables;
+  };
+  PatternEvaluateResult evaluate_pattern(pattern::archive_part::Pattern const& pattern, expression::Context& expression_context);
 }
 
 #endif

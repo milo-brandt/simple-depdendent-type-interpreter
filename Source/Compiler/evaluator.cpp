@@ -14,7 +14,10 @@ namespace compiler::evaluate {
       return {
         .depth = 0,
         .fam = expression::tree::External{context.primitives.type},
-        .var = expression::tree::External{context.primitives.id}
+        .var = expression::tree::Apply{
+          expression::tree::External{context.primitives.id},
+          expression::tree::External{context.primitives.type}
+        }
       };
     }
     ContextInfo extend_context(ContextInfo const& context, expression::tree::Expression base_family, expression::Context& expression_context) {
@@ -341,6 +344,90 @@ namespace compiler::evaluate {
       .casts = std::move(detail.casts),
       .rules = std::move(detail.rules),
       .result = std::move(result)
+    };
+  }
+  PatternEvaluateResult evaluate_pattern(pattern::archive_part::Pattern const& pattern, expression::Context& expression_context) {
+    struct Detail {
+      expression::Context& expression_context;
+      std::unordered_map<std::uint64_t, pattern_variable_explanation::Any> variables;
+      std::vector<Cast> casts;
+      std::vector<std::uint64_t> capture_point_variables;
+      expression::TypedValue evaluate_pattern(pattern::archive_part::Pattern const& pat) {
+        return pat.visit(mdb::overloaded{
+          [&](pattern::archive_part::CapturePoint const& point) -> expression::TypedValue {
+            auto type_var = expression_context.create_variable({
+              .is_axiom = false,
+              .type = expression::tree::External{expression_context.primitives.type}
+            });
+            auto var = expression_context.create_variable({
+              .is_axiom = false,
+              .type = expression::tree::External{type_var}
+            });
+
+            capture_point_variables.push_back(var);
+            variables.insert(std::make_pair(var, pattern_variable_explanation::CapturePoint{ point.index() }));
+            variables.insert(std::make_pair(type_var, pattern_variable_explanation::CapturePointType{ point.index() }));
+
+            return {
+              .value = expression::tree::External{var},
+              .type = expression::tree::External{type_var}
+            };
+          },
+          [&](pattern::archive_part::Segment const& segment) -> expression::TypedValue {
+            expression::TypedValue head = expression_context.get_external(segment.head);
+            std::uint64_t count = 0;
+            for(auto const& arg : segment.args) {
+              auto val = evaluate_pattern(arg);
+              head.type = expression_context.reduce(std::move(head.type));
+              if(auto* lhs_apply = head.type.get_if_apply()) {
+                if(auto* inner_apply = lhs_apply->lhs.get_if_apply()) {
+                  if(auto* lhs_ext = inner_apply->lhs.get_if_external()) {
+                    if(lhs_ext->external_index == expression_context.primitives.arrow) {
+                      val.type = expression_context.reduce(std::move(val.type));
+                      if(val.type != inner_apply->rhs) {
+                        auto cast_var = expression_context.create_variable({
+                          .is_axiom = false,
+                          .type = inner_apply->rhs
+                        });
+                        variables.insert(std::make_pair(cast_var, pattern_variable_explanation::ApplyCast{ count, segment.index() }));
+                        casts.push_back({
+                          .depth = 0,
+                          .variable = cast_var,
+                          .source_type = val.type,
+                          .source = val.value,
+                          .target_type = inner_apply->rhs
+                        });
+                        head = expression::TypedValue{
+                          .value = expression::tree::Apply{std::move(head.value), expression::tree::External{cast_var}},
+                          .type = expression::tree::Apply{std::move(lhs_apply->rhs), expression::tree::External{cast_var}}
+                        };
+                      } else {
+                        head = expression::TypedValue{
+                          .value = expression::tree::Apply{std::move(head.value), val.value},
+                          .type = expression::tree::Apply{std::move(lhs_apply->rhs), val.value}
+                        };
+                      }
+                      ++count;
+                      continue;
+                    }
+                  }
+                }
+              }
+              std::terminate(); //o no panic
+            }
+            return head;
+          }
+        });
+      }
+    };
+    Detail detail{
+      .expression_context = expression_context
+    };
+    detail.evaluate_pattern(pattern);
+    return {
+      .variables = std::move(detail.variables),
+      .casts = std::move(detail.casts),
+      .capture_point_variables = std::move(detail.capture_point_variables)
     };
   }
 }

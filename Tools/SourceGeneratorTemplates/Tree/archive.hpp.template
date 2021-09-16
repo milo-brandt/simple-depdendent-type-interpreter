@@ -250,7 +250,11 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- for component in kind.components %}
     friend {{ component.name }};
     {%- endfor %}
-    {{ kind.name }}(std::uint64_t discriminator, std::uint64_t index):PolymorphicKind(discriminator, index) {}
+    {%- if not tree.multikind %}
+    std::uint64_t const discriminator;
+    std::uint64_t const private_index;
+    {%- endif %}
+    {{ kind.name }}(std::uint64_t discriminator, std::uint64_t index):{%- if tree.multikind %}PolymorphicKind(discriminator, index){% else %}discriminator(discriminator), private_index(index){% endif %}{}
     ~{{ kind.name }}() {}
   public:
     {{ no_copy(kind.name) }}
@@ -259,8 +263,10 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {{ component_getter_declaration(kind.name, component) }}
     {%- endfor %}
     {{ visit_declaration(kind.name, kind.components, kind.name + "Visitor", kind.name + "ConstVisitor") }}
+    {%- if tree.multikind %}
     PolymorphicKind& as_poly() { return *(PolymorphicKind*)this; }
     PolymorphicKind const& as_poly() const { return *(PolymorphicKind const*)this; }
+    {%- endif %}
   };
   {%- if kind.users.optional %}
   class Optional{{ kind.name }} {
@@ -348,8 +354,10 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- endfor %}
     {{ kind.name }}& as_{{kind.name|underscore}}() { return *({{ kind.name }}*)this; }
     {{ kind.name }} const& as_{{kind.name|underscore}}() const { return *({{ kind.name }} const*)this; }
+    {%- if tree.multikind %}
     PolymorphicKind& as_poly() { return *(PolymorphicKind*)({{ kind.name }}*)this; }
     PolymorphicKind const& as_poly() const { return *(PolymorphicKind const*)({{ kind.name }} const*)this; }
+    {%- endif %}
   };
   {%- call in_extension("cpp") %}
   {{ component.name }}::{{ component.name }}(std::size_t archive_index_private
