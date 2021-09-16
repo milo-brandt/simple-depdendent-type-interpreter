@@ -3,6 +3,7 @@
 
 #include "expression_tree_impl.hpp"
 #include "pattern_tree_impl.hpp"
+#include "../Utility/function.hpp"
 
 namespace expression {
   bool term_matches(tree::Expression const&, pattern::Pattern const&);
@@ -24,6 +25,7 @@ namespace expression {
   };
 
   tree::Expression substitute_into_replacement(std::vector<tree::Expression> const& terms, tree::Expression const& replacement); //args are replaced
+  tree::Expression substitute_into_replacement_callback(mdb::function<tree::Expression(std::uint64_t)>, tree::Expression const& replacement);
   void replace_with_substitution_at(tree::Expression* position, pattern::Pattern const& pattern, tree::Expression const& replacement);
 
   struct TypedValue {

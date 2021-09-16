@@ -138,6 +138,28 @@ namespace expression {
       }
     });
   }
+  tree::Expression substitute_into_replacement_callback(mdb::function<tree::Expression(std::uint64_t)> func, tree::Expression const& replacement) {
+    struct Detail {
+      mdb::function<tree::Expression(std::uint64_t)> func;
+      tree::Expression process(tree::Expression const& expr) {
+        return expr.visit(mdb::overloaded{
+          [&](tree::Apply const& apply) -> tree::Expression {
+            return tree::Apply{
+              .lhs = process(apply.lhs),
+              .rhs = process(apply.rhs)
+            };
+          },
+          [&](tree::External const& external) -> tree::Expression {
+            return external; //copy
+          },
+          [&](tree::Arg const& arg) -> tree::Expression {
+            return func(arg.arg_index);
+          }
+        });
+      }
+    };
+    return Detail{std::move(func)}.process(replacement);
+  }
   void replace_with_substitution_at(tree::Expression* term, pattern::Pattern const& pattern, tree::Expression const& replacement) {
     auto captures = destructure_match(std::move(*term), pattern);
     *term = substitute_into_replacement(captures, replacement);

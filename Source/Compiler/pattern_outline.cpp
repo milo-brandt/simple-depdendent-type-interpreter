@@ -95,7 +95,8 @@ namespace compiler::pattern {
       if(detail.discharge_held_constraints()) {
         return ConstrainedPattern{
           .pattern = std::move(*pat),
-          .constraints = std::move(detail.constraints)
+          .constraints = std::move(detail.constraints),
+          .args_to_captures = std::move(detail.args_to_captures)
         };
       }
     }
