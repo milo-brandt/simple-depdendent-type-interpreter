@@ -15,17 +15,20 @@
 */
 
 namespace expression::format {
+  struct FormatContext;
+  struct Formatter {
+    FormatContext& context;
+    tree::Expression const& expr;
+  };
   struct FormatContext {
-    std::function<std::string(std::uint64_t)> format_external = [](std::uint64_t index) { std::stringstream str; str << "_" << index; return str.str(); };
-    std::uint64_t arrow_external = -1;
-    bool full_reduce = false;
+    Context& expression_context;
+    std::function<bool(std::uint64_t)> force_expansion; //for lambdas
+    std::function<void(std::ostream&, std::uint64_t)> write_external;
+    Formatter operator()(tree::Expression const& expr) & {
+      return Formatter{*this, expr};
+    }
   };
-  struct FormatResult {
-    std::string result;
-    std::unordered_set<std::uint64_t> included_externals;
-  };
-  FormatResult format_expression(tree::Tree const&, Context& evaluation_context, FormatContext format_context);
-  FormatResult format_pattern(pattern::Tree const&, Context& evaluation_context, FormatContext format_context);
+  std::ostream& operator<<(std::ostream&, Formatter);
 }
 
 

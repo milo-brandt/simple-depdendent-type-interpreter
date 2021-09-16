@@ -164,6 +164,13 @@ namespace expression {
     auto captures = destructure_match(std::move(*term), pattern);
     *term = substitute_into_replacement(captures, replacement);
   }
+  std::uint64_t get_pattern_head(expression::pattern::Pattern const& pat) {
+    if(auto* apply = pat.get_if_apply()) {
+      return get_pattern_head(apply->lhs);
+    } else {
+      return pat.get_fixed().external_index;
+    }
+  }
 
   RefUnfolding unfold_ref(tree::Expression const& tree) {
     RefUnfolding ret{

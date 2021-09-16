@@ -188,9 +188,10 @@ namespace expression {
     }
     return tree;
   }
-  tree::Expression Context::reduce_once_at_root(tree::Expression tree) {
-  ROOT_REDUCTION_START:
+  tree::Expression Context::reduce_filer_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter) {
+    ROOT_REDUCTION_START:
     for(auto const& rule : rules) {
+      if(!filter(rule)) continue;
       if(term_matches(tree, rule.pattern)) {
         replace_with_substitution_at(&tree, rule.pattern, rule.replacement);
         goto ROOT_REDUCTION_START;

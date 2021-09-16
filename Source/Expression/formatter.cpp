@@ -2,110 +2,140 @@
 #include <sstream>
 
 namespace expression::format {
-  FormatResult format_expression(tree::Tree const& term, Context& evaluation_context, FormatContext format_context) {
-    struct FormatSettings {
+  std::ostream& operator<<(std::ostream& o, Formatter format) {
+    struct Options {
+      std::ostream& o;
       bool parenthesize_application;
+      bool parenthesize_lambda;
       bool parenthesize_arrow;
-      std::uint64_t depth;
+      std::uint64_t arg_count;
     };
-    using namespace tree;
-    auto arrow_pattern_out = match::Apply{
-      match::Apply{
-        full_match::External{match::Predicate{[arrow = format_context.arrow_external](std::uint64_t ext) { return ext == arrow; }}},
-        match::Any{}
-      },
-      match::Any{}
+    struct Response {
+      std::unordered_set<std::uint64_t> args_used;
+      void merge(Response other) {
+        for(auto arg : other.args_used) args_used.insert(arg);
+      }
     };
     struct Detail {
-      Context& evaluation_context;
-      FormatContext& format_context;
-      decltype(arrow_pattern_out) arrow_pattern;
-      std::unordered_set<std::uint64_t> included_externals;
-      std::unordered_set<std::uint64_t> merge_sets(std::unordered_set<std::uint64_t> lhs, std::unordered_set<std::uint64_t> rhs) {
-        for(auto v : rhs) {
-          lhs.insert(v);
-        }
-        return lhs;
+      FormatContext& context;
+      tree::Expression reduce_legal(tree::Expression expr) {
+        return context.expression_context.reduce_filer_rules(std::move(expr), [&](Rule const& rule) {
+          return context.force_expansion(get_pattern_head(rule.pattern));
+        });
       }
-      std::unordered_set<std::uint64_t> write(std::stringstream& out, tree::Tree const& term, FormatSettings settings) { //returns list of used arguments
-        std::unordered_set<std::uint64_t> ret;
-        if(auto match = arrow_pattern.try_match(term)) {
-          tree::Tree const& domain = match->lhs.rhs;
-          tree::Tree const& codomain = match->rhs;
-          auto codomain_applied = tree::Apply{codomain, tree::Arg{settings.depth}};
-          auto true_codomain = format_context.full_reduce ?
-            evaluation_context.reduce(std::move(codomain_applied))
-          : evaluation_context.reduce_once_at_root(std::move(codomain_applied));
-          if(settings.parenthesize_arrow) {
-            out << "(";
+      bool treat_as_lambda(tree::Expression const& expr) {
+        for(auto const& rule : context.expression_context.rules) {
+          if(context.force_expansion(get_pattern_head(rule.pattern))) {
+            pattern::Pattern const* segment = &rule.pattern;
+            while(auto* apply = segment->get_if_apply()) {
+              if(!apply->rhs.holds_wildcard()) break;
+              segment = &apply->lhs;
+              if(term_matches(expr, *segment)) {
+                return true;
+              }
+            }
           }
-          std::stringstream codomain_out;
-          auto codomain_used_args = write(codomain_out, true_codomain, {.parenthesize_application = false, .parenthesize_arrow = false, .depth = settings.depth + 1});
-          bool needs_named_arg = codomain_used_args.contains(settings.depth);
-          if(needs_named_arg) {
-            out << "($" << settings.depth << " : ";
-          }
-          auto domain_used_args = write(out, domain, {.parenthesize_application = false, .parenthesize_arrow = !needs_named_arg, .depth = settings.depth});
-          if(needs_named_arg) {
-            out << ")";
-          }
-          out << " -> ";
-          out << codomain_out.str();
-          if(settings.parenthesize_arrow) {
-            out << ")";
-          }
-          return merge_sets(std::move(domain_used_args), std::move(codomain_used_args));
         }
-        return term.visit(mdb::overloaded{
-          [&](tree::Apply const& apply) {
-            if(settings.parenthesize_application) {
-              out << "(";
+        return false;
+      }
+      Response write_expression(tree::Expression expr, Options options) {
+        expr = reduce_legal(std::move(expr));
+        if(auto* lhs_apply = expr.get_if_apply()) { //is it an arrow expression?
+          if(auto* inner_apply = lhs_apply->lhs.get_if_apply()) {
+            if(auto* lhs_ext = inner_apply->lhs.get_if_external()) {
+              if(lhs_ext->external_index == context.expression_context.primitives.arrow) {
+                auto& domain = inner_apply->rhs;
+                auto& codomain = lhs_apply->rhs;
+                std::stringstream temp;
+                auto response = write_expression(tree::Apply{
+                  std::move(codomain),
+                  tree::Arg{options.arg_count}
+                }, {
+                  .o = temp,
+                  .parenthesize_application = false,
+                  .parenthesize_lambda = false,
+                  .parenthesize_arrow = false,
+                  .arg_count = options.arg_count + 1
+                });
+                if(options.parenthesize_arrow) options.o << "(";
+                if(response.args_used.contains(options.arg_count)) {
+                  options.o << "($" << options.arg_count << " : ";
+                }
+                response.merge(write_expression(std::move(domain), {
+                  .o = options.o,
+                  .parenthesize_application = false,
+                  .parenthesize_lambda = true,
+                  .parenthesize_arrow = true,
+                  .arg_count = options.arg_count
+                }));
+                if(response.args_used.contains(options.arg_count)) {
+                  options.o << ")";
+                }
+                options.o << " -> " << temp.str();
+                if(options.parenthesize_arrow) options.o << ")";
+                return response;
+              }
             }
-            auto lhs_used_args = write(out, apply.lhs, {.parenthesize_application = false, .parenthesize_arrow = true, .depth = settings.depth});
-            out << " ";
-            auto rhs_used_args = write(out, apply.rhs, {.parenthesize_application = true, .parenthesize_arrow = true, .depth = settings.depth});
-            if(settings.parenthesize_application) {
-              out << ")";
-            }
-            return merge_sets(std::move(lhs_used_args), std::move(rhs_used_args));
+          }
+        }
+        if(treat_as_lambda(expr)) {
+          if(options.parenthesize_lambda) options.o << "(";
+          options.o << "\\$" << options.arg_count << ".";
+          auto response = write_expression(tree::Apply{
+            std::move(expr),
+            tree::Arg{options.arg_count}
+          }, {
+            .o = options.o,
+            .parenthesize_application = false,
+            .parenthesize_lambda = false,
+            .parenthesize_arrow = false,
+            .arg_count = options.arg_count + 1
+          });
+          if(options.parenthesize_lambda) options.o << ")";
+          return response;
+        }
+        return expr.visit(mdb::overloaded{
+          [&](tree::Apply& apply) {
+            if(options.parenthesize_application) options.o << "(";
+            auto response = write_expression(std::move(apply.lhs), {
+              .o = options.o,
+              .parenthesize_application = false,
+              .parenthesize_lambda = true,
+              .parenthesize_arrow = true,
+              .arg_count = options.arg_count
+            });
+            options.o << " ";
+            response.merge(write_expression(std::move(apply.rhs), {
+              .o = options.o,
+              .parenthesize_application = true,
+              .parenthesize_lambda = false,
+              .parenthesize_arrow = true,
+              .arg_count = options.arg_count
+            }));
+            if(options.parenthesize_application) options.o << ")";
+            return response;
           },
-          [&](tree::External const& external) {
-            out << format_context.format_external(external.index);
-            included_externals.insert(external.index);
-            return std::unordered_set<std::uint64_t>{};
+          [&](tree::Arg& arg) {
+            Response response{
+              .args_used = {arg.arg_index}
+            };
+            options.o << "$" << arg.arg_index;
+            return response;
           },
-          [&](tree::Arg const& arg) {
-            out << "$" << arg.index;
-            return std::unordered_set<std::uint64_t>{arg.index};
+          [&](tree::External& external) {
+            context.write_external(options.o, external.external_index);
+            return Response{};
           }
         });
       }
     };
-    Detail detail{evaluation_context, format_context, std::move(arrow_pattern_out)};
-    std::stringstream out;
-    detail.write(out, term, {.parenthesize_application = false, .parenthesize_arrow = false, .depth = 0});
-    return {
-      .result = out.str(),
-      .included_externals = std::move(detail.included_externals)
-    };
-  }
-  FormatResult format_pattern(pattern::Tree const& pattern, Context& evaluation_context, FormatContext format_context) {
-    struct Detail {
-      std::uint64_t index = 0;
-      tree::Tree to_tree(pattern::Tree const& pattern) {
-        return pattern.visit(mdb::overloaded{
-          [&](pattern::Apply const& apply) -> tree::Tree {
-            return tree::Apply{to_tree(apply.lhs), to_tree(apply.rhs)};
-          },
-          [&](pattern::Wildcard const&) -> tree::Tree {
-            return tree::Arg{index++};
-          },
-          [&](pattern::Fixed const& fixed) -> tree::Tree {
-            return tree::External{fixed.index};
-          }
-        });
-      }
-    };
-    return format_expression(Detail{}.to_tree(pattern), evaluation_context, std::move(format_context));
+    Detail{format.context}.write_expression(format.expr, {
+      .o = o,
+      .parenthesize_application = false,
+      .parenthesize_lambda = false,
+      .parenthesize_arrow = false,
+      .arg_count = 0
+    });
+    return o;
   }
 }

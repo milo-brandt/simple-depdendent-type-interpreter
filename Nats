@@ -1,0 +1,34 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let one = succ zero;
+  let two = succ one;
+  let three = succ two;
+  let four = succ three;
+  let five = succ four;
+
+  declare iterate : (T : Type) -> (T -> T) -> T -> Nat -> T;
+  rule iterate T f base zero = base;
+  rule iterate T f base (succ n) = f (iterate T f base n);
+
+  declare add : Nat -> Nat -> Nat;
+  rule add x y = iterate _ succ x y;
+
+  declare mul : Nat -> Nat -> Nat;
+  rule mul x y = iterate _ (add x) zero y;
+
+  declare exp : Nat -> Nat -> Nat;
+  rule exp x y = iterate _ (mul x) (succ zero) y;
+
+  axiom Array : (T : Type) -> Nat -> Type;
+  axiom empty : (T : Type) -> Array T zero;
+  axiom cons : (T : Type) -> (n : Nat) -> T -> Array T n -> Array T (succ n);
+
+  declare lfold : (T : Type) -> T -> (T -> T -> T) -> (n : Nat) -> Array T n -> T;
+  rule lfold T base combine zero (empty T) = base;
+  rule lfold T base combine (succ n) (cons T n head tail) = lfold T (combine base head) combine n tail;
+
+  lfold _ zero add _ \\ cons _ _ two \\ cons _ _ three \\ cons _ _ four \\ cons _ _ five \\ empty _
+}

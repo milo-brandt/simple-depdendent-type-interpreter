@@ -27,6 +27,7 @@ namespace expression {
   tree::Expression substitute_into_replacement(std::vector<tree::Expression> const& terms, tree::Expression const& replacement); //args are replaced
   tree::Expression substitute_into_replacement_callback(mdb::function<tree::Expression(std::uint64_t)>, tree::Expression const& replacement);
   void replace_with_substitution_at(tree::Expression* position, pattern::Pattern const& pattern, tree::Expression const& replacement);
+  std::uint64_t get_pattern_head(expression::pattern::Pattern const& pat);
 
   struct TypedValue {
     tree::Expression value;

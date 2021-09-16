@@ -6,10 +6,12 @@
 #include "Expression/solver.hpp"
 #include "Expression/standard_solver_context.hpp"
 #include "Expression/solve_routine.hpp"
+#include "Expression/formatter.hpp"
 
 #include <termcolor.hpp>
 #include <algorithm>
 #include <map>
+#include <fstream>
 
 template<class... Formats>
 struct Format {
@@ -20,20 +22,41 @@ struct Format {
 };
 template<class... Formats>
 std::ostream& operator<<(std::ostream& o, Format<Formats...> const& format) {
+
   auto start_offset = format.part.begin() - format.source.begin();
   auto end_offset = format.part.end() - format.source.begin();
-  auto end_length = format.source.end() - format.part.end();
-  if(start_offset > 30) {
+
+  auto line_start = 0;
+  auto line_count = 0;
+  if(start_offset > 0) {
+    auto last_line = format.source.rfind('\n', start_offset - 1);
+    line_count = std::count(format.source.begin(), format.source.begin() + start_offset, '\n');
+    if(last_line != std::string::npos) {
+      line_start = last_line + 1;
+    }
+  }
+  auto line_end = format.source.size();
+  {
+    auto next_line = format.source.find('\n', end_offset);
+    if(next_line != std::string::npos) {
+      line_end = next_line;
+    }
+  }
+
+  if(start_offset - line_start > 30) {
     o << "..." << format.source.substr(start_offset - 30, 30);
   } else {
-    o << format.source.substr(0, start_offset);
+    o << format.source.substr(line_start, start_offset - line_start);
   }
   std::apply([&](auto const&... formats){ (o << ... << formats); }, format.formats);
   o << format.part << termcolor::reset;
-  if(end_length > 30) {
+  if(line_end - end_offset  > 30) {
     o << format.source.substr(end_offset, 30) << "...";
   } else {
-    o << format.source.substr(end_offset);
+    o << format.source.substr(end_offset, line_end - end_offset);
+  }
+  if(line_count > 0) {
+    o << " [line " << (line_count + 1) << "]";
   }
   return o;
 }
@@ -166,7 +189,20 @@ int main(int argc, char** argv) {
   while(true) {
     std::string line;
     std::getline(std::cin, line);
+    if(line.empty()) continue;
     if(line == "q") return 0;
+    if(line.starts_with("file ")) {
+      std::ifstream f(line.substr(5));
+      if(!f) {
+        std::cout << "Failed to read file \"" << line.substr(5) << "\"\n";
+        continue;
+      } else {
+        std::string total;
+        std::getline(f, total, '\0'); //just read the whole file - assuming no null characters in it :P
+        std::cout << "Contents of file:\n" << total << "\n";
+        line = std::move(total);
+      }
+    }
     std::string_view source = line;
 
     auto x = expression_parser::parser::expression(source);
@@ -252,8 +288,23 @@ int main(int argc, char** argv) {
 
         solve_routine.run();
 
+        std::vector<expression::Rule> new_rules;
         for(auto i = rule_count; i < expression_context.rules.size(); ++i) {
-          auto const& rule = expression_context.rules[i];
+          new_rules.push_back(expression_context.rules[i]);
+        }
+        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
+          struct Detail {
+            static std::uint64_t get_head(expression::pattern::Pattern const& pat) {
+              if(auto* apply = pat.get_if_apply()) {
+                return get_head(apply->lhs);
+              } else {
+                return pat.get_fixed().external_index;
+              }
+            }
+          };
+          return Detail::get_head(lhs.pattern) < Detail::get_head(rhs.pattern);
+        });
+        for(auto const& rule : new_rules) {
           std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
         }
         rule_count = expression_context.rules.size();
@@ -271,7 +322,42 @@ int main(int argc, char** argv) {
           std::cout << "Rules okay!\n";
         } else {
           */
-        std::cout << "Final: " << expression::raw_format(expression_context.reduce(eval_result.result.value)) << " of type " << expression::raw_format(expression_context.reduce(eval_result.result.type)) << "\n";
+        std::unordered_map<std::uint64_t, const char*> fixed_names = {
+          {0, "Type"},
+          {1, "arrow"}
+        };
+        auto fancy_format = expression::format::FormatContext{
+          .expression_context = expression_context,
+          .force_expansion = [](std::uint64_t){ return true; },
+          .write_external = [&](std::ostream& o, std::uint64_t ext_index) -> std::ostream& {
+            if(fixed_names.contains(ext_index)) {
+              return o << fixed_names.at(ext_index);
+            } else if(eval_result.variables.contains(ext_index)) {
+              namespace explanation = compiler::evaluate::variable_explanation;
+              auto const& reason = eval_result.variables.at(ext_index);
+              if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
+                auto const& location = instruction_locator[declared->index];
+                if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
+                  auto const& parsed_position = output_archive[location.source.index];
+                  if(auto* declare_locator = parsed_position.get_if_declare()) {
+                    return o << declare_locator->name;
+                  }
+                }
+              } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
+                auto const& location = instruction_locator[axiom->index];
+                if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
+                  auto const& parsed_position = output_archive[location.source.index];
+                  if(auto* axiom_locator = parsed_position.get_if_axiom()) {
+                    return o << axiom_locator->name;
+                  }
+                }
+              }
+            }
+            return o << "ext_" << ext_index;
+          }
+        };
+
+        std::cout << "Final: " << fancy_format(expression_context.reduce(eval_result.result.value)) << " of type " << fancy_format(expression_context.reduce(eval_result.result.type)) << "\n";
       } else {
         auto const& err = resolved.get_error();
         for(auto const& bad_id : err.bad_ids) {

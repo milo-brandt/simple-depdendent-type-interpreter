@@ -1,0 +1,56 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  rule not yes = no;
+  rule not no = yes;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let one = succ zero;
+  let two = succ one;
+  let three = succ two;
+  let four = succ three;
+  let five = succ four;
+
+  declare iterate : (T : Type) -> (T -> T) -> T -> Nat -> T;
+  rule iterate T f base zero = base;
+  rule iterate T f base (succ n) = f (iterate T f base n);
+
+  declare add : Nat -> Nat -> Nat;
+  rule add x y = iterate _ succ x y;
+
+  axiom Simulation : Type -> Type;
+  axiom return : (T : Type) -> T -> Simulation T;
+  axiom read : (T : Type) -> (Nat -> Simulation T) -> Simulation T;
+
+  declare feed : (Nat -> Nat) -> (T : Type) -> Simulation T -> T;
+  rule feed f T (return T x) = x;
+  rule feed f T (read T then) = feed (\n.f (succ n)) T (then (f zero));
+
+  declare bind : (S : Type) -> (T : Type) -> Simulation S -> (S -> Simulation T) -> Simulation T;
+  rule bind S T (return S x) finally = finally x;
+  rule bind S T (read S then) finally = read T (\n.bind S T (then n) finally);
+
+  let read_one = read _ (return _);
+
+  declare sum_n_impl : (b : Nat) -> (n : Nat) -> Simulation Nat;
+  rule sum_n_impl b zero = return _ b;
+  rule sum_n_impl b (succ n) = read _ \v.sum_n_impl (add v b) n;
+
+  let sum_n = sum_n_impl zero;
+
+
+
+  let sum_first_n = read _ sum_n;
+
+  declare f : Nat -> Nat;
+  rule f zero = five;
+  rule f (succ n) = n;
+
+  feed f _ \\ bind _ _ read_one sum_n
+}

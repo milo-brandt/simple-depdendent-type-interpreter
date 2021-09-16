@@ -43,7 +43,7 @@ namespace expression {
     Context();
     TypedValue get_external(std::uint64_t);
     tree::Expression reduce(tree::Expression tree);
-    tree::Expression reduce_once_at_root(tree::Expression tree);
+    tree::Expression reduce_filer_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);
     template<std::uint64_t count, class Callback> decltype(auto) create_variables(Callback&& callback) {
       bool called_build = false;
       decltype(auto) ret = [&]<std::uint64_t... indices>(std::integer_sequence<std::uint64_t, indices...>) {
