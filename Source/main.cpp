@@ -275,9 +275,20 @@ template<class... Formats>
 std::ostream& operator<<(std::ostream& o, Format<Formats...> const& format) {
   auto start_offset = format.part.begin() - format.source.begin();
   auto end_offset = format.part.end() - format.source.begin();
-  o << format.source.substr(0, start_offset);
+  auto end_length = format.source.end() - format.part.end();
+  if(start_offset > 30) {
+    o << "..." << format.source.substr(start_offset - 30, 30);
+  } else {
+    o << format.source.substr(0, start_offset);
+  }
   std::apply([&](auto const&... formats){ (o << ... << formats); }, format.formats);
-  return o << format.part << termcolor::reset << format.source.substr(end_offset);
+  o << format.part << termcolor::reset;
+  if(end_length > 30) {
+    o << format.source.substr(end_offset, 30) << "...";
+  } else {
+    o << format.source.substr(end_offset);
+  }
+  return o;
 }
 template<class... Formats>
 Format<Formats...> format_substring(std::string_view substring, std::string_view full_string, Formats... formats) {
@@ -390,37 +401,19 @@ int main(int argc, char** argv) {
   std::cout << format(x.root()) << "\n";
   std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";*/
   expression::Context expression_context;
-  compiler::evaluate::EvaluateContext evaluator {
-    .arrow_axiom = { .value = expression::tree::External{ expression_context.primitives.arrow }, .type = expression_context.primitives.arrow_type() },
-    .type_axiom = { .value = expression::tree::External{ expression_context.primitives.type }, .type = expression::tree::External{ expression_context.primitives.type } },
-    .type_family_over = [&] (expression::tree::Expression expr) {
-      return expression::TypedValue{
-        .value = expression::tree::Apply{
-          .lhs = expression::tree::Apply{
-            .lhs = expression::tree::External{ expression_context.primitives.arrow },
-            .rhs = std::move(expr)
-          },
-          .rhs = expression::tree::External{ expression_context.primitives.type_constant_function }
-        },
-        .type = expression::tree::External{ expression_context.primitives.type }
-      };
-    },
-    .embed = [&] (std::uint64_t index) -> expression::TypedValue {
-      if(index == 0) {
-        return { .value = expression::tree::External{ expression_context.primitives.type }, .type = expression::tree::External{ expression_context.primitives.type } };
-      } else {
-        return { .value = expression::tree::External{ expression_context.primitives.arrow}, .type = expression_context.primitives.arrow_type() };
-      }
-    },
-    .allocate_variable = [&](bool is_axiom) -> std::uint64_t {
-      if(is_axiom) {
-        return expression_context.add_axiom();
-      } else {
-        return expression_context.add_declaration();
-      }
-    },
-    .reduce = [&](expression::tree::Expression term) {
-      return expression_context.reduce(std::move(term));
+  auto embed = [&] (std::uint64_t index) -> expression::TypedValue {
+    if(index == 0) {
+      return expression_context.get_external(0);
+    } else if(index == 1) {
+      return expression_context.get_external(1);
+    } else if(index == 2) {
+      return expression_context.get_external(2);
+    } else if(index == 3) {
+      return expression_context.get_external(3);
+    } else if(index == 4) {
+      return expression_context.get_external(8);
+    } else {
+      std::terminate();
     }
   };
   while(true) {
@@ -444,6 +437,12 @@ int main(int argc, char** argv) {
             return 0;
           } else if(str == "arrow") {
             return 1;
+          } else if(str == "type_family") {
+            return 2;
+          } else if(str == "constant") {
+            return 3;
+          } else if(str == "id") {
+            return 4;
           } else {
             return std::nullopt;
           }
@@ -456,7 +455,10 @@ int main(int argc, char** argv) {
         std::cout << "Instructions: " << format(instructions.output) << "\n";
         auto instruction_archive = archive(instructions.output);
         auto instruction_locator = archive(instructions.locator);
-        auto eval_result = compiler::evaluate::evaluate_tree(instruction_archive.root().get_program_root(), evaluator);
+
+        auto rule_count = expression_context.rules.size();
+
+        auto eval_result = compiler::evaluate::evaluate_tree(instruction_archive.root().get_program_root(), expression_context, embed);
 
         expression::solver::StandardSolverContext solver_context {
           .evaluation = expression_context
@@ -478,7 +480,8 @@ int main(int argc, char** argv) {
             [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "AxiomTypeCast: "; },
             [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "LetTypeCast: "; },
             [&](compiler::evaluate::variable_explanation::LetCast const&) { return "LetCast: "; },
-            [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "ForAllTypeCast: "; }
+            [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "ForAllTypeCast: "; },
+            [&](compiler::evaluate::variable_explanation::VarType const&) { return "VarType: "; }
           }, reason) << var << "\n";
           if(is_variable(reason))
             solver.register_variable(var);
@@ -516,7 +519,6 @@ int main(int argc, char** argv) {
         //Hard thing: How to know when rules are allowable?
         std::cout << "Result: " << expression::raw_format(eval_result.result.value) << " of type " << expression::raw_format(eval_result.result.type) << "\n";
 
-        auto rule_count = expression_context.rules.size();
 
         while([&] {
           bool progress = false;
@@ -859,7 +861,7 @@ int main(int argc, char** argv) {
 }
 
 /*
-block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; declare add : Nat -> Nat -> Nat; rule add zero x = x; rule add (succ x) y = succ (add x y); declare mul : Nat -> Nat -> Nat; rule mul zero x = zero; rule mul (succ x) y = add y (mul x y); mul }
+block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; declare add : Nat -> Nat -> Nat; rule add zero x = x; rule add (succ x) y = succ (add x y); declare mul : Nat -> Nat -> Nat; rule mul zero x = zero; rule mul (succ x) y = add y (mul x y); mul (succ \\ succ \\ succ \\ succ zero) (succ \\ succ \\ succ \\ succ \\ succ zero) }
 */
 
 /*
@@ -868,5 +870,20 @@ block { axiom String : Type; axiom One : Type; axiom Parser : Type -> Type; axio
 /*
 block { axiom Id : Type -> Type; axiom pure : (T : Type) -> T -> Id T; declare extract : (T : Type) -> Id T -> T; rule extract T (pure T x) = x; extract }
 block { axiom Id : Type -> Type; axiom pure : (T : Type) -> T -> Id T; pure }
+
+
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+  axiom Routine : Type -> Type;
+  axiom return : (T : Type) -> T -> Routine T;
+  axiom read : (T : Type) -> (Nat -> Routine T) -> Routine T;
+
+  declare bind : (S : Type) -> (T : Type) -> Routine S -> (S -> Routine T) -> Routine T;
+  bind S T (return S x) then = then x;
+  bind S T (read S f) then = read T \n.bind S T (f n) then;
+  bind
+}
 
 */

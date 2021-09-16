@@ -12,7 +12,7 @@ namespace expression::solver {
 
     Simplification simplify(tree::Expression base);
     void define_variable(std::uint64_t variable, std::uint64_t arg_count, tree::Expression replacement);
-    std::uint64_t introduce_variable();
+    //std::uint64_t introduce_variable();
     bool term_depends_on(std::uint64_t term, std::uint64_t possible_dependency);
   };
 }

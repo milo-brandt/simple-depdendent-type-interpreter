@@ -2,7 +2,7 @@
 #define COMPILER_EVALUATOR_HPP
 
 #include "instructions.hpp"
-#include "../Expression/expression_tree.hpp"
+#include "../Expression/evaluation_context.hpp"
 #include "../Utility/function.hpp"
 #include <unordered_map>
 
@@ -75,7 +75,12 @@ namespace compiler::evaluate {
       std::uint64_t depth;
       archive_index::ForAll index;
     };
-    using Any = std::variant<ApplyRHSCast, ApplyCodomain, ApplyLHSCast, ExplicitHole, Declaration, Axiom, TypeFamilyCast, HoleTypeCast, DeclareTypeCast, AxiomTypeCast, LetCast, LetTypeCast, ForAllTypeCast>;
+    struct VarType {
+      std::uint64_t depth;
+      std::uint64_t base_variable;
+      archive_index::PolymorphicKind index;
+    };
+    using Any = std::variant<ApplyRHSCast, ApplyCodomain, ApplyLHSCast, ExplicitHole, Declaration, Axiom, TypeFamilyCast, HoleTypeCast, DeclareTypeCast, AxiomTypeCast, LetCast, LetTypeCast, ForAllTypeCast, VarType>;
     inline bool is_axiom(Any const& any) { return std::holds_alternative<Axiom>(any); }
     inline bool is_declaration(Any const& any) { return std::holds_alternative<Declaration>(any); }
     inline bool is_variable(Any const& any) { return std::holds_alternative<ApplyCodomain>(any) || std::holds_alternative<ExplicitHole>(any); }
@@ -87,18 +92,7 @@ namespace compiler::evaluate {
     std::vector<Rule> rules;
     expression::TypedValue result;
   };
-  struct EvaluateContext {
-    expression::TypedValue arrow_axiom;
-    expression::TypedValue type_axiom;
-    mdb::function<expression::TypedValue(expression::tree::Expression)> type_family_over;
-    mdb::function<expression::TypedValue(std::uint64_t)> embed;
-    mdb::function<std::uint64_t(bool)> allocate_variable;
-    mdb::function<expression::tree::Expression(expression::tree::Expression)> reduce;
-  };
-  EvaluateResult evaluate_tree(instruction::output::archive_part::ProgramRoot const& tree, EvaluateContext& context);
-  inline EvaluateResult evaluate_tree(instruction::output::archive_part::ProgramRoot const& tree, EvaluateContext&& context) {
-    return evaluate_tree(tree, context);
-  }
+  EvaluateResult evaluate_tree(instruction::output::archive_part::ProgramRoot const& tree, expression::Context& expression_context, mdb::function<expression::TypedValue(std::uint64_t)> embed);
 }
 
 #endif

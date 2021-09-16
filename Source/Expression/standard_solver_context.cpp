@@ -55,11 +55,11 @@ namespace expression::solver {
       .replacement = std::move(replacement)
     });
   }
-  std::uint64_t StandardSolverContext::introduce_variable() {
+  /*std::uint64_t StandardSolverContext::introduce_variable() {
     auto ret = evaluation.add_declaration();
     indeterminates.insert(ret);
     return ret;
-  }
+  }*/
   bool StandardSolverContext::term_depends_on(std::uint64_t term, std::uint64_t possible_dependency) {
     return term == possible_dependency;
   }

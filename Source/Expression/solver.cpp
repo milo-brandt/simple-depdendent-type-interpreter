@@ -202,14 +202,14 @@ namespace expression::solver {
       }
       return AttemptResult::nothing;
     }
-    void process_asymmetric_explosion(std::uint64_t index, std::uint64_t depth, AsymmetricExplodeSpec spec) {
+    /*void process_asymmetric_explosion(std::uint64_t index, std::uint64_t depth, AsymmetricExplodeSpec spec) {
       tree::Expression replacement = std::visit([](auto const& v) -> tree::Expression { return v; }, spec.irreducible_head);
 
       for(std::uint64_t i = 0; i < spec.irreducible_args.size(); ++i) {
-        auto var = context.introduce_variable(/*introduction_explanation::Exploded{
+        auto var = context.introduce_variable(*//*introduction_explanation::Exploded{
           .equation_index = equation_index,
           .part_index = i
-        }*/);
+        }*//*);
         variables.insert(var);
         replacement = tree::Apply{std::move(replacement), apply_args_enumerated(tree::External{var}, spec.pattern_args.size())};
         equations.push_back({
@@ -225,11 +225,11 @@ namespace expression::solver {
         spec.pattern_head,
         spec.pattern_args.size(),
         std::move(replacement)
-      );/*, rule_explanation::FromEquation{equation_index}*/
-
+      );*//*, rule_explanation::FromEquation{equation_index}*/
+/*
       variables.erase(spec.pattern_head);
-    }
-    AttemptResult try_to_explode_asymmetric(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
+    }*/
+    /*AttemptResult try_to_explode_asymmetric(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
       if(rhs.state == SimplificationState::head_closed) {
         auto asymmetric = get_asymmetric_explode_from_equation(lhs.expression, rhs.expression, variables);
         if(std::holds_alternative<AsymmetricHeadFailure>(asymmetric)) return AttemptResult::failed;
@@ -247,7 +247,7 @@ namespace expression::solver {
         }
       }
       return AttemptResult::nothing;
-    }
+    }*/
     AttemptResult try_to_judge_equal(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.expression == rhs.expression) {
         return AttemptResult::handled;
@@ -267,7 +267,7 @@ namespace expression::solver {
         &Impl::try_to_extract_rule,
         &Impl::try_to_deepen,
         &Impl::try_to_explode_symmetric,
-        &Impl::try_to_explode_asymmetric,
+      //  &Impl::try_to_explode_asymmetric,
         &Impl::try_to_judge_equal)
       );
       auto& equation_final = equations[index]; //Vector might move!!!
