@@ -1,0 +1,39 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Trivial : Type;
+  axiom element : Trivial;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let one = succ zero;
+  let two = succ one;
+  let three = succ two;
+  let four = succ three;
+  let five = succ four;
+
+  axiom TypeList : Type;
+  axiom empty : TypeList;
+  axiom cons : Type -> TypeList -> TypeList;
+
+  declare concat : TypeList -> TypeList -> TypeList;
+  rule concat empty list = list;
+  rule concat (cons head tail) list = cons head (concat tail list);
+
+  axiom Tuple : TypeList -> Type;
+  axiom t_empty : Tuple empty;
+  axiom t_cons : (T : Type) -> (list : TypeList) -> T -> Tuple list -> Tuple (cons T list);
+
+  declare tuple_cat : (l1 : TypeList) -> (l2 : TypeList) -> Tuple l1 -> Tuple l2 -> Tuple (concat l1 l2);
+  rule tuple_cat empty l2 t_empty t2 = t2;
+  rule tuple_cat (cons H l1) l2 (t_cons H l1 h t1) t2 = t_cons _ _ h (tuple_cat _ _ t1 t2);
+
+  let tuple_1 = t_cons _ _ yes \\ t_cons _ _ five \\ t_empty;
+  let tuple_2 = t_cons _ _ (\n:Nat.Type) \\ t_empty;
+
+  tuple_cat _ _ tuple_1 tuple_2
+}

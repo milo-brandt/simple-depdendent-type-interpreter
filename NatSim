@@ -11,11 +11,16 @@ block {
   axiom zero : Nat;
   axiom succ : Nat -> Nat;
 
-  let one = succ zero;
-  let two = succ one;
-  let three = succ two;
-  let four = succ three;
-  let five = succ four;
+  declare one : _;
+  declare two : _;
+  declare three : _;
+  declare four : _;
+  declare five : _;
+  rule one = succ zero;
+  rule two = succ one;
+  rule three = succ two;
+  rule four = succ three;
+  rule five = succ four;
 
   declare iterate : (T : Type) -> (T -> T) -> T -> Nat -> T;
   rule iterate T f base zero = base;
@@ -42,7 +47,8 @@ block {
   rule sum_n_impl b zero = return _ b;
   rule sum_n_impl b (succ n) = read _ \v.sum_n_impl (add v b) n;
 
-  let sum_n = sum_n_impl zero;
+  declare sum_n : _;
+  rule sum_n = sum_n_impl zero;
 
 
 
@@ -52,5 +58,5 @@ block {
   rule f zero = five;
   rule f (succ n) = n;
 
-  feed f _ \\ bind _ _ read_one sum_n
+  feed f _ \\ bind _ _ (sum_n two) sum_n
 }

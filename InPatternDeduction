@@ -1,0 +1,11 @@
+block {
+  axiom Wrapped : Type -> Type;
+  axiom wrap : (T : Type) -> T -> Wrapped T;
+  declare unwrap : (T : Type) -> Wrapped T -> T;
+
+  let Q = _;
+
+  rule unwrap T (wrap (Q T) x) = x;
+
+  unwrap
+}

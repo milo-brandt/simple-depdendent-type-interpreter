@@ -15,6 +15,7 @@ namespace expression::solver {
     Routine& operator=(Routine&&);
     ~Routine();
     void run();
+    std::vector<std::pair<tree::Expression, tree::Expression> > get_equations();
   };
 };
 

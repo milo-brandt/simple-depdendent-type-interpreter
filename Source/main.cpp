@@ -186,10 +186,15 @@ int main(int argc, char** argv) {
       std::terminate();
     }
   };
+  std::string last_line = "";
   while(true) {
     std::string line;
     std::getline(std::cin, line);
-    if(line.empty()) continue;
+    if(line.empty()) {
+      if(last_line.empty()) continue;
+      line = last_line;
+    }
+    last_line = line;
     if(line == "q") return 0;
     if(line.starts_with("file ")) {
       std::ifstream f(line.substr(5));
@@ -308,27 +313,67 @@ int main(int argc, char** argv) {
           std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
         }
         rule_count = expression_context.rules.size();
-        /*if(casts.empty()) {
-          std::cout << "Casts okay!\n";
-        }
-        if(solver.is_fully_satisfied()) {
-          std::cout << "Solver satisfied!\n";
-        } else {
-          for(auto const& [lhs, rhs] : solver.get_equations()) {
-            std::cout << expression::raw_format(lhs) << " =?= " << expression::raw_format(rhs) << "\n";
-          }
-        }
-        if(rules.empty()) {
-          std::cout << "Rules okay!\n";
-        } else {
-          */
+
         std::unordered_map<std::uint64_t, const char*> fixed_names = {
           {0, "Type"},
           {1, "arrow"}
         };
+        auto is_explicit = [&](std::uint64_t ext_index) {
+          namespace explanation = compiler::evaluate::variable_explanation;
+          if(!eval_result.variables.contains(ext_index)) return false;
+          auto const& reason = eval_result.variables.at(ext_index);
+          if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
+            auto const& location = instruction_locator[declared->index];
+            if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
+              auto const& parsed_position = output_archive[location.source.index];
+              if(auto* declare_locator = parsed_position.get_if_declare()) {
+                return true;
+              }
+            }
+          } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
+            auto const& location = instruction_locator[axiom->index];
+            if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
+              auto const& parsed_position = output_archive[location.source.index];
+              if(auto* axiom_locator = parsed_position.get_if_axiom()) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
         auto fancy_format = expression::format::FormatContext{
           .expression_context = expression_context,
-          .force_expansion = [](std::uint64_t){ return true; },
+          .force_expansion = [&](std::uint64_t ext_index){ return !is_explicit(ext_index); },
+          .write_external = [&](std::ostream& o, std::uint64_t ext_index) -> std::ostream& {
+            if(fixed_names.contains(ext_index)) {
+              return o << fixed_names.at(ext_index);
+            } else if(eval_result.variables.contains(ext_index)) {
+              namespace explanation = compiler::evaluate::variable_explanation;
+              auto const& reason = eval_result.variables.at(ext_index);
+              if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
+                auto const& location = instruction_locator[declared->index];
+                if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
+                  auto const& parsed_position = output_archive[location.source.index];
+                  if(auto* declare_locator = parsed_position.get_if_declare()) {
+                    return o << declare_locator->name;
+                  }
+                }
+              } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
+                auto const& location = instruction_locator[axiom->index];
+                if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
+                  auto const& parsed_position = output_archive[location.source.index];
+                  if(auto* axiom_locator = parsed_position.get_if_axiom()) {
+                    return o << axiom_locator->name;
+                  }
+                }
+              }
+            }
+            return o << "ext_" << ext_index;
+          }
+        };
+        auto deep_format = expression::format::FormatContext{
+          .expression_context = expression_context,
+          .force_expansion = [&](std::uint64_t ext_index){ return true; },
           .write_external = [&](std::ostream& o, std::uint64_t ext_index) -> std::ostream& {
             if(fixed_names.contains(ext_index)) {
               return o << fixed_names.at(ext_index);
@@ -357,7 +402,14 @@ int main(int argc, char** argv) {
           }
         };
 
-        std::cout << "Final: " << fancy_format(expression_context.reduce(eval_result.result.value)) << " of type " << fancy_format(expression_context.reduce(eval_result.result.type)) << "\n";
+        auto remaining_equations = solve_routine.get_equations();
+        for(auto const& [lhs, rhs] : remaining_equations) {
+          std::cout << fancy_format(lhs) << " =?= " << fancy_format(rhs) << "\n";
+        }
+
+        std::cout << "Final: " << fancy_format(eval_result.result.value) << " of type " << fancy_format(eval_result.result.type) << "\n";
+        std::cout << "Deep: " << deep_format(eval_result.result.value) << " of type " << deep_format(eval_result.result.type) << "\n";
+
       } else {
         auto const& err = resolved.get_error();
         for(auto const& bad_id : err.bad_ids) {

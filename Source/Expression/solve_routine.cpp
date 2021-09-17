@@ -285,10 +285,19 @@ namespace expression::solver {
     void run() {
       while(step());
     }
+    std::vector<std::pair<tree::Expression, tree::Expression> > get_equations() {
+      std::vector<std::pair<tree::Expression, tree::Expression> > ret;
+      for(auto& solver : solvers) {
+        auto eqs = solver.get_equations();
+        ret.insert(ret.end(), eqs.begin(), eqs.end());
+      }
+      return ret;
+    }
   };
   Routine::Routine(compiler::evaluate::EvaluateResult& input, expression::Context& expression_context, StandardSolverContext solver_context):impl(std::make_unique<Impl>(input, expression_context, std::move(solver_context))) {}
   Routine::Routine(Routine&&) = default;
   Routine& Routine::operator=(Routine&&) = default;
   Routine::~Routine() = default;
   void Routine::run() { return impl->run(); }
+  std::vector<std::pair<tree::Expression, tree::Expression> > Routine::get_equations() { return impl->get_equations(); }
 }

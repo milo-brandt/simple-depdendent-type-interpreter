@@ -108,7 +108,7 @@ namespace expression::format {
             response.merge(write_expression(std::move(apply.rhs), {
               .o = options.o,
               .parenthesize_application = true,
-              .parenthesize_lambda = false,
+              .parenthesize_lambda = !options.parenthesize_application,
               .parenthesize_arrow = true,
               .arg_count = options.arg_count
             }));

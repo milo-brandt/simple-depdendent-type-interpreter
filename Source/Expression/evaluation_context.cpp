@@ -192,8 +192,9 @@ namespace expression {
     ROOT_REDUCTION_START:
     for(auto const& rule : rules) {
       if(!filter(rule)) continue;
-      if(term_matches(tree, rule.pattern)) {
-        replace_with_substitution_at(&tree, rule.pattern, rule.replacement);
+      auto vec = find_all_matches(tree, rule.pattern);
+      if(!vec.empty()) {
+        replace_with_substitution_at(vec[0], rule.pattern, rule.replacement);
         goto ROOT_REDUCTION_START;
       }
     }
