@@ -223,7 +223,9 @@ namespace expression::solver {
           stack.type_of(context.expression_context(), replacement)
         );
         if(!next_type_opt) std::terminate();
-        auto var = context.introduce_variable(std::move(next_type_opt->domain));
+        auto var = context.introduce_variable(stack.instance_of_type_family(context.expression_context(),
+         std::move(next_type_opt->domain)
+       ));
         variables.insert(var);
         replacement = tree::Apply{std::move(replacement), apply_args_enumerated(tree::External{var}, spec.pattern_args.size())};
         equations.push_back({
