@@ -1,0 +1,8 @@
+block {
+  let X = \T:Type.block {
+    let Y = Type;
+    Y
+  };
+  let Z = _;
+  Z
+}

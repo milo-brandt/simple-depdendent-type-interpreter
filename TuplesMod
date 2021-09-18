@@ -1,0 +1,50 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Trivial : Type;
+  axiom element : Trivial;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let one = succ zero;
+  let two = succ one;
+  let three = succ two;
+  let four = succ three;
+  let five = succ four;
+
+  axiom TypeList : Type;
+  axiom empty : TypeList;
+  axiom cons : Type -> TypeList -> TypeList;
+
+  axiom Tuple : TypeList -> Type;
+  axiom t_empty : Tuple empty;
+  axiom t_cons : (T : Type) -> (list : TypeList) -> T -> Tuple list -> Tuple (cons T list);
+
+  let ListMod = \T:Type.block {
+    axiom List : Type;
+    axiom emp : List;
+    axiom con : T -> List -> List;
+
+    declare cat : List -> List -> List;
+    rule cat emp l = l;
+    rule cat (con head tail) l = con head (cat tail l);
+
+    t_cons _ _ List \\ t_cons _ _ emp \\ t_cons _ _ con \\ t_cons _ _ cat t_empty
+  };
+
+  let List = _;
+  let emp = _;
+  let con = _;
+  let cat = _;
+
+  let eq_force : Id _ ListMod \T.t_cons _ _ (List T) \\ t_cons _ _ (emp T) \\ t_cons _ _ (con T) \\ t_cons _ _ (cat T) t_empty = refl _ _;
+
+  cat _ (con _ one \\ con _ two \\ emp _) (con _ three \\ con _ four \\ emp _)
+}

@@ -56,12 +56,13 @@ namespace compiler::instruction {
         std::vector<located_output::Command> old_commands;
         std::swap(commands, old_commands);
         auto old_stack_size = output_stack_size;
+        auto old_locals_size = locals_stack.size();
         locals_stack.push_back(output_stack_size);
         callback(located_output::Local{
           .local_index = output_stack_size++,
           .source = arg_explanation
         });
-        locals_stack.pop_back();
+        locals_stack.erase(locals_stack.begin() + old_locals_size, locals_stack.end()); //restore stack
         output_stack_size = old_stack_size;
         auto for_all_command = located_output::ForAll{
           .type = std::move(base_type),
