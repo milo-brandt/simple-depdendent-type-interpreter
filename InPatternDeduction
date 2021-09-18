@@ -7,5 +7,5 @@ block {
 
   rule unwrap T (wrap (Q T) x) = x;
 
-  unwrap
+  unwrap _ (wrap _ wrap)
 }

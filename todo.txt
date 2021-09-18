@@ -1,0 +1,27 @@
+*************
+High priority
+*************
+- Add support for C++ types (string, int most importantly - maybe vector too)
+- Allow interactive loading of files
+- Add an IO monad
+- Add a system of traits
+- Add a module system
+- Add automated testing
+- Improve error message generation (esp. for when equations fail to solve)
+
+************
+Mid priority (as needed)
+************
+- Optimize expression contexts.
+  - Probably faster to use shared_ptrs to avoid copying.
+  - Can organize rules by their head.
+  - Can add memoization (even possibly allow unique-ing of expressions)
+  - Could refactor to a system of events and callbacks to avoid re-checking expressions when nothing's changed
+
+************
+Low priority
+************
+- Allow easy deduction of parts of rules - e.g. write unwrap _ (wrap _ x) = x.
+- Revamp web interface
+- Add other rules for equation solving
+  - e.g. elimination of variables not held in common, expansion of tuple-like types,
