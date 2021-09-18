@@ -127,24 +127,31 @@ namespace expression::solver {
     struct AsymmetricExplodeSpec {
       std::uint64_t pattern_head;
       std::vector<std::uint64_t> pattern_args;
-      std::uint64_t irreducible_head;
+      std::variant<tree::External, tree::Arg> irreducible_head;
       std::vector<tree::Expression> irreducible_args;
     };
-    std::optional<AsymmetricExplodeSpec> get_asymmetric_explode_from_equation(tree::Expression const& lhs, tree::Expression const& rhs, std::unordered_set<std::uint64_t> const& variables) {
+    struct AsymmetricHeadFailure{};
+    std::variant<std::monostate, AsymmetricHeadFailure, AsymmetricExplodeSpec> get_asymmetric_explode_from_equation(tree::Expression const& lhs, tree::Expression const& rhs, std::unordered_set<std::uint64_t> const& variables) {
       //first must check lhs is head-closed!
       if(auto def_form = is_term_in_definition_form(lhs, variables)) {
         auto unfolded = unfold(rhs);
-        if(auto* external = unfolded.head.get_if_external()) {
-          AsymmetricExplodeSpec ret{
-            .pattern_head = def_form->head,
-            .pattern_args = std::move(def_form->arg_list),
-            .irreducible_head = external->external_index,
-            .irreducible_args = std::move(unfolded.args)
-          };
-          return ret;
+        AsymmetricExplodeSpec ret{
+          .pattern_head = def_form->head,
+          .pattern_args = std::move(def_form->arg_list),
+          .irreducible_args = std::move(unfolded.args)
+        };
+        if(auto* arg = unfolded.head.get_if_arg()) {
+          if(def_form->arg_to_index.contains(arg->arg_index)) {
+            ret.irreducible_head = tree::Arg{def_form->arg_to_index.at(arg->arg_index)};
+          } else {
+            return AsymmetricHeadFailure{};
+          }
+        } else {
+          ret.irreducible_head = unfolded.head.get_external();
         }
+        return ret;
       }
-      return std::nullopt;
+      return std::monostate{};
     }
   }
   struct Solver::Impl {
@@ -209,28 +216,18 @@ namespace expression::solver {
       }
       return AttemptResult::nothing;
     }
-    /*void process_asymmetric_explosion(std::uint64_t index, expression::Stack stack, AsymmetricExplodeSpec spec) {
-      tree::Expression type = context.expression_context().get_external(spec.irreducible_head).type;
+    void process_asymmetric_explosion(std::uint64_t index, expression::Stack stack, AsymmetricExplodeSpec spec) {
+      auto replacement = std::visit([](auto const& x) -> tree::Expression { return x; }, spec.irreducible_head);
       for(std::uint64_t i = 0; i < spec.irreducible_args.size(); ++i) {
-        type = context.expression_context().reduce(std::move(type));
-        auto [domain, codomain] = [&] {
-          if(auto* lhs_apply = type.get_if_apply()) {
-            if(auto* inner_apply = lhs_apply->lhs.get_if_apply()) {
-              if(auto* lhs_ext = inner_apply->lhs.get_if_external()) {
-                if(lhs_ext->external_index == context.expression_context().primitives.arrow) {
-                  return std::make_pair(std::move(inner_apply->rhs), std::move(lhs_apply->rhs));
-                }
-              }
-            }
-          }
-          std::terminate();
-        }();
-
-        auto var = context.introduce_variable();
+        auto next_type_opt = context.expression_context().get_domain_and_codomain(
+          stack.type_of(context.expression_context(), replacement)
+        );
+        if(!next_type_opt) std::terminate();
+        auto var = context.introduce_variable(std::move(next_type_opt->domain));
         variables.insert(var);
         replacement = tree::Apply{std::move(replacement), apply_args_enumerated(tree::External{var}, spec.pattern_args.size())};
         equations.push_back({
-          .depth = depth,
+          .stack = stack,
           .lhs = apply_args_vector(tree::External{var}, spec.pattern_args),
           .rhs = spec.irreducible_args[i],
           .parent = index
@@ -250,7 +247,7 @@ namespace expression::solver {
         auto asymmetric = get_asymmetric_explode_from_equation(lhs.expression, rhs.expression, variables);
         if(std::holds_alternative<AsymmetricHeadFailure>(asymmetric)) return AttemptResult::failed;
         if(auto* success = std::get_if<AsymmetricExplodeSpec>(&asymmetric)) {
-          process_asymmetric_explosion(index, depth, std::move(*success));
+          process_asymmetric_explosion(index, stack, std::move(*success));
           return AttemptResult::handled;
         }
       }
@@ -258,12 +255,12 @@ namespace expression::solver {
         auto asymmetric = get_asymmetric_explode_from_equation(rhs.expression, lhs.expression, variables);
         if(std::holds_alternative<AsymmetricHeadFailure>(asymmetric)) return AttemptResult::failed;
         if(auto* success = std::get_if<AsymmetricExplodeSpec>(&asymmetric)) {
-          process_asymmetric_explosion(index, depth, std::move(*success));
+          process_asymmetric_explosion(index, stack, std::move(*success));
           return AttemptResult::handled;
         }
       }
       return AttemptResult::nothing;
-    }*/
+    }
     AttemptResult try_to_judge_equal(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.expression == rhs.expression) {
         return AttemptResult::handled;
@@ -283,7 +280,7 @@ namespace expression::solver {
         &Impl::try_to_extract_rule,
         &Impl::try_to_deepen,
         &Impl::try_to_explode_symmetric,
-      //  &Impl::try_to_explode_asymmetric,
+        &Impl::try_to_explode_asymmetric,
         &Impl::try_to_judge_equal)
       );
       auto& equation_final = equations[index]; //Vector might move!!!
