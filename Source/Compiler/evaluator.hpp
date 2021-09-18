@@ -5,6 +5,7 @@
 #include "pattern_outline.hpp"
 #include "../Expression/evaluation_context.hpp"
 #include "../Utility/function.hpp"
+#include "../Expression/stack.hpp"
 #include <unordered_map>
 
 namespace compiler::evaluate {
