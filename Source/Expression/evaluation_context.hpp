@@ -44,6 +44,11 @@ namespace expression {
     TypedValue get_external(std::uint64_t);
     tree::Expression reduce(tree::Expression tree);
     tree::Expression reduce_filer_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);
+    struct FunctionData {
+      tree::Expression domain;
+      tree::Expression codomain;
+    };
+    std::optional<FunctionData> get_domain_and_codomain(tree::Expression);
     template<std::uint64_t count, class Callback> decltype(auto) create_variables(Callback&& callback) {
       bool called_build = false;
       decltype(auto) ret = [&]<std::uint64_t... indices>(std::integer_sequence<std::uint64_t, indices...>) {

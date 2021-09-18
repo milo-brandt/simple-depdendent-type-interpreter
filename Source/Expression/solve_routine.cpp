@@ -136,7 +136,7 @@ namespace expression::solver {
           solver_context.indeterminates.insert(var);
       }
       for(auto& cast : input.casts) {
-        auto index = solvers[0].add_equation(cast.depth, cast.source_type, cast.target_type);
+        auto index = solvers[0].add_equation(cast.stack, cast.source_type, cast.target_type);
         casts.push_back({
           .solver_index = 0,
           .type_check_equation = index,
@@ -144,7 +144,7 @@ namespace expression::solver {
         });
       }
       for(auto& rule : input.rules) {
-        auto index = solvers[0].add_equation(rule.depth, rule.pattern_type, rule.replacement_type);
+        auto index = solvers[0].add_equation(rule.stack, rule.pattern_type, rule.replacement_type);
         rules.push_back({
           .solver_index = 0,
           .type_check_equation = index,
@@ -163,7 +163,7 @@ namespace expression::solver {
       auto cast_erase = std::remove_if(casts.begin(), casts.end(), [&](auto cast_info) {
         if(solvers[cast_info.solver_index].is_equation_satisfied(cast_info.type_check_equation)) {
           auto const& cast = *cast_info.cast;
-          solver_context.define_variable(cast.variable, cast.depth, cast.source);
+          solver_context.define_variable(cast.variable, cast.stack.depth(), cast.source);
           return true;
         } else {
           return false;
@@ -199,7 +199,7 @@ namespace expression::solver {
             });
             auto& rule = *rule_routines.back();
             for(auto& cast : rule.evaluated.casts) {
-              auto index = solver.add_equation(cast.depth, cast.source_type, cast.target_type);
+              auto index = solver.add_equation(cast.stack, cast.source_type, cast.target_type);
               casts.push_back({
                 .solver_index = solve_index,
                 .type_check_equation = index,
@@ -238,7 +238,7 @@ namespace expression::solver {
             for(auto constraint : instance->pattern.constraints) {
               auto base_value = capture_vec[constraint.capture_point];
               auto new_value = expression::substitute_into_replacement(capture_vec, constraint.equivalent_expression);
-              solver.add_equation(0, std::move(base_value), std::move(new_value));
+              solver.add_equation(Stack::empty(expression_context), std::move(base_value), std::move(new_value));
             }
             instance->check_solver = solve_index;
             made_progress = true;

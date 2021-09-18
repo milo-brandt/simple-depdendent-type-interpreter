@@ -10,14 +10,14 @@
 
 namespace compiler::evaluate {
   struct Cast {
-    std::uint64_t depth;
+    expression::Stack stack;
     std::uint64_t variable;
     expression::tree::Expression source_type;
     expression::tree::Expression source;
     expression::tree::Expression target_type;
   };
   struct Rule {
-    std::uint64_t depth;
+    expression::Stack stack;
     expression::tree::Expression pattern_type;
     expression::tree::Expression pattern;
     expression::tree::Expression replacement_type;

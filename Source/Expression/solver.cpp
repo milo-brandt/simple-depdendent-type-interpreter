@@ -6,7 +6,7 @@
 namespace expression::solver {
   namespace {
     struct Equation {
-      std::uint64_t depth;
+      expression::Stack stack;
       tree::Expression lhs;
       tree::Expression rhs;
       std::uint64_t parent = std::uint64_t(-1); //-1 for no parent
@@ -127,40 +127,31 @@ namespace expression::solver {
     struct AsymmetricExplodeSpec {
       std::uint64_t pattern_head;
       std::vector<std::uint64_t> pattern_args;
-      std::variant<tree::External, tree::Arg> irreducible_head; //if arg, gives proper position for pattern
+      std::uint64_t irreducible_head;
       std::vector<tree::Expression> irreducible_args;
     };
-    struct AsymmetricHeadFailure {};
-    std::variant<std::monostate, AsymmetricHeadFailure, AsymmetricExplodeSpec> get_asymmetric_explode_from_equation(tree::Expression const& lhs, tree::Expression const& rhs, std::unordered_set<std::uint64_t> const& variables) {
-      //first must check rhs is head-closed!
+    std::optional<AsymmetricExplodeSpec> get_asymmetric_explode_from_equation(tree::Expression const& lhs, tree::Expression const& rhs, std::unordered_set<std::uint64_t> const& variables) {
+      //first must check lhs is head-closed!
       if(auto def_form = is_term_in_definition_form(lhs, variables)) {
         auto unfolded = unfold(rhs);
-
-        AsymmetricExplodeSpec ret{
-          .pattern_head = def_form->head,
-          .pattern_args = std::move(def_form->arg_list),
-          .irreducible_args = std::move(unfolded.args)
-        };
-
-        if(auto* head_arg = unfolded.head.get_if_arg()) {
-          if(!def_form->arg_to_index.contains(head_arg->arg_index)) {
-            return AsymmetricHeadFailure{}; //illegal!
-          } else {
-            ret.irreducible_head = tree::Arg{def_form->arg_to_index.at(head_arg->arg_index)};
-          }
-        } else {
-          ret.irreducible_head = unfolded.head.get_external();
+        if(auto* external = unfolded.head.get_if_external()) {
+          AsymmetricExplodeSpec ret{
+            .pattern_head = def_form->head,
+            .pattern_args = std::move(def_form->arg_list),
+            .irreducible_head = external->external_index,
+            .irreducible_args = std::move(unfolded.args)
+          };
+          return ret;
         }
-        return ret;
       }
-      return std::monostate{};
+      return std::nullopt;
     }
   }
   struct Solver::Impl {
     Context context;
     std::vector<Equation> equations;
     std::unordered_set<std::uint64_t> variables;
-    AttemptResult try_to_extract_rule(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_extract_rule(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
       if(auto extracted_rule = get_rule_from_equation(lhs.expression, rhs.expression, variables, context)) {
         context.define_variable(extracted_rule->head, extracted_rule->arg_count, std::move(extracted_rule->replacement));
         variables.erase(extracted_rule->head);
@@ -169,12 +160,28 @@ namespace expression::solver {
         return AttemptResult::nothing;
       }
     }
-    AttemptResult try_to_deepen(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
-      if(lhs.state == SimplificationState::lambda_like || rhs.state == SimplificationState::lambda_like) {
+    AttemptResult try_to_deepen(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
+      if(lhs.state == SimplificationState::lambda_like) {
+        auto lhs_type = context.expression_context().get_domain_and_codomain(
+          stack.type_of(context.expression_context(), lhs.expression)
+        );
+        if(!lhs_type) std::terminate();
         equations.push_back({
-          .depth = depth + 1,
-          .lhs =  tree::Apply{lhs.expression, tree::Arg{depth}},
-          .rhs = tree::Apply{rhs.expression, tree::Arg{depth}},
+          .stack = stack.extend(context.expression_context(), std::move(lhs_type->domain)),
+          .lhs =  tree::Apply{lhs.expression, tree::Arg{stack.depth()}},
+          .rhs = tree::Apply{rhs.expression, tree::Arg{stack.depth()}},
+          .parent = index
+        });
+        return AttemptResult::handled;
+      } else if(rhs.state == SimplificationState::lambda_like) {
+        auto rhs_type = context.expression_context().get_domain_and_codomain(
+          stack.type_of(context.expression_context(), rhs.expression)
+        );
+        if(!rhs_type) std::terminate();
+        equations.push_back({
+          .stack = stack.extend(context.expression_context(), std::move(rhs_type->domain)),
+          .lhs =  tree::Apply{lhs.expression, tree::Arg{stack.depth()}},
+          .rhs = tree::Apply{rhs.expression, tree::Arg{stack.depth()}},
           .parent = index
         });
         return AttemptResult::handled;
@@ -182,14 +189,14 @@ namespace expression::solver {
         return AttemptResult::nothing;
       }
     }
-    AttemptResult try_to_explode_symmetric(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_explode_symmetric(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.state == SimplificationState::head_closed && rhs.state == SimplificationState::head_closed) {
         auto unfold_lhs = unfold(lhs.expression);
         auto unfold_rhs = unfold(rhs.expression);
         if(unfold_lhs.head == unfold_rhs.head && unfold_lhs.args.size() == unfold_rhs.args.size()) {
           for(std::uint64_t i = 0; i < unfold_lhs.args.size(); ++i) {
             equations.push_back({
-              .depth = depth,
+              .stack = stack,
               .lhs = unfold_lhs.args[i],
               .rhs = unfold_rhs.args[i],
               .parent = index
@@ -202,14 +209,24 @@ namespace expression::solver {
       }
       return AttemptResult::nothing;
     }
-    /*void process_asymmetric_explosion(std::uint64_t index, std::uint64_t depth, AsymmetricExplodeSpec spec) {
-      tree::Expression replacement = std::visit([](auto const& v) -> tree::Expression { return v; }, spec.irreducible_head);
-
+    /*void process_asymmetric_explosion(std::uint64_t index, expression::Stack stack, AsymmetricExplodeSpec spec) {
+      tree::Expression type = context.expression_context().get_external(spec.irreducible_head).type;
       for(std::uint64_t i = 0; i < spec.irreducible_args.size(); ++i) {
-        auto var = context.introduce_variable(*//*introduction_explanation::Exploded{
-          .equation_index = equation_index,
-          .part_index = i
-        }*//*);
+        type = context.expression_context().reduce(std::move(type));
+        auto [domain, codomain] = [&] {
+          if(auto* lhs_apply = type.get_if_apply()) {
+            if(auto* inner_apply = lhs_apply->lhs.get_if_apply()) {
+              if(auto* lhs_ext = inner_apply->lhs.get_if_external()) {
+                if(lhs_ext->external_index == context.expression_context().primitives.arrow) {
+                  return std::make_pair(std::move(inner_apply->rhs), std::move(lhs_apply->rhs));
+                }
+              }
+            }
+          }
+          std::terminate();
+        }();
+
+        auto var = context.introduce_variable();
         variables.insert(var);
         replacement = tree::Apply{std::move(replacement), apply_args_enumerated(tree::External{var}, spec.pattern_args.size())};
         equations.push_back({
@@ -225,11 +242,10 @@ namespace expression::solver {
         spec.pattern_head,
         spec.pattern_args.size(),
         std::move(replacement)
-      );*//*, rule_explanation::FromEquation{equation_index}*/
-/*
+      );
       variables.erase(spec.pattern_head);
-    }*/
-    /*AttemptResult try_to_explode_asymmetric(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
+    }
+    AttemptResult try_to_explode_asymmetric(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
       if(rhs.state == SimplificationState::head_closed) {
         auto asymmetric = get_asymmetric_explode_from_equation(lhs.expression, rhs.expression, variables);
         if(std::holds_alternative<AsymmetricHeadFailure>(asymmetric)) return AttemptResult::failed;
@@ -248,7 +264,7 @@ namespace expression::solver {
       }
       return AttemptResult::nothing;
     }*/
-    AttemptResult try_to_judge_equal(std::uint64_t index, std::uint64_t depth, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_judge_equal(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.expression == rhs.expression) {
         return AttemptResult::handled;
       } else {
@@ -262,7 +278,7 @@ namespace expression::solver {
 
       AttemptResult ret = AttemptResult::nothing;
       std::apply([&](auto... tests) {
-        (is_definitive(ret = (this->*tests)(index, equation.depth, lhs, rhs)) || ...);
+        (is_definitive(ret = (this->*tests)(index, equation.stack, lhs, rhs)) || ...);
       }, std::make_tuple(
         &Impl::try_to_extract_rule,
         &Impl::try_to_deepen,
@@ -310,10 +326,10 @@ namespace expression::solver {
     void register_variable(std::uint64_t index) {
       variables.insert(index);
     }
-    std::uint64_t add_equation(std::uint64_t depth, tree::Expression lhs, tree::Expression rhs) {
+    std::uint64_t add_equation(expression::Stack stack, tree::Expression lhs, tree::Expression rhs) {
       auto ret = equations.size();
       equations.push_back({
-        .depth = depth,
+        .stack = stack,
         .lhs = std::move(lhs),
         .rhs = std::move(rhs)
       });
@@ -348,8 +364,8 @@ namespace expression::solver {
   void Solver::register_variable(std::uint64_t index) {
     return impl->register_variable(index);
   }
-  std::uint64_t Solver::add_equation(std::uint64_t depth, tree::Expression lhs, tree::Expression rhs) {
-    return impl->add_equation(depth, std::move(lhs), std::move(rhs));
+  std::uint64_t Solver::add_equation(expression::Stack stack, tree::Expression lhs, tree::Expression rhs) {
+    return impl->add_equation(std::move(stack), std::move(lhs), std::move(rhs));
   }
   bool Solver::is_equation_satisfied(std::uint64_t index) {
     return impl->is_equation_satisfied(index);

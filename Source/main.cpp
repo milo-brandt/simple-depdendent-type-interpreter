@@ -283,10 +283,10 @@ int main(int argc, char** argv) {
           std::cout << "Position: " << format_info(str_pos, source) << "\n";
         }
         for(auto const& cast : eval_result.casts) {
-          std::cout << "Cast (depth " << cast.depth << ") " << expression::raw_format(cast.source) << " from " << expression::raw_format(cast.source_type) << " to " << expression::raw_format(cast.target_type) << " as " << cast.variable << "\n";
+          std::cout << "Cast (depth " << cast.stack.depth() << ") " << expression::raw_format(cast.source) << " from " << expression::raw_format(cast.source_type) << " to " << expression::raw_format(cast.target_type) << " as " << cast.variable << "\n";
         }
         for(auto const& rule : eval_result.rules) {
-          std::cout << "Rule (depth " << rule.depth << ") " << expression::raw_format(rule.pattern) << " from " << expression::raw_format(rule.pattern_type) << " to " << expression::raw_format(rule.replacement_type) << " as " << expression::raw_format(rule.replacement) << "\n";
+          std::cout << "Rule (depth " << rule.stack.depth() << ") " << expression::raw_format(rule.pattern) << " from " << expression::raw_format(rule.pattern_type) << " to " << expression::raw_format(rule.replacement_type) << " as " << expression::raw_format(rule.replacement) << "\n";
         }
         //Hard thing: How to know when rules are allowable?
         std::cout << "Result: " << expression::raw_format(eval_result.result.value) << " of type " << expression::raw_format(eval_result.result.type) << "\n";

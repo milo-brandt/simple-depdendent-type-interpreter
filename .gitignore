@@ -5,3 +5,4 @@ Web/resources/codemirror/**
 **/*_impl.hpp
 **/*_impl.cpp
 **/*_impl.inl
+Makefile

@@ -56,11 +56,14 @@ namespace expression::solver {
       .replacement = std::move(replacement)
     });
   }
-  /*std::uint64_t StandardSolverContext::introduce_variable() {
-    auto ret = evaluation.add_declaration();
+  std::uint64_t StandardSolverContext::introduce_variable(tree::Expression type) {
+    auto ret = evaluation.create_variable({
+      .is_axiom = false,
+      .type = std::move(type)
+    });
     indeterminates.insert(ret);
     return ret;
-  }*/
+  }
   bool StandardSolverContext::term_depends_on(std::uint64_t term, std::uint64_t possible_dependency) {
     return term == possible_dependency;
   }

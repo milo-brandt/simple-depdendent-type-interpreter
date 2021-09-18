@@ -14,9 +14,9 @@ namespace expression {
   };
   Stack::Stack(std::shared_ptr<Impl> impl):impl(std::move(impl)) {}
 
-  std::uint64_t Stack::depth() { return impl->depth; }
-  tree::Expression Stack::type_family_type() { return impl->fam; }
-  tree::Expression Stack::apply_args(tree::Expression in) {
+  std::uint64_t Stack::depth() const { return impl->depth; }
+  tree::Expression Stack::type_family_type() const { return impl->fam; }
+  tree::Expression Stack::apply_args(tree::Expression in) const {
     for(std::uint64_t i = 0; i < depth(); ++i) {
       in = tree::Apply{
         std::move(in),
@@ -25,7 +25,7 @@ namespace expression {
     }
     return std::move(in);
   }
-  tree::Expression Stack::instance_of_type_family(Context& context, tree::Expression expr) {
+  tree::Expression Stack::instance_of_type_family(Context& context, tree::Expression expr) const {
     auto var = context.create_variable({
       .is_axiom = false,
       .type = type_family_type()
@@ -39,7 +39,7 @@ namespace expression {
       tree::External{var}
     };
   }
-  tree::Expression Stack::type_of_arg(std::uint64_t i) {
+  tree::Expression Stack::type_of_arg(std::uint64_t i) const {
     if(i >= impl->depth) std::terminate();
     Impl* ptr = impl.get();
     while(i != ptr->depth - 1) {
@@ -61,7 +61,7 @@ namespace expression {
       }
     )};
   }
-  Stack Stack::extend(Context& context, tree::Expression extension_family) {
+  Stack Stack::extend(Context& context, tree::Expression extension_family) const {
     return context.create_variables<4>([&](auto&& build, auto inner_constant_family, auto family_over, auto as_fibration, auto var_p) {
       tree::Expression new_fam = tree::Apply{
         impl->var,
@@ -137,6 +137,24 @@ namespace expression {
         std::move(new_fam),
         expression::tree::External{var_p}
       )};
+    });
+  }
+  tree::Expression Stack::type_of(Context& context, tree::Expression expression) const {
+    return expression.visit(mdb::overloaded{
+      [&](tree::Apply& apply) -> tree::Expression {
+        auto lhs_type = type_of(context, apply.lhs);
+        if(auto func_data = context.get_domain_and_codomain(std::move(lhs_type))) {
+          return tree::Apply{std::move(func_data->codomain), std::move(apply.rhs)};
+        } else {
+          std::terminate();
+        }
+      },
+      [&](tree::External& external) -> tree::Expression {
+        return context.external_info.at(external.external_index).type;
+      },
+      [&](tree::Arg& arg) -> tree::Expression {
+        return type_of_arg(arg.arg_index);
+      }
     });
   }
 }

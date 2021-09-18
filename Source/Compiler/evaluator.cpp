@@ -39,7 +39,7 @@ namespace compiler::evaluate {
         auto cast_var = make_variable(new_type, cast_var_explanation, local_context);
         auto var = expression::unfold_ref(cast_var).head->get_external().external_index;
         casts.push_back({
-          .depth = local_context.depth(),
+          .stack = local_context,
           .variable = var,
           .source_type = std::move(input.type),
           .source = std::move(input.value),
@@ -173,7 +173,7 @@ namespace compiler::evaluate {
             auto pattern = evaluate(rule.pattern, local_context);
             auto replacement = evaluate(rule.replacement, local_context);
             rules.push_back({
-              .depth = local_context.depth(),
+              .stack = local_context,
               .pattern_type = std::move(pattern.type),
               .pattern = std::move(pattern.value),
               .replacement_type = std::move(replacement.type),
@@ -279,7 +279,7 @@ namespace compiler::evaluate {
                         });
                         variables.insert(std::make_pair(cast_var, pattern_variable_explanation::ApplyCast{ count, segment.index() }));
                         casts.push_back({
-                          .depth = 0,
+                          .stack = expression::Stack::empty(expression_context),
                           .variable = cast_var,
                           .source_type = val.type,
                           .source = val.value,

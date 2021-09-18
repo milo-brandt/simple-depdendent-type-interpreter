@@ -206,4 +206,20 @@ namespace expression {
       .type = external_info[i].type
     };
   }
+  std::optional<Context::FunctionData> Context::get_domain_and_codomain(tree::Expression in) {
+    in = reduce(std::move(in));
+    if(auto* lhs_apply = in.get_if_apply()) {
+      if(auto* inner_apply = lhs_apply->lhs.get_if_apply()) {
+        if(auto* lhs_ext = inner_apply->lhs.get_if_external()) {
+          if(lhs_ext->external_index == primitives.arrow) {
+            return FunctionData{
+              .domain = std::move(inner_apply->rhs),
+              .codomain = std::move(lhs_apply->rhs)
+            };
+          }
+        }
+      }
+    }
+    return std::nullopt;
+  }
 }

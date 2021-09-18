@@ -1,6 +1,9 @@
 # Source Generator
 
 shape = TypeErasedKind(namespace = "expression::solver", name = "Context", functions = [
+    MemberFunction("expression_context",
+        ret="expression::Context&"
+    ),
     MemberFunction("simplify",
         ret="Simplification",
         args=[("tree::Expression","base")]
@@ -9,9 +12,10 @@ shape = TypeErasedKind(namespace = "expression::solver", name = "Context", funct
         ret="void",
         args=[("std::uint64_t","variable"),("std::uint64_t", "args"),("tree::Expression", "body")]
     ),
-    #MemberFunction("introduce_variable",
-    #    ret="std::uint64_t"
-    #),
+    MemberFunction("introduce_variable",
+        ret="std::uint64_t",
+        args=[("tree::Expression","type")]
+    ),
     MemberFunction("term_depends_on",
         ret="bool",
         args=[("std::uint64_t", "term"), ("std::uint64_t", "possible_dependency")]

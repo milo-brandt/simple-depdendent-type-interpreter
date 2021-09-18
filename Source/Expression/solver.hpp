@@ -3,6 +3,7 @@
 
 #include "expression_tree.hpp"
 #include "solver_context.hpp"
+#include "stack.hpp"
 
 /*
 Solving algorithm: repeatedly loop over all equations (as long as progress is being made), and apply the following steps.
@@ -78,7 +79,7 @@ namespace expression::solver {
     Solver& operator=(Solver&&);
     ~Solver();
     void register_variable(std::uint64_t);
-    std::uint64_t add_equation(std::uint64_t depth, tree::Expression lhs, tree::Expression rhs);
+    std::uint64_t add_equation(expression::Stack, tree::Expression lhs, tree::Expression rhs);
     bool is_equation_satisfied(std::uint64_t);
     bool is_fully_satisfied();
     bool try_to_make_progress(); //returns true if progress was made.
