@@ -1,0 +1,28 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let one = succ zero;
+  let two = succ one;
+  let three = succ two;
+  let four = succ three;
+  let five = succ four;
+
+  declare NAryOp : Nat -> Type;
+  rule NAryOp zero = Nat;
+  rule NAryOp (succ n) = Nat -> NAryOp n;
+
+  declare add : NAryOp two;
+  rule add zero x = x;
+  rule add (succ x) y = succ (add x y);
+
+  declare multi_add_impl : (base : Nat) -> (n : Nat) -> NAryOp n;
+  rule multi_add_impl base zero = base;
+  rule multi_add_impl base (succ n) x = multi_add_impl (add base x) n;
+
+  declare multi_add : (n : Nat) -> NAryOp n;
+  rule multi_add = multi_add_impl zero;
+
+  multi_add four 
+}

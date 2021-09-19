@@ -1,0 +1,28 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  axiom Telescope : Nat -> Type;
+  axiom trivial : Telescope zero;
+  axiom cons : (n : Nat) -> (T : Type) -> (T -> Telescope n) -> Telescope (succ n);
+
+  declare Family : (n : Nat) -> Telescope n -> Type;
+  rule Family zero trivial = Type;
+  rule Family (succ n) (cons n T f) = (x : T) -> Family _ (f x);
+
+  declare extend : (n : Nat) -> (telescope : Telescope n) -> Family n telescope -> Telescope (succ n);
+  rule extend zero trivial T = cons _ _ \x:T.trivial;
+  rule extend (succ n) (cons n T f) fam = cons _ _ \x:T.extend n (f x) (fam x);
+
+  declare Instance : (n : Nat) -> (telescope : Telescope n) -> Family n telescope -> Type;
+  rule Instance zero trivial T = T;
+  rule Instance (succ n) (cons n T f) fam = (x : T) -> Instance n (f x) (fam x);
+
+  let base_telescope = extend _ (extend _ (extend _ trivial _) _) \x:Nat.\y:Nat.Id _ x y;
+
+  Family _ base_telescope
+}

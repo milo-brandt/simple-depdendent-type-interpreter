@@ -8,10 +8,13 @@ High priority
 - Add a module system
 - Add automated testing
 - Improve error message generation (esp. for when equations fail to solve)
+- Add syntax for comments
+- Add possibility for hidden arguments
 
 ************
 Mid priority (as needed)
 ************
+- Add destructuring Let statement
 - Optimize expression contexts.
   - Probably faster to use shared_ptrs to avoid copying.
   - Can organize rules by their head.
