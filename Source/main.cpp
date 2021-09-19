@@ -7,6 +7,8 @@
 #include "Expression/standard_solver_context.hpp"
 #include "Expression/solve_routine.hpp"
 #include "Expression/formatter.hpp"
+#include "Expression/data.hpp"
+#include "Expression/data_helper.hpp"
 
 #include <termcolor.hpp>
 #include <algorithm>
@@ -111,6 +113,9 @@ std::optional<expression::Rule> convert_to_rule(expression::tree::Expression con
           auto index = arg_convert.size();
           arg_convert.insert(std::make_pair(arg.arg_index, index));
           return expression::pattern::Wildcard{};
+        },
+        [&](expression::tree::Data const& data) -> std::optional<expression::pattern::Pattern> {
+          return std::nullopt;
         }
       });
     }
@@ -136,6 +141,9 @@ std::optional<expression::Rule> convert_to_rule(expression::tree::Expression con
           } else {
             return std::nullopt;
           }
+        },
+        [&](expression::tree::Data const& data) -> std::optional<expression::tree::Expression> {
+          return data; /* DATA BUG: Need to remap through data */
         }
       });
     }
@@ -150,6 +158,8 @@ std::optional<expression::Rule> convert_to_rule(expression::tree::Expression con
 }
 //block { axiom Nat : Type; axiom zero : Nat; declare f : Nat -> Nat; rule f zero = zero; f }
 int main(int argc, char** argv) {
+  using Data = expression::data::Data;
+
   /*located_output::Expression located_expr = located_output::Apply{
     .lhs = located_output::Identifier{.id = "hi", .position = "hi"},
     .rhs = located_output::Identifier{.id = "wassup", .position = "wassup"},
@@ -171,6 +181,32 @@ int main(int argc, char** argv) {
   std::cout << format(x.root()) << "\n";
   std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";*/
   expression::Context expression_context;
+  expression::data::SmallScalar<std::uint64_t> u64(expression_context);
+  auto square_head = expression_context.create_variable({
+    .is_axiom = false,
+    .type = expression::multi_apply(
+      expression::tree::External{expression_context.primitives.arrow},
+      expression::tree::External{u64.get_type_axiom()},
+      expression::multi_apply(
+        expression::tree::External{expression_context.primitives.constant},
+        expression::tree::External{expression_context.primitives.type},
+        expression::tree::External{u64.get_type_axiom()},
+        expression::tree::External{u64.get_type_axiom()}
+      )
+    )
+  });
+  expression_context.data_rules.push_back(expression::DataRule{
+    .pattern = expression::data_pattern::Apply{
+      expression::data_pattern::Fixed{square_head},
+      expression::data_pattern::Data{u64.get_type_index()}
+    },
+    .replace = [&](std::vector<expression::tree::Expression> args) {
+      auto in = (std::uint64_t&)args[0].get_data().data.storage;
+      return u64(in * in);
+    }
+  });
+
+
   auto embed = [&] (std::uint64_t index) -> expression::TypedValue {
     if(index == 0) {
       return expression_context.get_external(0);
@@ -182,6 +218,12 @@ int main(int argc, char** argv) {
       return expression_context.get_external(3);
     } else if(index == 4) {
       return expression_context.get_external(8);
+    } else if(index == 5) {
+      auto ret = u64(17);
+      auto t = ret.get_data().data.type_of();
+      return {std::move(ret), std::move(t)};
+    } else if(index == 6) {
+      return expression_context.get_external(square_head);
     } else {
       std::terminate();
     }
@@ -231,6 +273,10 @@ int main(int argc, char** argv) {
             return 3;
           } else if(str == "id") {
             return 4;
+          } else if(str == "seventeen") {
+            return 5;
+          } else if(str == "square") {
+            return 6;
           } else {
             return std::nullopt;
           }
@@ -316,7 +362,9 @@ int main(int argc, char** argv) {
 
         std::unordered_map<std::uint64_t, const char*> fixed_names = {
           {0, "Type"},
-          {1, "arrow"}
+          {1, "arrow"},
+          {u64.get_type_axiom(), "U64"},
+          {square_head, "square"}
         };
         auto is_explicit = [&](std::uint64_t ext_index) {
           namespace explanation = compiler::evaluate::variable_explanation;

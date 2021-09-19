@@ -8,6 +8,7 @@ shape = CompoundShape({
         ],
         "Arg": [],
         "External": [],
+        "Data": []
     }
 })
 output = shape.generate_instance(namespace = "expression::tree", data = {
@@ -18,6 +19,9 @@ output = shape.generate_instance(namespace = "expression::tree", data = {
         ],
         "External": [
             ("external_index", "std::uint64_t")
+        ],
+        "Data": [
+            ("data", "data::Data")
         ]
     }
 })
@@ -28,5 +32,6 @@ tree_def = TreeOutput(
 main_output = get_output("THIS_impl")
 
 main_output.write(
-    tree_def
+    tree_def,
+    relative_includes = ["data.hpp"]
 )

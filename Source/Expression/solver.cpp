@@ -97,6 +97,9 @@ namespace expression::solver {
           } else {
             return tree::Expression{ext};
           }
+        },
+        [&](tree::Data const& data) -> std::optional<tree::Expression> {
+          return data; /* DATA BUG */
         }
       });
     }

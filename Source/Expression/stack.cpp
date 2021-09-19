@@ -154,6 +154,9 @@ namespace expression {
       },
       [&](tree::Arg& arg) -> tree::Expression {
         return type_of_arg(arg.arg_index);
+      },
+      [&](tree::Data& data) -> tree::Expression {
+        return data.data.type_of();
       }
     });
   }

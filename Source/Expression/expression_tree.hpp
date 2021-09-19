@@ -3,10 +3,12 @@
 
 #include "expression_tree_impl.hpp"
 #include "pattern_tree_impl.hpp"
+#include "data_pattern_tree_impl.hpp"
 #include "../Utility/function.hpp"
 
 namespace expression {
   bool term_matches(tree::Expression const&, pattern::Pattern const&);
+  bool term_matches(tree::Expression const&, data_pattern::Pattern const&);
   struct NoMatchException : std::runtime_error {
     NoMatchException():std::runtime_error("Attempted to destructure non-existant match.") {}
   };
@@ -16,9 +18,13 @@ namespace expression {
   std::vector<tree::Expression*> destructure_match_ref(tree::Expression&, pattern::Pattern const&); //throws if not matching
   std::vector<tree::Expression const*> destructure_match_ref(tree::Expression const&, pattern::Pattern const&); //throws if not matching
   std::vector<tree::Expression> destructure_match(tree::Expression, pattern::Pattern const&); //throws if not matching
+  std::vector<tree::Expression> destructure_match(tree::Expression, data_pattern::Pattern const&); //throws if not matching
+
 
   std::vector<tree::Expression*> find_all_matches(tree::Expression&, pattern::Pattern const&);
   std::vector<tree::Expression const*> find_all_matches(tree::Expression const&, pattern::Pattern const&);
+  std::vector<tree::Expression*> find_all_matches(tree::Expression&, data_pattern::Pattern const&);
+  std::vector<tree::Expression const*> find_all_matches(tree::Expression const&, data_pattern::Pattern const&);
 
   struct NotEnoughArguments : std::runtime_error {
     NotEnoughArguments():std::runtime_error("Not enough arguments to substitute into replacement.") {}

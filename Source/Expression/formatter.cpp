@@ -19,7 +19,7 @@ namespace expression::format {
     struct Detail {
       FormatContext& context;
       tree::Expression reduce_legal(tree::Expression expr) {
-        return context.expression_context.reduce_filer_rules(std::move(expr), [&](Rule const& rule) {
+        return context.expression_context.reduce_filter_rules(std::move(expr), [&](Rule const& rule) {
           return context.force_expansion(get_pattern_head(rule.pattern));
         });
       }
@@ -125,6 +125,19 @@ namespace expression::format {
           [&](tree::External& external) {
             context.write_external(options.o, external.external_index);
             return Response{};
+          },
+          [&](tree::Data& data) {
+            Response ret{};
+            data.data.pretty_print(options.o, [&](tree::Expression sub_expr) {
+              ret.merge(write_expression(std::move(sub_expr), {
+                .o = options.o,
+                .parenthesize_application = false,
+                .parenthesize_lambda = true,
+                .parenthesize_arrow = false,
+                .arg_count = options.arg_count
+              }));
+            });
+            return ret;
           }
         });
       }

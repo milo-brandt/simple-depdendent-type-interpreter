@@ -77,6 +77,9 @@ namespace expression::solver {
               auto index = arg_convert.size();
               arg_convert.insert(std::make_pair(arg.arg_index, index));
               return expression::pattern::Wildcard{};
+            },
+            [&](expression::tree::Data const& data) -> std::optional<expression::pattern::Pattern> {
+              return std::nullopt;
             }
           });
         }
@@ -102,6 +105,9 @@ namespace expression::solver {
               } else {
                 return std::nullopt;
               }
+            },
+            [&](expression::tree::Expression const& data) -> std::optional<expression::tree::Expression> {
+              return data; /* DATA BUG */
             }
           });
         }

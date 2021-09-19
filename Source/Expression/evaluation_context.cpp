@@ -186,15 +186,29 @@ namespace expression {
         goto REDUCTION_START;
       }
     }
+    for(auto const& data_rule : data_rules) {
+      auto vec = find_all_matches(tree, data_rule.pattern);
+      if(!vec.empty()) {
+        *vec[0] = data_rule.replace(destructure_match(std::move(*vec[0]), data_rule.pattern));
+        goto REDUCTION_START;
+      }
+    }
     return tree;
   }
-  tree::Expression Context::reduce_filer_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter) {
+  tree::Expression Context::reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter) {
     ROOT_REDUCTION_START:
     for(auto const& rule : rules) {
       if(!filter(rule)) continue;
       auto vec = find_all_matches(tree, rule.pattern);
       if(!vec.empty()) {
         replace_with_substitution_at(vec[0], rule.pattern, rule.replacement);
+        goto ROOT_REDUCTION_START;
+      }
+    }
+    for(auto const& data_rule : data_rules) {
+      auto vec = find_all_matches(tree, data_rule.pattern);
+      if(!vec.empty()) {
+        *vec[0] = data_rule.replace(destructure_match(std::move(*vec[0]), data_rule.pattern));
         goto ROOT_REDUCTION_START;
       }
     }

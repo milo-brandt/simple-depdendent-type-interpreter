@@ -19,6 +19,10 @@ namespace expression {
     pattern::Pattern pattern;
     tree::Expression replacement;
   };
+  struct DataRule {
+    data_pattern::Pattern pattern;
+    mdb::function<tree::Expression(std::vector<tree::Expression>)> replace;
+  };
   struct ExternalInfo {
     bool is_axiom;
     tree::Expression type;
@@ -38,12 +42,13 @@ namespace expression {
   };
   struct Context {
     std::vector<Rule> rules;
+    std::vector<DataRule> data_rules;
     std::vector<ExternalInfo> external_info;
     Primitives primitives;
     Context();
     TypedValue get_external(std::uint64_t);
     tree::Expression reduce(tree::Expression tree);
-    tree::Expression reduce_filer_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);
+    tree::Expression reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);
     struct FunctionData {
       tree::Expression domain;
       tree::Expression codomain;

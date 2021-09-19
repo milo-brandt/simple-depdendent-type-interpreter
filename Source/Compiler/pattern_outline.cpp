@@ -31,6 +31,7 @@ namespace compiler::pattern {
           }
           return CapturePoint{};
         }
+        if(unfolded.head->get_if_data()) return std::nullopt; //can't define data heads
         auto head_index = unfolded.head->get_external().external_index;
         if(indeterminates.contains(head_index)) return std::nullopt; //cannot match indeterminates ever.
         if(spine && expression_context.external_info[head_index].is_axiom) return std::nullopt; //can't have a rule with axiom head.
@@ -70,6 +71,9 @@ namespace compiler::pattern {
             } else {
               return std::nullopt; //unmatchable arg
             }
+          },
+          [&](expression::tree::Data const& data) -> std::optional<expression::tree::Expression> {
+            return data; /* DATA BUG: Need to remap any expressions contained within data. */
           }
         });
       }

@@ -27,6 +27,9 @@ namespace expression {
           },
           [&](tree::External const& external) {
             format_external(o, external.external_index);
+          },
+          [&](tree::Data const& data) {
+            o << data.data;
           }
         });
       }

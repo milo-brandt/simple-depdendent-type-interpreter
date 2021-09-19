@@ -23,6 +23,35 @@ namespace expression {
       }
     });
   }
+  bool term_matches(tree::Expression const& term, data_pattern::Pattern const& pattern) {
+    return pattern.visit(mdb::overloaded{
+      [&](data_pattern::Apply const& apply) {
+        if(auto* app = term.get_if_apply()) {
+          return term_matches(app->lhs, apply.lhs) && term_matches(app->rhs, apply.rhs);
+        } else {
+          return false;
+        }
+      },
+      [&](data_pattern::Fixed const& fixed) {
+        if(auto* ext = term.get_if_external()) {
+          return ext->external_index == fixed.external_index;
+        } else {
+          return false;
+        }
+      },
+      [&](data_pattern::Wildcard const&) {
+        return true;
+      },
+      [&](data_pattern::Data const& data) {
+        if(auto* dat = term.get_if_data()) {
+          return dat->data.get_type_index() == data.type_index;
+        } else {
+          return false;
+        }
+      }
+    });
+  }
+
   namespace {
     tree::Expression trivial_replacement_for_impl(pattern::Pattern const& pat, std::uint64_t& index) {
       return pat.visit(mdb::overloaded{
@@ -81,6 +110,34 @@ namespace expression {
     destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(std::move(term)); });
     return ret;
   }
+  namespace {
+    template<class T, class Callback>
+    void destructure_match_impl(T term, data_pattern::Pattern const& pattern, Callback&& insert) {
+      pattern.visit(mdb::overloaded{
+        [&](data_pattern::Apply const& apply) {
+          if(auto* app = term.get_if_apply()) {
+            destructure_match_impl<T>(app->lhs, apply.lhs, insert);
+            destructure_match_impl<T>(app->rhs, apply.rhs, insert);
+          } else {
+            throw NoMatchException{};
+          }
+        },
+        [&](data_pattern::Fixed const& fixed) {},
+        [&](data_pattern::Wildcard const&) {
+          insert(term);
+        },
+        [&](data_pattern::Data const& data) {
+          insert(term);
+        }
+      });
+    }
+  }
+  std::vector<tree::Expression> destructure_match(tree::Expression term, data_pattern::Pattern const& pattern) {
+    std::vector<tree::Expression> ret;
+    destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(std::move(term)); });
+    return ret;
+  }
+
   std::vector<tree::Expression*> find_all_matches(tree::Expression& term, pattern::Pattern const& pattern) {
     struct Detail {
       std::vector<tree::Expression*> ret;
@@ -117,6 +174,42 @@ namespace expression {
     detail.search(term);
     return std::move(detail.ret);
   }
+  std::vector<tree::Expression*> find_all_matches(tree::Expression& term, data_pattern::Pattern const& pattern) {
+    struct Detail {
+      std::vector<tree::Expression*> ret;
+      data_pattern::Pattern const& pattern;
+      void search(tree::Expression& expression) {
+        if(term_matches(expression, pattern)) {
+          ret.push_back(&expression);
+        }
+        if(auto* apply = expression.get_if_apply()) {
+          search(apply->lhs);
+          search(apply->rhs);
+        }
+      }
+    };
+    Detail detail{.pattern = pattern};
+    detail.search(term);
+    return std::move(detail.ret);
+  }
+  std::vector<tree::Expression const*> find_all_matches(tree::Expression const& term, data_pattern::Pattern const& pattern) {
+    struct Detail {
+      std::vector<tree::Expression const*> ret;
+      data_pattern::Pattern const& pattern;
+      void search(tree::Expression const& expression) {
+        if(term_matches(expression, pattern)) {
+          ret.push_back(&expression);
+        }
+        if(auto* apply = expression.get_if_apply()) {
+          search(apply->lhs);
+          search(apply->rhs);
+        }
+      }
+    };
+    Detail detail{.pattern = pattern};
+    detail.search(term);
+    return std::move(detail.ret);
+  }
 
   tree::Expression substitute_into_replacement(std::vector<tree::Expression> const& terms, tree::Expression const& replacement) {
     return replacement.visit(mdb::overloaded{
@@ -135,6 +228,9 @@ namespace expression {
         } else {
           throw NotEnoughArguments{};
         }
+      },
+      [&](tree::Data const& data) -> tree::Expression {
+        return data.data.substitute([&](std::uint64_t index) { return terms.at(index); });
       }
     });
   }
@@ -154,6 +250,9 @@ namespace expression {
           },
           [&](tree::Arg const& arg) -> tree::Expression {
             return func(arg.arg_index);
+          },
+          [&](tree::Data const& data) -> tree::Expression {
+            return data.data.substitute([&](std::uint64_t index) { return func(index); });
           }
         });
       }

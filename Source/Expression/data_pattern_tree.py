@@ -7,16 +7,20 @@ shape = CompoundShape({
             ("rhs", "Pattern")
         ],
         "Fixed": [],
-        "Wildcard": []
+        "Wildcard": [],
+        "Data": []
     }
 })
-output = shape.generate_instance(namespace = "expression::pattern", data = {
+output = shape.generate_instance(namespace = "expression::data_pattern", data = {
     "Pattern": {
         "Apply": [],
         "Fixed": [
             ("external_index", "std::uint64_t")
         ],
-        "Wildcard": []
+        "Wildcard": [],
+        "Data": [
+            ("type_index", "std::uint64_t")
+        ]
     }
 })
 tree_def = TreeOutput(
