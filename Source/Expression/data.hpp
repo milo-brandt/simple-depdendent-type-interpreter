@@ -5,6 +5,8 @@
 #include <type_traits>
 #include "../Utility/function.hpp"
 #include <vector>
+#include <optional>
+#include <unordered_map>
 
 namespace expression::tree {
   class Expression;
@@ -20,7 +22,8 @@ namespace expression::data {
     virtual void destroy(Buffer&) const = 0;
     virtual void debug_print(Buffer const&, std::ostream&) const = 0;
     virtual void pretty_print(Buffer const&, std::ostream&, mdb::function<void(tree::Expression)>) const = 0;
-    virtual tree::Expression substitute(Buffer const&, mdb::function<tree::Expression(std::uint64_t)>) const = 0;
+    virtual tree::Expression substitute(Buffer const&, std::vector<tree::Expression> const&) const = 0;
+    virtual std::optional<tree::Expression> remap_args(Buffer const&, std::unordered_map<std::uint64_t, std::uint64_t> const&) const = 0;
     virtual tree::Expression type_of(Buffer const&) const = 0;
     virtual ~DataType() = default;
   };
@@ -46,7 +49,8 @@ namespace expression::data {
     ~Data();
     std::uint64_t get_type_index() const { return type_index; }
     void pretty_print(std::ostream& o, mdb::function<void(tree::Expression)> format_data) const;
-    tree::Expression substitute(mdb::function<tree::Expression(std::uint64_t)>) const;
+    tree::Expression substitute(std::vector<tree::Expression> const&) const;
+    std::optional<tree::Expression> remap_args(std::unordered_map<std::uint64_t, std::uint64_t> const&) const;
     tree::Expression type_of() const;
   };
 }

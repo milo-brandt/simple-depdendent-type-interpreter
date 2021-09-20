@@ -30,7 +30,12 @@ namespace expression::data {
       void pretty_print(Buffer const& me, std::ostream& o, mdb::function<void(tree::Expression)>) const override {
         debug_print(me, o);
       }
-      tree::Expression substitute(Buffer const& me, mdb::function<tree::Expression(std::uint64_t)>) const override {
+      tree::Expression substitute(Buffer const& me, std::vector<tree::Expression> const&) const override {
+        auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
+        new (&ret.get_data().data.storage) T{get(me)};
+        return ret;
+      }
+      std::optional<tree::Expression> remap_args(Buffer const& me, std::unordered_map<std::uint64_t, std::uint64_t> const&) const override {
         auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
         new (&ret.get_data().data.storage) T{get(me)};
         return ret;

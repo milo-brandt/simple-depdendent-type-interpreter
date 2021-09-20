@@ -75,33 +75,7 @@ namespace expression::solver {
       Utilities for (I)
     */
     std::optional<tree::Expression> get_replacement_from(std::unordered_map<std::uint64_t, std::uint64_t> const& map, tree::Expression const& term, Context& context, std::uint64_t head) {
-      return term.visit(mdb::overloaded{
-        [&](tree::Apply const& apply) -> std::optional<tree::Expression> {
-          if(auto lhs = get_replacement_from(map, apply.lhs, context, head)) {
-            if(auto rhs = get_replacement_from(map, apply.rhs, context, head)) {
-              return tree::Apply{std::move(*lhs), std::move(*rhs)};
-            }
-          }
-          return std::nullopt;
-        },
-        [&](tree::Arg const& arg) -> std::optional<tree::Expression> {
-          if(map.contains(arg.arg_index)) {
-            return tree::Arg{map.at(arg.arg_index)};
-          } else {
-            return std::nullopt;
-          }
-        },
-        [&](tree::External const& ext) -> std::optional<tree::Expression> {
-          if(context.term_depends_on(head, ext.external_index)) {
-            return std::nullopt;
-          } else {
-            return tree::Expression{ext};
-          }
-        },
-        [&](tree::Data const& data) -> std::optional<tree::Expression> {
-          return data; /* DATA BUG */
-        }
-      });
+      return remap_args(map, term);
     }
     struct ExtractedRule {
       std::uint64_t head;

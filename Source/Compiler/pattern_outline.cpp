@@ -53,29 +53,7 @@ namespace compiler::pattern {
         return ret;
       }
       std::optional<expression::tree::Expression> remap_args_to_captures(expression::tree::Expression const& expr) const {
-        return expr.visit(mdb::overloaded{
-          [&](expression::tree::Apply const& apply) -> std::optional<expression::tree::Expression> {
-            if(auto lhs = remap_args_to_captures(apply.lhs)) {
-              if(auto rhs = remap_args_to_captures(apply.rhs)) {
-                return expression::tree::Apply{std::move(*lhs), std::move(*rhs)};
-              }
-            }
-            return std::nullopt;
-          },
-          [&](expression::tree::External const& ext) -> std::optional<expression::tree::Expression> {
-            return ext;
-          },
-          [&](expression::tree::Arg const& arg) -> std::optional<expression::tree::Expression> {
-            if(args_to_captures.contains(arg.arg_index)) {
-              return expression::tree::Arg{args_to_captures.at(arg.arg_index)};
-            } else {
-              return std::nullopt; //unmatchable arg
-            }
-          },
-          [&](expression::tree::Data const& data) -> std::optional<expression::tree::Expression> {
-            return data; /* DATA BUG: Need to remap any expressions contained within data. */
-          }
-        });
+        return expression::remap_args(args_to_captures, expr);
       }
       bool discharge_held_constraints() {
         for(auto const& [capture_point, capture_expr] : constrained_capture_points) {

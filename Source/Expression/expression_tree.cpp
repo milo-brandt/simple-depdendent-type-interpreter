@@ -230,34 +230,37 @@ namespace expression {
         }
       },
       [&](tree::Data const& data) -> tree::Expression {
-        return data.data.substitute([&](std::uint64_t index) { return terms.at(index); });
+        return data.data.substitute(terms);
       }
     });
   }
-  tree::Expression substitute_into_replacement_callback(mdb::function<tree::Expression(std::uint64_t)> func, tree::Expression const& replacement) {
-    struct Detail {
-      mdb::function<tree::Expression(std::uint64_t)> func;
-      tree::Expression process(tree::Expression const& expr) {
-        return expr.visit(mdb::overloaded{
-          [&](tree::Apply const& apply) -> tree::Expression {
+  std::optional<tree::Expression> remap_args(std::unordered_map<std::uint64_t, std::uint64_t> const& arg_map, tree::Expression const& target) {
+    return target.visit(mdb::overloaded{
+      [&](tree::Apply const& apply) -> std::optional<tree::Expression> {
+        if(auto lhs = remap_args(arg_map, apply.lhs)) {
+          if(auto rhs = remap_args(arg_map, apply.rhs)) {
             return tree::Apply{
-              .lhs = process(apply.lhs),
-              .rhs = process(apply.rhs)
+              .lhs = std::move(*lhs),
+              .rhs = std::move(*rhs)
             };
-          },
-          [&](tree::External const& external) -> tree::Expression {
-            return external; //copy
-          },
-          [&](tree::Arg const& arg) -> tree::Expression {
-            return func(arg.arg_index);
-          },
-          [&](tree::Data const& data) -> tree::Expression {
-            return data.data.substitute([&](std::uint64_t index) { return func(index); });
           }
-        });
+        }
+        return std::nullopt;
+      },
+      [&](tree::External const& external) -> std::optional<tree::Expression> {
+        return external; //copy
+      },
+      [&](tree::Arg const& arg) -> std::optional<tree::Expression> {
+        if(arg_map.contains(arg.arg_index)) {
+          return tree::Arg{arg_map.at(arg.arg_index)};
+        } else {
+          return std::nullopt;
+        }
+      },
+      [&](tree::Data const& data) -> std::optional<tree::Expression> {
+        return data.data.remap_args(arg_map);
       }
-    };
-    return Detail{std::move(func)}.process(replacement);
+    });
   }
   void replace_with_substitution_at(tree::Expression* term, pattern::Pattern const& pattern, tree::Expression const& replacement) {
     auto captures = destructure_match(std::move(*term), pattern);
@@ -292,6 +295,5 @@ namespace expression {
     }
     std::reverse(ret.args.begin(), ret.args.end());
     return ret;
-
   }
 }

@@ -52,8 +52,11 @@ namespace expression::data {
   void Data::pretty_print(std::ostream& o, mdb::function<void(tree::Expression)> data_print) const {
     get_data_type(type_index).pretty_print(storage, o, std::move(data_print));
   }
-  tree::Expression Data::substitute(mdb::function<tree::Expression(std::uint64_t)> args) const {
-    return get_data_type(type_index).substitute(storage, std::move(args));
+  tree::Expression Data::substitute(std::vector<tree::Expression> const& args) const {
+    return get_data_type(type_index).substitute(storage, args);
+  }
+  std::optional<tree::Expression> Data::remap_args(std::unordered_map<std::uint64_t, std::uint64_t> const& arg_map) const {
+    return get_data_type(type_index).remap_args(storage, arg_map);
   }
   tree::Expression Data::type_of() const {
     return get_data_type(type_index).type_of(storage);

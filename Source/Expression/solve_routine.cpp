@@ -84,32 +84,7 @@ namespace expression::solver {
           });
         }
         std::optional<expression::tree::Expression> remap_replacement(expression::tree::Expression const& expr) {
-          return expr.visit(mdb::overloaded{
-            [&](expression::tree::Apply const& apply) -> std::optional<expression::tree::Expression> {
-              if(auto lhs = remap_replacement(apply.lhs)) {
-                if(auto rhs = remap_replacement(apply.rhs)) {
-                  return expression::tree::Apply{
-                    .lhs = std::move(*lhs),
-                    .rhs = std::move(*rhs)
-                  };
-                }
-              }
-              return std::nullopt;
-            },
-            [&](expression::tree::External const& external) -> std::optional<expression::tree::Expression> {
-              return external;
-            },
-            [&](expression::tree::Arg const& arg) -> std::optional<expression::tree::Expression> {
-              if(arg_convert.contains(arg.arg_index)) {
-                return expression::tree::Arg{arg_convert.at(arg.arg_index)};
-              } else {
-                return std::nullopt;
-              }
-            },
-            [&](expression::tree::Expression const& data) -> std::optional<expression::tree::Expression> {
-              return data; /* DATA BUG */
-            }
-          });
+          return expression::remap_args(arg_convert, expr);
         }
       };
       Detail detail{context, indeterminates};
@@ -268,15 +243,14 @@ namespace expression::solver {
               }
             };
             auto pat = PatternBuilder::from_outline(instance->pattern.pattern);
-            auto replaced_rule = expression::substitute_into_replacement_callback(
-              [&](std::uint64_t arg) {
-                return tree::Arg{instance->pattern.args_to_captures.at(arg)};
-              },
+            auto replaced_rule = expression::remap_args(
+              instance->pattern.args_to_captures,
               instance->rule->replacement
             );
+            if(!replaced_rule) std::terminate(); //the heck?
             expression_context.rules.push_back({
               .pattern = std::move(pat),
-              .replacement = std::move(replaced_rule)
+              .replacement = std::move(*replaced_rule)
             });
             instance->done = true;
             made_progress = true;
