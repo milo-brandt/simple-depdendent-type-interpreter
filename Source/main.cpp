@@ -26,10 +26,15 @@ int main(int argc, char** argv) {
     auto Bool = environment.axiom_check("Bool", "Type").head;
     auto yes = environment.axiom_check("yes", "Bool").head;
     auto no = environment.axiom_check("no", "Bool").head;
+    auto Assert = environment.axiom_check("Assert", "Bool -> Type").head;
+    auto witness = environment.axiom_check("witness", "Assert yes").head;
 
     auto add = environment.declare_check("add", "U64 -> U64 -> U64").head;
     auto mul = environment.declare_check("mul", "U64 -> U64 -> U64").head;
     auto eq = environment.declare_check("eq", "U64 -> U64 -> Bool").head;
+    auto lte = environment.declare_check("lte", "U64 -> U64 -> Bool").head;
+    auto sub_pos = environment.declare_check("sub_pos", "(x : U64) -> (y : U64) -> Assert (lte y x) -> U64").head;
+
     auto recurse = environment.declare_check("indexed_recurse", "(T : Type) -> (U64 -> T -> T) -> T -> U64 -> T").head;
 
     auto substr = environment.declare_check("substr", "String -> U64 -> String").head;
@@ -49,6 +54,17 @@ int main(int argc, char** argv) {
         return tree::Expression{tree::External{ (x == y) ? yes : no }};
       }
     );
+    environment.context().data_rules.push_back(
+      pattern(fixed(lte), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
+        return tree::Expression{tree::External{ (x <= y) ? yes : no }};
+      }
+    );
+    environment.context().data_rules.push_back(
+      pattern(fixed(sub_pos), match(u64), match(u64), fixed(witness)) >> [&](std::uint64_t x, std::uint64_t y) {
+        return u64(x - y);
+      }
+    );
+
     environment.context().data_rules.push_back(
       pattern(fixed(recurse), ignore, wildcard, wildcard, match(u64)) >> [&](Expression step, Expression base, std::uint64_t count) {
         for(std::uint64_t i = 0; i < count; ++i) {
