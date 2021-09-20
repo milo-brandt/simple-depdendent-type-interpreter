@@ -237,14 +237,42 @@ int main(int argc, char** argv) {
     )
   );
 
-  auto square_head = expression_context.create_variable({
+  auto strtostr = expression::multi_apply(
+    expression::tree::External{expression_context.primitives.arrow},
+    expression::tree::External{str.get_type_axiom()},
+    expression::multi_apply(
+      expression::tree::External{expression_context.primitives.constant},
+      expression::tree::External{expression_context.primitives.type},
+      expression::tree::External{str.get_type_axiom()},
+      expression::tree::External{str.get_type_axiom()}
+    )
+  );
+  auto strtostrtostr = expression::multi_apply(
+    expression::tree::External{expression_context.primitives.arrow},
+    expression::tree::External{str.get_type_axiom()},
+    expression::multi_apply(
+      expression::tree::External{expression_context.primitives.constant},
+      expression::tree::External{expression_context.primitives.type},
+      strtostr,
+      expression::tree::External{str.get_type_axiom()}
+    )
+  );
+
+  auto add_head = expression_context.create_variable({
     .is_axiom = false,
     .type = utoutou
   });
+  auto cat_head = expression_context.create_variable({
+    .is_axiom = false,
+    .type = strtostrtostr
+  });
   {
     using namespace expression::data::builder;
-    expression_context.data_rules.push_back(pattern(fixed(square_head), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
+    expression_context.data_rules.push_back(pattern(fixed(add_head), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
       return u64(x + y);
+    });
+    expression_context.data_rules.push_back(pattern(fixed(cat_head), match(str), match(str)) >> [&](StrHolder x, StrHolder y) {
+      return str(StrHolder{std::make_shared<std::string>(*x.data + *y.data)});
     });
   }
 
@@ -299,7 +327,7 @@ int main(int argc, char** argv) {
             return 5;
           } else if(str == "add") {
             return 6;
-          } else if(str == "hi") {
+          } else if(str == "cat") {
             return 7;
           } else {
             return std::nullopt;
@@ -337,11 +365,9 @@ int main(int argc, char** argv) {
           auto t = ret.get_data().data.type_of();
           return {std::move(ret), std::move(t)};
         } else if(index == 6) {
-          return expression_context.get_external(square_head);
+          return expression_context.get_external(add_head);
         } else if(index == 7) {
-          auto ret = str(StrHolder{std::make_shared<std::string>("Hello!")});
-          auto t = ret.get_data().data.type_of();
-          return {std::move(ret), std::move(t)};
+          return expression_context.get_external(cat_head);
         } else {
           return literal_values.at(index - 8);
         }
@@ -428,7 +454,8 @@ int main(int argc, char** argv) {
           {0, "Type"},
           {1, "arrow"},
           {u64.get_type_axiom(), "U64"},
-          {square_head, "add"},
+          {add_head, "add"},
+          {cat_head, "cat"},
           {str.get_type_axiom(), "String"}
         };
         auto is_explicit = [&](std::uint64_t ext_index) {
