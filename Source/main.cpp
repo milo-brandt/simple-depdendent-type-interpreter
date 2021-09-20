@@ -157,6 +157,38 @@ std::optional<expression::Rule> convert_to_rule(expression::tree::Expression con
   return std::nullopt;
 }
 //block { axiom Nat : Type; axiom zero : Nat; declare f : Nat -> Nat; rule f zero = zero; f }
+struct StrHolder {
+  std::shared_ptr<std::string> data;
+};
+bool operator==(StrHolder const& lhs, StrHolder const& rhs) {
+  return *lhs.data == *rhs.data;
+}
+std::ostream& operator<<(std::ostream& o, StrHolder const& holder) {
+  return o << "\"" << *holder.data << "\"";
+}
+
+/*
+  Need some kind of fusion language...
+
+  axiom U64 : Type;
+  declare add : U64 -> U64 -> U64;
+
+  In C...
+    SmallScalar<std::uint64_t> u64{expr_U64};
+    pattern(expr_add, match(u64), match(u64)) >> [](std::uint64_t, std::uint64_t) { ... }
+
+    or
+
+    pattern(expr_recurse, wildcard, wildcard, wildcard, match(u64)) >> []
+
+  bind (std::uint64_t) U64;
+  add (u64_data x) (u64_data y) =
+
+
+  axiom Vec : (T : Type) -> Type;
+  bind ()
+*/
+
 int main(int argc, char** argv) {
   using Data = expression::data::Data;
 
@@ -182,29 +214,39 @@ int main(int argc, char** argv) {
   std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";*/
   expression::Context expression_context;
   expression::data::SmallScalar<std::uint64_t> u64(expression_context);
+  expression::data::SmallScalar<StrHolder> str(expression_context);
+
+  auto utou = expression::multi_apply(
+    expression::tree::External{expression_context.primitives.arrow},
+    expression::tree::External{u64.get_type_axiom()},
+    expression::multi_apply(
+      expression::tree::External{expression_context.primitives.constant},
+      expression::tree::External{expression_context.primitives.type},
+      expression::tree::External{u64.get_type_axiom()},
+      expression::tree::External{u64.get_type_axiom()}
+    )
+  );
+  auto utoutou = expression::multi_apply(
+    expression::tree::External{expression_context.primitives.arrow},
+    expression::tree::External{u64.get_type_axiom()},
+    expression::multi_apply(
+      expression::tree::External{expression_context.primitives.constant},
+      expression::tree::External{expression_context.primitives.type},
+      utou,
+      expression::tree::External{u64.get_type_axiom()}
+    )
+  );
+
   auto square_head = expression_context.create_variable({
     .is_axiom = false,
-    .type = expression::multi_apply(
-      expression::tree::External{expression_context.primitives.arrow},
-      expression::tree::External{u64.get_type_axiom()},
-      expression::multi_apply(
-        expression::tree::External{expression_context.primitives.constant},
-        expression::tree::External{expression_context.primitives.type},
-        expression::tree::External{u64.get_type_axiom()},
-        expression::tree::External{u64.get_type_axiom()}
-      )
-    )
+    .type = utoutou
   });
-  expression_context.data_rules.push_back(expression::DataRule{
-    .pattern = expression::data_pattern::Apply{
-      expression::data_pattern::Fixed{square_head},
-      expression::data_pattern::Data{u64.get_type_index()}
-    },
-    .replace = [&](std::vector<expression::tree::Expression> args) {
-      auto in = (std::uint64_t&)args[0].get_data().data.storage;
-      return u64(in * in);
-    }
-  });
+  {
+    using namespace expression::data::builder;
+    expression_context.data_rules.push_back(pattern(fixed(square_head), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
+      return u64(x + y);
+    });
+  }
 
 
   auto embed = [&] (std::uint64_t index) -> expression::TypedValue {
@@ -224,6 +266,10 @@ int main(int argc, char** argv) {
       return {std::move(ret), std::move(t)};
     } else if(index == 6) {
       return expression_context.get_external(square_head);
+    } else if(index == 7) {
+      auto ret = str(StrHolder{std::make_shared<std::string>("Hello!")});
+      auto t = ret.get_data().data.type_of();
+      return {std::move(ret), std::move(t)};
     } else {
       std::terminate();
     }
@@ -277,6 +323,8 @@ int main(int argc, char** argv) {
             return 5;
           } else if(str == "square") {
             return 6;
+          } else if(str == "hi") {
+            return 7;
           } else {
             return std::nullopt;
           }
@@ -364,7 +412,8 @@ int main(int argc, char** argv) {
           {0, "Type"},
           {1, "arrow"},
           {u64.get_type_axiom(), "U64"},
-          {square_head, "square"}
+          {square_head, "square"},
+          {str.get_type_axiom(), "String"}
         };
         auto is_explicit = [&](std::uint64_t ext_index) {
           namespace explanation = compiler::evaluate::variable_explanation;
