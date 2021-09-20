@@ -216,6 +216,10 @@ namespace expression::interactive {
         if(!value->is_solved()) {
           std::cerr << "While compiling: " << expr << "\n";
           std::cerr << "Solving failed.\n";
+          auto fancy = fancy_format(*value);
+          for(auto const& [lhs, rhs] : value->remaining_equations) {
+            std::cout << fancy(lhs) << " =?= " << fancy(rhs) << "\n";
+          }
           std::terminate();
         }
         if(ret_type != tree::Expression{tree::External{expression_context.primitives.type}}) {
