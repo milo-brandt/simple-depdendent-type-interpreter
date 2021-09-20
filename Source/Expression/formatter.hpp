@@ -27,6 +27,9 @@ namespace expression::format {
     Formatter operator()(tree::Expression const& expr) & {
       return Formatter{*this, expr};
     }
+    Formatter operator()(tree::Expression const& expr) && {
+      return (*this)(expr);
+    }
   };
   std::ostream& operator<<(std::ostream&, Formatter);
 }

@@ -144,11 +144,11 @@ namespace expression::data {
         [](auto& input) { return std::move((T&)input); }
       };
     }
-    auto fixed(std::uint64_t head) {
+    constexpr auto fixed(std::uint64_t head) {
       return Fixed{head};
     }
-    auto wildcard = Wildcard{};
-    auto ignore = Ignore{};
+    constexpr auto wildcard = Wildcard{};
+    constexpr auto ignore = Ignore{};
     template<class Head>
     auto pattern(Head&& head) {
       return head;

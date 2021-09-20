@@ -1,77 +1,6 @@
-#include "ExpressionParser/expression_parser.hpp"
-#include "Compiler/instructions.hpp"
-#include "Compiler/evaluator.hpp"
-#include "Expression/evaluation_context.hpp"
+#include "Expression/interactive_environment.hpp"
 #include "Expression/expression_debug_format.hpp"
-#include "Expression/solver.hpp"
-#include "Expression/standard_solver_context.hpp"
-#include "Expression/solve_routine.hpp"
-#include "Expression/formatter.hpp"
-#include "Expression/data.hpp"
-#include "Expression/data_helper.hpp"
-
-#include <termcolor.hpp>
-#include <algorithm>
-#include <map>
 #include <fstream>
-
-template<class... Formats>
-struct Format {
-  std::string_view source;
-  std::string_view part;
-  std::tuple<Formats...> formats;
-  Format(std::string_view source, std::string_view part, Formats... formats):source(source),part(part),formats(formats...) {}
-};
-template<class... Formats>
-std::ostream& operator<<(std::ostream& o, Format<Formats...> const& format) {
-
-  auto start_offset = format.part.begin() - format.source.begin();
-  auto end_offset = format.part.end() - format.source.begin();
-
-  auto line_start = 0;
-  auto line_count = 0;
-  if(start_offset > 0) {
-    auto last_line = format.source.rfind('\n', start_offset - 1);
-    line_count = std::count(format.source.begin(), format.source.begin() + start_offset, '\n');
-    if(last_line != std::string::npos) {
-      line_start = last_line + 1;
-    }
-  }
-  auto line_end = format.source.size();
-  {
-    auto next_line = format.source.find('\n', end_offset);
-    if(next_line != std::string::npos) {
-      line_end = next_line;
-    }
-  }
-
-  if(start_offset - line_start > 30) {
-    o << "..." << format.source.substr(start_offset - 30, 30);
-  } else {
-    o << format.source.substr(line_start, start_offset - line_start);
-  }
-  std::apply([&](auto const&... formats){ (o << ... << formats); }, format.formats);
-  o << format.part << termcolor::reset;
-  if(line_end - end_offset  > 30) {
-    o << format.source.substr(end_offset, 30) << "...";
-  } else {
-    o << format.source.substr(end_offset, line_end - end_offset);
-  }
-  if(line_count > 0) {
-    o << " [line " << (line_count + 1) << "]";
-  }
-  return o;
-}
-template<class... Formats>
-Format<Formats...> format_substring(std::string_view substring, std::string_view full_string, Formats... formats) {
-  return Format<Formats...>{full_string, substring, std::move(formats)...};
-}
-auto format_error(std::string_view substring, std::string_view full) {
-  return format_substring(substring, full, termcolor::red, termcolor::bold, termcolor::underline);
-}
-auto format_info(std::string_view substring, std::string_view full) {
-  return format_substring(substring, full, termcolor::green, termcolor::bold);
-}
 
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
@@ -83,201 +12,63 @@ void debug_print_rule(expression::Rule const& rule) {
   std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
 }
 
-std::optional<expression::Rule> convert_to_rule(expression::tree::Expression const& pattern, expression::tree::Expression const& replacement, expression::Context const& context, std::unordered_set<std::uint64_t> const& indeterminates) {
-  struct Detail {
-    expression::Context const& context;
-    std::unordered_set<std::uint64_t> const& indeterminates;
-    std::unordered_map<std::uint64_t, std::uint64_t> arg_convert;
-    std::optional<expression::pattern::Pattern> convert_to_pattern(expression::tree::Expression const& expr, bool spine) {
-      return expr.visit(mdb::overloaded{
-        [&](expression::tree::Apply const& apply) -> std::optional<expression::pattern::Pattern> {
-          if(auto lhs = convert_to_pattern(apply.lhs, spine)) {
-            if(auto rhs = convert_to_pattern(apply.rhs, false)) {
-              return expression::pattern::Apply{
-                .lhs = std::move(*lhs),
-                .rhs = std::move(*rhs)
-              };
-            }
-          }
-          return std::nullopt;
-        },
-        [&](expression::tree::External const& external) -> std::optional<expression::pattern::Pattern> {
-          if(context.external_info[external.external_index].is_axiom != spine && !indeterminates.contains(external.external_index)) {
-            return expression::pattern::Fixed{external.external_index};
-          } else {
-            return std::nullopt;
-          }
-        },
-        [&](expression::tree::Arg const& arg) -> std::optional<expression::pattern::Pattern> {
-          if(arg_convert.contains(arg.arg_index)) return std::nullopt;
-          auto index = arg_convert.size();
-          arg_convert.insert(std::make_pair(arg.arg_index, index));
-          return expression::pattern::Wildcard{};
-        },
-        [&](expression::tree::Data const& data) -> std::optional<expression::pattern::Pattern> {
-          return std::nullopt;
-        }
-      });
-    }
-    std::optional<expression::tree::Expression> remap_replacement(expression::tree::Expression const& expr) {
-      return expr.visit(mdb::overloaded{
-        [&](expression::tree::Apply const& apply) -> std::optional<expression::tree::Expression> {
-          if(auto lhs = remap_replacement(apply.lhs)) {
-            if(auto rhs = remap_replacement(apply.rhs)) {
-              return expression::tree::Apply{
-                .lhs = std::move(*lhs),
-                .rhs = std::move(*rhs)
-              };
-            }
-          }
-          return std::nullopt;
-        },
-        [&](expression::tree::External const& external) -> std::optional<expression::tree::Expression> {
-          return external;
-        },
-        [&](expression::tree::Arg const& arg) -> std::optional<expression::tree::Expression> {
-          if(arg_convert.contains(arg.arg_index)) {
-            return expression::tree::Arg{arg_convert.at(arg.arg_index)};
-          } else {
-            return std::nullopt;
-          }
-        },
-        [&](expression::tree::Data const& data) -> std::optional<expression::tree::Expression> {
-          return data; /* DATA BUG: Need to remap through data */
-        }
-      });
-    }
-  };
-  Detail detail{context, indeterminates};
-  if(auto pat = detail.convert_to_pattern(pattern, true)) {
-    if(auto rep = detail.remap_replacement(replacement)) {
-      return expression::Rule{std::move(*pat), std::move(*rep)};
-    }
-  }
-  return std::nullopt;
-}
-//block { axiom Nat : Type; axiom zero : Nat; declare f : Nat -> Nat; rule f zero = zero; f }
-struct StrHolder {
-  std::shared_ptr<std::string> data;
-};
-bool operator==(StrHolder const& lhs, StrHolder const& rhs) {
-  return *lhs.data == *rhs.data;
-}
-std::ostream& operator<<(std::ostream& o, StrHolder const& holder) {
-  return o << "\"" << *holder.data << "\"";
-}
-
-/*
-  Need some kind of fusion language...
-
-  axiom U64 : Type;
-  declare add : U64 -> U64 -> U64;
-
-  In C...
-    SmallScalar<std::uint64_t> u64{expr_U64};
-    pattern(expr_add, match(u64), match(u64)) >> [](std::uint64_t, std::uint64_t) { ... }
-
-    or
-
-    pattern(expr_recurse, wildcard, wildcard, wildcard, match(u64)) >> []
-
-  bind (std::uint64_t) U64;
-  add (u64_data x) (u64_data y) =
-
-
-  axiom Vec : (T : Type) -> Type;
-  bind ()
-*/
-
 int main(int argc, char** argv) {
-  using Data = expression::data::Data;
-
-  /*located_output::Expression located_expr = located_output::Apply{
-    .lhs = located_output::Identifier{.id = "hi", .position = "hi"},
-    .rhs = located_output::Identifier{.id = "wassup", .position = "wassup"},
-    .position = "hi wassup"
-  };
-  auto expr = located_expr.locator;
-  auto x = archive(expr);
-  std::cout << "Hello, werld!\n";
-  x.root().visit(mdb::overloaded{
-    [](locator::archive_part::Apply const& apply) {
-      std::cout << "Apply!\n";
-      std::cout << apply.index().index() << "\n";
-    },
-    [](auto const&) {
-      std::cout << "o no\n";
-    }
-  });
-  std::cout << format(expr) << "\n";
-  std::cout << format(x.root()) << "\n";
-  std::cout << format(x, [&](std::ostream& o, std::string_view x) { o << "\"" << x << "\""; }) << "\n";*/
-  expression::Context expression_context;
-  expression::data::SmallScalar<std::uint64_t> u64(expression_context);
-  expression::data::SmallScalar<StrHolder> str(expression_context);
-
-  auto utou = expression::multi_apply(
-    expression::tree::External{expression_context.primitives.arrow},
-    expression::tree::External{u64.get_type_axiom()},
-    expression::multi_apply(
-      expression::tree::External{expression_context.primitives.constant},
-      expression::tree::External{expression_context.primitives.type},
-      expression::tree::External{u64.get_type_axiom()},
-      expression::tree::External{u64.get_type_axiom()}
-    )
-  );
-  auto utoutou = expression::multi_apply(
-    expression::tree::External{expression_context.primitives.arrow},
-    expression::tree::External{u64.get_type_axiom()},
-    expression::multi_apply(
-      expression::tree::External{expression_context.primitives.constant},
-      expression::tree::External{expression_context.primitives.type},
-      utou,
-      expression::tree::External{u64.get_type_axiom()}
-    )
-  );
-
-  auto strtostr = expression::multi_apply(
-    expression::tree::External{expression_context.primitives.arrow},
-    expression::tree::External{str.get_type_axiom()},
-    expression::multi_apply(
-      expression::tree::External{expression_context.primitives.constant},
-      expression::tree::External{expression_context.primitives.type},
-      expression::tree::External{str.get_type_axiom()},
-      expression::tree::External{str.get_type_axiom()}
-    )
-  );
-  auto strtostrtostr = expression::multi_apply(
-    expression::tree::External{expression_context.primitives.arrow},
-    expression::tree::External{str.get_type_axiom()},
-    expression::multi_apply(
-      expression::tree::External{expression_context.primitives.constant},
-      expression::tree::External{expression_context.primitives.type},
-      strtostr,
-      expression::tree::External{str.get_type_axiom()}
-    )
-  );
-
-  auto add_head = expression_context.create_variable({
-    .is_axiom = false,
-    .type = utoutou
-  });
-  auto cat_head = expression_context.create_variable({
-    .is_axiom = false,
-    .type = strtostrtostr
-  });
+  std::string last_line = "";
+  expression::interactive::Environment environment;
   {
     using namespace expression::data::builder;
-    expression_context.data_rules.push_back(pattern(fixed(add_head), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
-      return u64(x + y);
-    });
-    expression_context.data_rules.push_back(pattern(fixed(cat_head), match(str), match(str)) >> [&](StrHolder x, StrHolder y) {
-      return str(StrHolder{std::make_shared<std::string>(*x.data + *y.data)});
-    });
+    namespace tree = expression::tree;
+    using Expression = tree::Expression;
+
+    auto const& u64 = environment.u64();
+    auto const& str = environment.str();
+
+    auto Bool = environment.axiom_check("Bool", "Type").head;
+    auto yes = environment.axiom_check("yes", "Bool").head;
+    auto no = environment.axiom_check("no", "Bool").head;
+
+    auto add = environment.declare_check("add", "U64 -> U64 -> U64").head;
+    auto mul = environment.declare_check("mul", "U64 -> U64 -> U64").head;
+    auto eq = environment.declare_check("eq", "U64 -> U64 -> Bool").head;
+    auto recurse = environment.declare_check("indexed_recurse", "(T : Type) -> (U64 -> T -> T) -> T -> U64 -> T").head;
+
+    auto substr = environment.declare_check("substr", "String -> U64 -> String").head;
+
+    environment.context().data_rules.push_back(
+      pattern(fixed(add), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
+        return u64(x + y);
+      }
+    );
+    environment.context().data_rules.push_back(
+      pattern(fixed(mul), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
+        return u64(x * y);
+      }
+    );
+    environment.context().data_rules.push_back(
+      pattern(fixed(eq), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
+        return tree::Expression{tree::External{ (x == y) ? yes : no }};
+      }
+    );
+    environment.context().data_rules.push_back(
+      pattern(fixed(recurse), ignore, wildcard, wildcard, match(u64)) >> [&](Expression step, Expression base, std::uint64_t count) {
+        for(std::uint64_t i = 0; i < count; ++i) {
+          base = expression::multi_apply(
+            step,
+            u64(i),
+            std::move(base)
+          );
+        }
+        return std::move(base);
+      }
+    );
+    environment.context().data_rules.push_back(
+      pattern(fixed(substr), match(str), match(u64)) >> [&](auto str_holder, std::uint64_t amt) {
+        return str({std::make_shared<std::string>(str_holder.data->substr(amt))});
+      }
+    );
   }
 
 
-  std::string last_line = "";
   while(true) {
     std::string line;
     std::getline(std::cin, line);
@@ -300,269 +91,9 @@ int main(int argc, char** argv) {
       }
     }
     std::string_view source = line;
-
-    auto x = expression_parser::parser::expression(source);
-
-    if(auto* error = parser::get_if_error(&x)) {
-      std::cout << "Error: " << error->error << "\nAt: " << format_error(source.substr(error->position.begin() - source.begin()), source) << "\n";
-    } else {
-      auto& success = parser::get_success(x);
-      auto output_archive = archive(success.value.output);
-      auto locator_archive = archive(success.value.locator);
-      std::cout << "Parse result: " << format(locator_archive) << "\n";
-      std::vector<expression::TypedValue> literal_values;
-      auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda{
-        .lookup = [&](std::string_view str) -> std::optional<std::uint64_t> {
-          if(str == "Type") {
-            return 0;
-          } else if(str == "arrow") {
-            return 1;
-          } else if(str == "type_family") {
-            return 2;
-          } else if(str == "constant") {
-            return 3;
-          } else if(str == "id") {
-            return 4;
-          } else if(str == "seventeen") {
-            return 5;
-          } else if(str == "add") {
-            return 6;
-          } else if(str == "cat") {
-            return 7;
-          } else {
-            return std::nullopt;
-          }
-        },
-        .embed_literal = [&](auto const& literal) -> std::uint64_t {
-          std::visit(mdb::overloaded{
-            [&](std::uint64_t literal) {
-              auto ret = u64(literal);
-              auto t = ret.get_data().data.type_of();
-              literal_values.push_back({std::move(ret), std::move(t)});
-            },
-            [&](std::string literal) {
-              auto ret = str(StrHolder{std::make_shared<std::string>(std::move(literal))});
-              auto t = ret.get_data().data.type_of();
-              literal_values.push_back({std::move(ret), std::move(t)});
-            }
-          }, literal);
-          return 7 + literal_values.size();
-        }
-      }, output_archive.root());
-      auto embed = [&] (std::uint64_t index) -> expression::TypedValue {
-        if(index == 0) {
-          return expression_context.get_external(0);
-        } else if(index == 1) {
-          return expression_context.get_external(1);
-        } else if(index == 2) {
-          return expression_context.get_external(2);
-        } else if(index == 3) {
-          return expression_context.get_external(3);
-        } else if(index == 4) {
-          return expression_context.get_external(8);
-        } else if(index == 5) {
-          auto ret = u64(17);
-          auto t = ret.get_data().data.type_of();
-          return {std::move(ret), std::move(t)};
-        } else if(index == 6) {
-          return expression_context.get_external(add_head);
-        } else if(index == 7) {
-          return expression_context.get_external(cat_head);
-        } else {
-          return literal_values.at(index - 8);
-        }
-      };
-      if(auto* resolve = resolved.get_if_value()) {
-        std::cout << "Resolved: " << format(*resolve) << "\n";
-        auto resolve_archive = archive(std::move(*resolve));
-        auto instructions = compiler::instruction::make_instructions(resolve_archive.root());
-        std::cout << "Instructions: " << format(instructions.output) << "\n";
-        auto instruction_archive = archive(instructions.output);
-        auto instruction_locator = archive(instructions.locator);
-
-        auto rule_count = expression_context.rules.size();
-
-        auto eval_result = compiler::evaluate::evaluate_tree(instruction_archive.root().get_program_root(), expression_context, embed);
-
-        expression::solver::StandardSolverContext solver_context {
-          .evaluation = expression_context
-        };
-        expression::solver::Routine solve_routine{eval_result, expression_context, solver_context};
-
-        std::cout << "Variables:\n";
-        std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
-        for(auto const& entry : eval_result.variables) sorted_variables.insert(entry);
-        for(auto const& [var, reason] : sorted_variables) {
-          std::cout << std::visit(mdb::overloaded{
-            [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
-            [&](compiler::evaluate::variable_explanation::ApplyCodomain const&) { return "ApplyCodomain: "; },
-            [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "ApplyLHSCast: "; },
-            [&](compiler::evaluate::variable_explanation::ExplicitHole const&) { return "ExplicitHole: "; },
-            [&](compiler::evaluate::variable_explanation::Declaration const&) { return "Declaration: "; },
-            [&](compiler::evaluate::variable_explanation::Axiom const&) { return "Axiom: "; },
-            [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "TypeFamilyCast: "; },
-            [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "HoleTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "DeclareTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "AxiomTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "LetTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::LetCast const&) { return "LetCast: "; },
-            [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "ForAllTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::VarType const&) { return "VarType: "; }
-          }, reason) << var << "\n";
-          auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
-            return reason.index;
-          }, reason);
-          auto const& pos = instruction_locator[index];
-          auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
-          auto const& locator_pos = locator_archive[locator_index];
-          auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-          std::cout << "Position: " << format_info(str_pos, source) << "\n";
-        }
-        for(auto const& cast : eval_result.casts) {
-          std::cout << "Cast (depth " << cast.stack.depth() << ") " << expression::raw_format(cast.source) << " from " << expression::raw_format(cast.source_type) << " to " << expression::raw_format(cast.target_type) << " as " << cast.variable << "\n";
-        }
-        for(auto const& rule : eval_result.rules) {
-          std::cout << "Rule (depth " << rule.stack.depth() << ") " << expression::raw_format(rule.pattern) << " from " << expression::raw_format(rule.pattern_type) << " to " << expression::raw_format(rule.replacement_type) << " as " << expression::raw_format(rule.replacement) << "\n";
-        }
-        //Hard thing: How to know when rules are allowable?
-        std::cout << "Result: " << expression::raw_format(eval_result.result.value) << " of type " << expression::raw_format(eval_result.result.type) << "\n";
-
-        solve_routine.run();
-
-        std::vector<expression::Rule> new_rules;
-        for(auto i = rule_count; i < expression_context.rules.size(); ++i) {
-          new_rules.push_back(expression_context.rules[i]);
-        }
-        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
-          struct Detail {
-            static std::uint64_t get_head(expression::pattern::Pattern const& pat) {
-              if(auto* apply = pat.get_if_apply()) {
-                return get_head(apply->lhs);
-              } else {
-                return pat.get_fixed().external_index;
-              }
-            }
-          };
-          return Detail::get_head(lhs.pattern) < Detail::get_head(rhs.pattern);
-        });
-        for(auto const& rule : new_rules) {
-          std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
-        }
-        rule_count = expression_context.rules.size();
-
-        std::unordered_map<std::uint64_t, const char*> fixed_names = {
-          {0, "Type"},
-          {1, "arrow"},
-          {u64.get_type_axiom(), "U64"},
-          {add_head, "add"},
-          {cat_head, "cat"},
-          {str.get_type_axiom(), "String"}
-        };
-        auto is_explicit = [&](std::uint64_t ext_index) {
-          namespace explanation = compiler::evaluate::variable_explanation;
-          if(!eval_result.variables.contains(ext_index)) return false;
-          auto const& reason = eval_result.variables.at(ext_index);
-          if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
-            auto const& location = instruction_locator[declared->index];
-            if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
-              auto const& parsed_position = output_archive[location.source.index];
-              if(auto* declare_locator = parsed_position.get_if_declare()) {
-                return true;
-              }
-            }
-          } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
-            auto const& location = instruction_locator[axiom->index];
-            if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
-              auto const& parsed_position = output_archive[location.source.index];
-              if(auto* axiom_locator = parsed_position.get_if_axiom()) {
-                return true;
-              }
-            }
-          }
-          return false;
-        };
-        auto fancy_format = expression::format::FormatContext{
-          .expression_context = expression_context,
-          .force_expansion = [&](std::uint64_t ext_index){ return !is_explicit(ext_index); },
-          .write_external = [&](std::ostream& o, std::uint64_t ext_index) -> std::ostream& {
-            if(fixed_names.contains(ext_index)) {
-              return o << fixed_names.at(ext_index);
-            } else if(eval_result.variables.contains(ext_index)) {
-              namespace explanation = compiler::evaluate::variable_explanation;
-              auto const& reason = eval_result.variables.at(ext_index);
-              if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
-                auto const& location = instruction_locator[declared->index];
-                if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
-                  auto const& parsed_position = output_archive[location.source.index];
-                  if(auto* declare_locator = parsed_position.get_if_declare()) {
-                    return o << declare_locator->name;
-                  }
-                }
-              } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
-                auto const& location = instruction_locator[axiom->index];
-                if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
-                  auto const& parsed_position = output_archive[location.source.index];
-                  if(auto* axiom_locator = parsed_position.get_if_axiom()) {
-                    return o << axiom_locator->name;
-                  }
-                }
-              }
-            }
-            return o << "ext_" << ext_index;
-          }
-        };
-        auto deep_format = expression::format::FormatContext{
-          .expression_context = expression_context,
-          .force_expansion = [&](std::uint64_t ext_index){ return true; },
-          .write_external = [&](std::ostream& o, std::uint64_t ext_index) -> std::ostream& {
-            if(fixed_names.contains(ext_index)) {
-              return o << fixed_names.at(ext_index);
-            } else if(eval_result.variables.contains(ext_index)) {
-              namespace explanation = compiler::evaluate::variable_explanation;
-              auto const& reason = eval_result.variables.at(ext_index);
-              if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
-                auto const& location = instruction_locator[declared->index];
-                if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
-                  auto const& parsed_position = output_archive[location.source.index];
-                  if(auto* declare_locator = parsed_position.get_if_declare()) {
-                    return o << declare_locator->name;
-                  }
-                }
-              } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
-                auto const& location = instruction_locator[axiom->index];
-                if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
-                  auto const& parsed_position = output_archive[location.source.index];
-                  if(auto* axiom_locator = parsed_position.get_if_axiom()) {
-                    return o << axiom_locator->name;
-                  }
-                }
-              }
-            }
-            return o << "ext_" << ext_index;
-          }
-        };
-
-        auto remaining_equations = solve_routine.get_equations();
-        for(auto const& [lhs, rhs] : remaining_equations) {
-          std::cout << fancy_format(lhs) << " =?= " << fancy_format(rhs) << "\n";
-        }
-
-        std::cout << "Final: " << fancy_format(eval_result.result.value) << " of type " << fancy_format(eval_result.result.type) << "\n";
-        std::cout << "Deep: " << deep_format(eval_result.result.value) << " of type " << deep_format(eval_result.result.type) << "\n";
-
-      } else {
-        auto const& err = resolved.get_error();
-        for(auto const& bad_id : err.bad_ids) {
-          auto bad_pos = locator_archive[bad_id].position;
-          std::cout << "Bad id: " << format_error(bad_pos, source) << "\n";
-        }
-        for(auto const& bad_id : err.bad_pattern_ids) {
-          auto bad_pos = locator_archive[bad_id].position;
-          std::cout << "Bad pattern id: " << format_error(bad_pos, source) << "\n";
-        }
-      }
-    }
+    environment.debug_parse(source);
   }
+  return 0;
 }
 
 /*
