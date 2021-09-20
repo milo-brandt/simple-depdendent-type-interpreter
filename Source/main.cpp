@@ -249,31 +249,6 @@ int main(int argc, char** argv) {
   }
 
 
-  auto embed = [&] (std::uint64_t index) -> expression::TypedValue {
-    if(index == 0) {
-      return expression_context.get_external(0);
-    } else if(index == 1) {
-      return expression_context.get_external(1);
-    } else if(index == 2) {
-      return expression_context.get_external(2);
-    } else if(index == 3) {
-      return expression_context.get_external(3);
-    } else if(index == 4) {
-      return expression_context.get_external(8);
-    } else if(index == 5) {
-      auto ret = u64(17);
-      auto t = ret.get_data().data.type_of();
-      return {std::move(ret), std::move(t)};
-    } else if(index == 6) {
-      return expression_context.get_external(square_head);
-    } else if(index == 7) {
-      auto ret = str(StrHolder{std::make_shared<std::string>("Hello!")});
-      auto t = ret.get_data().data.type_of();
-      return {std::move(ret), std::move(t)};
-    } else {
-      std::terminate();
-    }
-  };
   std::string last_line = "";
   while(true) {
     std::string line;
@@ -307,6 +282,7 @@ int main(int argc, char** argv) {
       auto output_archive = archive(success.value.output);
       auto locator_archive = archive(success.value.locator);
       std::cout << "Parse result: " << format(locator_archive) << "\n";
+      std::vector<expression::TypedValue> literal_values;
       auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda{
         .lookup = [&](std::string_view str) -> std::optional<std::uint64_t> {
           if(str == "Type") {
@@ -321,15 +297,47 @@ int main(int argc, char** argv) {
             return 4;
           } else if(str == "seventeen") {
             return 5;
-          } else if(str == "square") {
+          } else if(str == "add") {
             return 6;
           } else if(str == "hi") {
             return 7;
           } else {
             return std::nullopt;
           }
+        },
+        .embed_literal = [&](auto const& literal) -> std::uint64_t {
+          auto x = std::get<0>(literal);
+          auto ret = u64(x);
+          auto t = ret.get_data().data.type_of();
+          literal_values.push_back({std::move(ret), std::move(t)});
+          return 7 + literal_values.size();
         }
       }, output_archive.root());
+      auto embed = [&] (std::uint64_t index) -> expression::TypedValue {
+        if(index == 0) {
+          return expression_context.get_external(0);
+        } else if(index == 1) {
+          return expression_context.get_external(1);
+        } else if(index == 2) {
+          return expression_context.get_external(2);
+        } else if(index == 3) {
+          return expression_context.get_external(3);
+        } else if(index == 4) {
+          return expression_context.get_external(8);
+        } else if(index == 5) {
+          auto ret = u64(17);
+          auto t = ret.get_data().data.type_of();
+          return {std::move(ret), std::move(t)};
+        } else if(index == 6) {
+          return expression_context.get_external(square_head);
+        } else if(index == 7) {
+          auto ret = str(StrHolder{std::make_shared<std::string>("Hello!")});
+          auto t = ret.get_data().data.type_of();
+          return {std::move(ret), std::move(t)};
+        } else {
+          return literal_values.at(index - 8);
+        }
+      };
       if(auto* resolve = resolved.get_if_value()) {
         std::cout << "Resolved: " << format(*resolve) << "\n";
         auto resolve_archive = archive(std::move(*resolve));
@@ -412,7 +420,7 @@ int main(int argc, char** argv) {
           {0, "Type"},
           {1, "arrow"},
           {u64.get_type_axiom(), "U64"},
-          {square_head, "square"},
+          {square_head, "add"},
           {str.get_type_axiom(), "String"}
         };
         auto is_explicit = [&](std::uint64_t ext_index) {

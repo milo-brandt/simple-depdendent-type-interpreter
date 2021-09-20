@@ -223,6 +223,12 @@ namespace compiler::instruction {
             compile(command);
           }
           return compile(block.value);
+        },
+        [&](resolved_archive::Literal const& literal) -> located_output::Expression {
+          return located_output::Embed{
+            .embed_index = literal.embed_index,
+            .source = {ExplanationKind::literal_embed, literal.index()}
+          };
         }
       });
     }

@@ -43,6 +43,20 @@ namespace expression_parser {
         });
       }
     };
+    resolved::Context& root_context(ContextParent& parent);
+    resolved::Context& root_context(LocalContext& context) {
+      return root_context(context.parent);
+    }
+    resolved::Context& root_context(CommandContext& context) {
+      return root_context(context.parent);
+    }
+    resolved::Context& root_context(resolved::Context& context) {
+      return context;
+    }
+    resolved::Context& root_context(ContextParent& parent) {
+      return *std::visit([&](auto* p) -> resolved::Context* { return &root_context(*p); }, parent);
+    }
+
     std::optional<resolved::Identifier> lookup(CommandContext& context, std::string_view str);
     std::optional<resolved::Identifier> lookup(resolved::Context& context, std::string_view str) {
       if(auto index = context.lookup(str)) {
@@ -269,6 +283,12 @@ namespace expression_parser {
             }
             return std::move(err);
           }
+        },
+        [&](output_archive::Literal const& literal) -> mdb::Result<resolved::Expression, ResolutionError> {
+          auto index = root_context(context).embed_literal(literal.value);
+          return resolved::Expression{resolved::Literal{
+            .embed_index = index
+          }};
         }
       });
     }

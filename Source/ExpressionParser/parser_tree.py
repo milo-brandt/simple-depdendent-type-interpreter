@@ -19,7 +19,8 @@ shape = CompoundShape({
         "Block": [
             ("statements", vector("Command")),
             ("value", "Expression")
-        ]
+        ],
+        "Literal": []
     },
     "Pattern": {
         "PatternApply": [
@@ -59,7 +60,10 @@ output = shape.generate_instance(namespace = "expression_parser::output", data =
         "Arrow": [
             ("arg_name", "std::optional<std::string_view>")
         ],
-        "Block": []
+        "Block": [],
+        "Literal": [
+            ("value", "literal::Any")
+        ]
     },
     "Pattern": {
         "PatternApply": [],
@@ -100,6 +104,9 @@ locator = shape.generate_instance(namespace = "expression_parser::locator", data
         ],
         "Block": [
             ("position", "std::string_view")
+        ],
+        "Literal": [
+            ("position", "std::string_view")
         ]
     },
     "Pattern": {
@@ -138,7 +145,10 @@ resolution = shape.generate_instance(namespace = "expression_parser::resolved", 
         ],
         "Hole": [],
         "Arrow": [],
-        "Block": []
+        "Block": [],
+        "Literal": [
+            ("embed_index", "std::uint64_t")
+        ]
     },
     "Pattern": {
         "PatternApply": [],
@@ -171,4 +181,7 @@ tree_def = TreeOutput(
 
 main_output = get_output("THIS_impl")
 
-main_output.write(tree_def)
+main_output.write(
+    tree_def,
+    relative_includes = ["literals.hpp"]
+)
