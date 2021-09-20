@@ -203,13 +203,20 @@ namespace expression_parser {
         .position = position
       };
     }));
+    constexpr auto string_literal = map(loose_capture(escaped_string), unpacked([](std::string value, std::string_view position) -> located_output::Expression {
+      return located_output::Literal {
+        .value = std::move(value),
+        .position = position
+      };
+    }));
 
     MB_DEFINE_RECURSIVE_PARSER(term, branch(
       std::make_pair(loose_symbol("("), loose_sequence(loose_symbol("("), expression, loose_symbol(")"))),
       std::make_pair(loose_symbol("\\\\"), rassoc_expression),
       std::make_pair(loose_symbol("\\"), lambda_expression),
-      std::make_pair(symbol("block"), block_expression),
+      std::make_pair(loose_symbol("block"), block_expression),
       std::make_pair(int_literal, int_literal),
+      std::make_pair(loose_symbol("\""), string_literal),
       std::make_pair(always_match, map(loosen(identifier), [](std::string_view identifier) -> located_output::Expression {
         if(identifier == "_") {
           return located_output::Hole{ .position = identifier };

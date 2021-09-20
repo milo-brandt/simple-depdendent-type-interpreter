@@ -127,6 +127,40 @@ namespace parser {
       return ParseError{"Expected digit.", str.substr(0, 1)};
     }
   };
+  constexpr auto escaped_string = [](std::string_view str) -> ParseResult<std::string> {
+    if(!str.empty() && str[0] == '"') {
+      std::string ret = "";
+      auto full = str;
+      str.remove_prefix(1);
+    READ_CHARACTER:
+      if(str.empty()) return ParseError{"Unterminated string.", full};
+      if(str[0] == '"') {
+        str.remove_prefix(1);
+        return ParseSuccess{std::move(ret), str};
+      } else if(str[0] == '\\') {
+        auto escape_full = str;
+        str.remove_prefix(1);
+        if(str.empty()) return ParseError{"Unterminated string.", full};
+        if(str[0] == 'n') ret += '\n';
+        else if(str[0] == 't') ret += '\t';
+        else if(str[0] == 'r') ret += '\r';
+        else if(str[0] == '\\') ret += '\\';
+        else if(str[0] == '"') ret += '"';
+        else if(str[0] == '\'') ret += '\'';
+        else {
+          return ParseError{"Unrecognized escape sequence.", escape_full.substr(0, 2)};
+        }
+        str.remove_prefix(1);
+        goto READ_CHARACTER;
+      } else {
+        ret += str[0];
+        str.remove_prefix(1);
+        goto READ_CHARACTER;
+      }
+    } else {
+      return ParseError{"Expected '\"'.", str.substr(0, 1)};
+    }
+  };
   constexpr auto always_match = [](std::string_view str) -> ParseResult<Empty> {
     return ParseSuccess{empty, str};
   };

@@ -306,10 +306,18 @@ int main(int argc, char** argv) {
           }
         },
         .embed_literal = [&](auto const& literal) -> std::uint64_t {
-          auto x = std::get<0>(literal);
-          auto ret = u64(x);
-          auto t = ret.get_data().data.type_of();
-          literal_values.push_back({std::move(ret), std::move(t)});
+          std::visit(mdb::overloaded{
+            [&](std::uint64_t literal) {
+              auto ret = u64(literal);
+              auto t = ret.get_data().data.type_of();
+              literal_values.push_back({std::move(ret), std::move(t)});
+            },
+            [&](std::string literal) {
+              auto ret = str(StrHolder{std::make_shared<std::string>(std::move(literal))});
+              auto t = ret.get_data().data.type_of();
+              literal_values.push_back({std::move(ret), std::move(t)});
+            }
+          }, literal);
           return 7 + literal_values.size();
         }
       }, output_archive.root());
