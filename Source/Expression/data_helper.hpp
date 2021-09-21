@@ -61,6 +61,7 @@ namespace expression::data {
       }
       void visit_children(Buffer const& me, mdb::function<void(tree::Expression const&)> visitor) const override {
         auto const& info = *get(me);
+        visitor(info.type);
         for(auto const& expr : info.vec) {
           visitor(expr);
         }
