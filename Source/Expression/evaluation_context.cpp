@@ -180,35 +180,58 @@ namespace expression {
   namespace {
     template<class Filter>
     tree::Expression reduce_impl(Context& ctx, tree::Expression tree, Filter&& filter) {
-    REDUCTION_START:
-      auto unfolded = unfold_ref(tree);
-      for(auto* arg : unfolded.args) {
-        *arg = reduce_impl(ctx, std::move(*arg), filter);
-      }
-      if(auto* ext = unfolded.head->get_if_external()) {
-        auto const& ext_info = ctx.external_info[ext->external_index];
-        for(auto const& rule_info : ext_info.rules) {
-          if(rule_info.arg_count <= unfolded.args.size()) {
-            auto test_pos = unfolded.spine.at(rule_info.arg_count);
-            auto const& rule = ctx.rules.at(rule_info.index);
-            if(!filter(rule)) continue;
-            if(term_matches(*test_pos, rule.pattern)) {
-              replace_with_substitution_at(test_pos, rule.pattern, rule.replacement);
-              goto REDUCTION_START;
+      struct Detail {
+        Context& ctx;
+        Filter& filter;
+        std::vector<tree::Expression*> spine_stack;
+        std::vector<tree::Expression*> arg_stack;
+        void reduce(tree::Expression* expr) {
+        REDUCTION_START:
+          //1. Unfold expr
+          std::uint64_t base_arg_index = arg_stack.size();
+          std::uint64_t arg_count = 0;
+          tree::Expression* head = expr;
+          spine_stack.push_back(head);
+          while(auto* apply = head->get_if_apply()) {
+            arg_stack.push_back(&apply->rhs);
+            head = &apply->lhs;
+            spine_stack.push_back(head);
+            ++arg_count;
+          }
+          //Top of stacks looks like
+          //spine_stack: spine@3 spine@2 spine@1 spine@0
+          //arg_stack: arg2 arg1 arg0
+          std::uint64_t spine_back_index = spine_stack.size() - 1;
+          for(std::uint64_t i = base_arg_index; i < base_arg_index + arg_count; ++i) {
+            reduce(arg_stack[i]);
+          }
+          if(auto* ext = head->get_if_external()) {
+            auto const& ext_info = ctx.external_info[ext->external_index];
+            for(auto const& rule_info : ext_info.rules) {
+              if(rule_info.arg_count <= arg_count) {
+                auto test_pos = spine_stack[spine_back_index - rule_info.arg_count];
+                auto const& rule = ctx.rules[rule_info.index];
+                if(!filter(rule)) continue;
+                if(term_matches(*test_pos, rule.pattern)) {
+                  replace_with_substitution_at(test_pos, rule.pattern, rule.replacement);
+                  goto REDUCTION_START;
+                }
+              }
+            }
+            for(auto const& rule_info : ext_info.data_rules) {
+              if(rule_info.arg_count <= arg_count) {
+                auto test_pos = spine_stack[spine_back_index - rule_info.arg_count];
+                auto const& rule = ctx.data_rules[rule_info.index];
+                if(term_matches(*test_pos, rule.pattern)) {
+                  *test_pos = rule.replace(destructure_match(std::move(*test_pos), rule.pattern));
+                  goto REDUCTION_START;
+                }
+              }
             }
           }
         }
-        for(auto const& rule_info : ext_info.data_rules) {
-          if(rule_info.arg_count <= unfolded.args.size()) {
-            auto test_pos = unfolded.spine.at(rule_info.arg_count);
-            auto const& rule = ctx.data_rules.at(rule_info.index);
-            if(term_matches(*test_pos, rule.pattern)) {
-              *test_pos = rule.replace(destructure_match(std::move(*test_pos), rule.pattern));
-              goto REDUCTION_START;
-            }
-          }
-        }
-      }
+      };
+      Detail{ctx, filter}.reduce(&tree);
       return std::move(tree);
     }
   }

@@ -324,6 +324,8 @@ namespace expression {
     RefUnfolding ret{
       .head = &tree
     };
+    ret.spine.reserve(16);
+    ret.args.reserve(16);
     ret.spine.push_back(&tree);
     while(auto* app = ret.head->get_if_apply()) {
       ret.head = &app->lhs;
@@ -334,6 +336,7 @@ namespace expression {
     std::reverse(ret.args.begin(), ret.args.end());
     return ret;
   }
+
   Unfolding unfold(tree::Expression tree) {
     Unfolding ret{
       .head = std::move(tree)

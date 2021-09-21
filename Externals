@@ -36,5 +36,5 @@ block {
   declare vec_from_fn : (T : Type) -> (n : U64) -> (U64 -> T) -> Vector T;
   rule vec_from_fn T n f = vec_from_fn_nat T (u_to_nat n) \x.f (nat_to_u x);
 
-  vec_from_fn _ 10 \x.vec_from_fn _ 10 (mul x)
+  vec_from_fn _ 100 \x.vec_from_fn _ 100 (mul x)
 }
