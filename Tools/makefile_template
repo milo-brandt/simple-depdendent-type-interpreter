@@ -1,36 +1,22 @@
 compiler = g++-10
 compiler_cmd = $(compiler) -std=c++20
+{% for target in targets %}
+{% if target.phony %}
+.PHONY: {{ target.phony.name }}
+{{ target.phony.name }}: {{ target.program }}
+	{{ target.phony.command }}
+{% endif %}
 
-.PHONY: all
-all: Build/program
+{{ target.program }}:{% for object in target.objects %} {{ object.file }}{% endfor %}
+	$(compiler_cmd){% for object in target.objects %} {{ object.file }}{% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread {{ target.link_options }} -o {{ target.program }}
 
-.PHONY: run
-run: Build/program
-	Build/program
+{% for object in target.objects %}
+{{ object.file }}:{% for source_file in object.sources_needed %} {{source_file}}{% endfor %}
+	@mkdir -p $(@D)
+	$(compiler_cmd) {{ target.compile_options }} -IDependencies/include -c {{ object.source }} -o {{ object.file}}
+{% endfor %}
+{% endfor %}
 
-.PHONY: test
-test: Build/test_program
-	Build/test_program
-
-.PHONY: debug_test
-debug_test: Debug/test_program
-	gdb -x Tools/gdb_init Debug/test_program
-
-.PHONY: debug
-debug: Debug/program
-	gdb -x Tools/gdb_init Debug/program
-
-Build/program: {% for src_file in main_files %}Build/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in main_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O3 -o Build/program
-
-Debug/program: {% for src_file in main_files %}Debug/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in main_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -lhttpserver -Wl,-rpath='$$ORIGIN' -lpthread -O0 -ggdb -o Debug/program
-
-Build/test_program: {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in test_files %}Build/{{src_file}}.o {% endfor %} -LDependencies/lib -O3 -o Build/test_program
-
-Debug/test_program: {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %}
-	$(compiler_cmd)  {% for src_file in test_files %}Debug/{{src_file}}.o {% endfor %} -LDependencies/lib -O0 -ggdb -o Debug/test_program
 
 {% for source_generator in source_generators %}
 {{source_generator.outputs[0]}} : {{source_generator.source}}
@@ -40,23 +26,6 @@ Debug/test_program: {% for src_file in test_files %}Debug/{{src_file}}.o {% endf
 {{output}} : {{source_generator.outputs[0]}}
 {%- endfor %}
 {%- endfor %}
-
-{% for src_file in source_files %}
-Build/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}
-	@mkdir -p $(@D)
-	$(compiler_cmd) -O3 -IDependencies/include -c Source/{{src_file}}.cpp -o Build/{{src_file}}.o
-{% endfor %}
-
-{% for src_file in source_files %}
-Debug/{{src_file}}.o: Source/{{src_file}}.cpp {% for dependency in getIncludedFileList(src_file) %}{{dependency}} {% endfor %}
-	@mkdir -p $(@D)
-	$(compiler_cmd) -O0 -ggdb -IDependencies/include -c Source/{{src_file}}.cpp -o Debug/{{src_file}}.o
-{% endfor %}
-
-.PHONY: clean
-clean:
-	-rm -r Build
-	-rm -r Debug
 
 .PHONY: regenerate
 regenerate:

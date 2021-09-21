@@ -19,35 +19,65 @@ def remove_c_comments(text): # from https://stackoverflow.com/questions/241327/r
     return re.sub(pattern, replacer, text)
 
 @lru_cache
-def getIncludedFileListImpl(filename):
+def get_direct_includes_of(filename):
     if not os.path.isfile(filename):
         raise RuntimeError("No file at " + filename)
-    str = open(filename).read()
-    requirements = {os.path.normpath(os.path.join(os.path.dirname(filename), m.group(1))) for m in re.finditer("#include \"([^\"]+)\"", remove_c_comments(str))}
-    output = requirements.copy()
-    [root, ext] = os.path.splitext(filename);
-    if ext != ".inl":
-        for r in requirements: #set comprehension caused caching to fail?
-            try:
-                output = output.union(getIncludedFileListImpl(r))
-            except:
-                print("Failed while parsing file " + filename)
-                raise
-    return output
+    with open(filename) as file:
+        source = file.read()
+        stripped_source = remove_c_comments(source)
+        include_iter = re.finditer("#include \"([^\"]+)\"", stripped_source)
+        return [os.path.normpath(os.path.join(os.path.dirname(filename), m.group(1))) for m in include_iter]
 
-def getIncludedFileList(filename):
-    return [f for f in getIncludedFileListImpl("Source/" + filename + ".cpp")]
+@lru_cache
+def get_direct_associates_of(filename): # Includes, but also .hpp files are associated to .cpp ones
+    (root, ext) = os.path.splitext(filename)
+    if ext == ".hpp" and os.path.exists(root + ".cpp"):
+        ret = get_direct_includes_of(filename).copy()
+        ret.append(root + ".cpp")
+        return ret
+    else:
+        return get_direct_includes_of(filename)
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)) + "/..")
-jinja_env = Environment(
-    loader=FileSystemLoader('.')
-);
+@lru_cache
+def get_nested_includes_of(filename):
+    to_check = get_direct_includes_of(filename).copy()
+    to_check.append(filename)
+    ret = {i for i in to_check}
+    while len(to_check) > 0:
+        target_file = to_check.pop()
+        target_includes = get_direct_includes_of(target_file)
+        for include in target_includes:
+            if not include in ret:
+                to_check.append(include)
+                ret.add(include)
+    return ret
 
-def list_roots_with_extension(ext, subdirectory = ""):
-    return [os.path.splitext(os.path.relpath(file_path, "Source"))[0] for folder in os.walk("Source/" + subdirectory) for file_path in glob(os.path.join(folder[0],"*." + ext))];
-def get_object_files_from(list):
-    roots = [os.path.splitext(file)[0] for file in list]
-    return {os.path.relpath(file, "Source") for file in roots if os.path.isfile(file + ".cpp")}
+@lru_cache
+def get_nested_associates_of(filename):
+    to_check = get_direct_associates_of(filename).copy()
+    to_check.append(filename)
+    ret = {i for i in to_check}
+    while len(to_check) > 0:
+        target_file = to_check.pop()
+        target_includes = get_direct_associates_of(target_file)
+        for include in target_includes:
+            if not include in ret:
+                to_check.append(include)
+                ret.add(include)
+    return ret
+
+def objects_to_compile(filename, object_folder):
+    associates = get_nested_associates_of(filename)
+    associate_cpp_roots = [
+        os.path.relpath(os.path.splitext(file)[0], "Source")
+        for file in associates if os.path.splitext(file)[1] == '.cpp'
+    ]
+    return [{
+        "file": object_folder + "/" + root + ".o",
+        "source": "Source/" + root + ".cpp",
+        "sources_needed": get_nested_includes_of("Source/" + root + ".cpp")
+    } for root in associate_cpp_roots]
+
 def generate_python_info():
     def is_source_generator(name):
         try:
@@ -56,7 +86,7 @@ def generate_python_info():
                 return line == "# Source Generator"
         except:
             return False
-    python_files = ["Source/" + file + ".py" for file in list_roots_with_extension("py")]
+    python_files = [file for folder in os.walk("Source") for file in glob(os.path.join(folder[0],"*.py"))]
     source_generators = [file for file in python_files if is_source_generator(file)]
     output_data = []
     for file in source_generators:
@@ -67,21 +97,24 @@ def generate_python_info():
         })
     return output_data
 
-source_gen_data = generate_python_info()
+source_generators = generate_python_info()
 
-source_files = list_roots_with_extension("cpp")
-test_roots = list_roots_with_extension("cpp", "Tests")
-test_files = get_object_files_from([file for test_root in test_roots for file in getIncludedFileList(test_root)] + ["Source/" + root + ".cpp" for root in test_roots])
-main_files = get_object_files_from(getIncludedFileList("main") + ["Source/main.cpp"])
-
-
-
-
-makefile = jinja_env.get_template('Tools/makefile_template').render(
-    source_files = source_files,
-    test_files = test_files,
-    main_files = main_files,
-    source_generators = source_gen_data,
-    getIncludedFileList = getIncludedFileList
+os.chdir(os.path.dirname(os.path.abspath(__file__)) + "/..")
+jinja_env = Environment(
+    loader=FileSystemLoader('Tools')
 );
+makefile = jinja_env.get_template('makefile_template').render(
+    targets = [{
+        "program": "Debug/program",
+        "objects": objects_to_compile("Source/main.cpp", "Debug"),
+        "phony": {
+            "name": "debug",
+            "command": "gdb -x Tools/gdb_init Debug/program"
+        },
+        "compile_options": "-O0 -ggdb",
+        "link_options": "-O0 -ggdb"
+    }],
+    source_generators = source_generators
+);
+
 open("Makefile","w").write(makefile);
