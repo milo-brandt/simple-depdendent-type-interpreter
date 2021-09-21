@@ -69,7 +69,7 @@ namespace expression {
         .is_axiom = false,
         .type = type_family_over(0)
       });
-      rules.push_back({ //type_family
+      add_rule({ //type_family
         .pattern = lambda_pattern(2, 1),
         .replacement = multi_apply(
           tree::External{1},
@@ -82,11 +82,11 @@ namespace expression {
           )
         )
       });
-      rules.push_back({ //constant
+      add_rule({ //constant
         .pattern = lambda_pattern(3, 4),
         .replacement = tree::Arg{1}
       });
-      rules.push_back({ //constant_codomain_1
+      add_rule({ //constant_codomain_1
         .pattern = lambda_pattern(4, 1),
         .replacement = multi_apply(
           tree::External{1},
@@ -97,7 +97,7 @@ namespace expression {
           }
         )
       });
-      rules.push_back({ //constant_codomain_2
+      add_rule({ //constant_codomain_2
         .pattern = lambda_pattern(5, 2),
         .replacement = multi_apply(
           tree::External{1},
@@ -108,7 +108,7 @@ namespace expression {
           }
         )
       });
-      rules.push_back({ //constant_codomain_3
+      add_rule({ //constant_codomain_3
         .pattern = lambda_pattern(6, 2),
         .replacement = multi_apply(
           tree::External{1},
@@ -121,18 +121,18 @@ namespace expression {
           )
         )
       });
-      rules.push_back({ //constant_codomain_4
+      add_rule({ //constant_codomain_4
         .pattern = lambda_pattern(7, 1),
         .replacement = tree::Apply{
           tree::External{2},
           tree::External{0}
         }
       });
-      rules.push_back({ //id
+      add_rule({ //id
         .pattern = lambda_pattern(8, 2),
         .replacement = tree::Arg{1}
       });
-      rules.push_back({ //id_codomain
+      add_rule({ //id_codomain
         .pattern = lambda_pattern(9, 1),
         .replacement = multi_apply(
           tree::External{1},
@@ -145,7 +145,7 @@ namespace expression {
           )
         )
       });
-      rules.push_back({ //arrow_codomain
+      add_rule({ //arrow_codomain
         .pattern = lambda_pattern(10, 1),
         .replacement = multi_apply(
           tree::External{1},
@@ -177,42 +177,46 @@ namespace expression {
     primitives.id_codomain = 9;
     primitives.arrow_codomain = 10;
   }
+  namespace {
+    template<class Filter>
+    tree::Expression reduce_impl(Context& ctx, tree::Expression tree, Filter&& filter) {
+    REDUCTION_START:
+      auto unfolded = unfold_ref(tree);
+      for(auto* arg : unfolded.args) {
+        *arg = reduce_impl(ctx, std::move(*arg), filter);
+      }
+      if(auto* ext = unfolded.head->get_if_external()) {
+        auto const& ext_info = ctx.external_info[ext->external_index];
+        for(auto const& rule_info : ext_info.rules) {
+          if(rule_info.arg_count <= unfolded.args.size()) {
+            auto test_pos = unfolded.spine.at(rule_info.arg_count);
+            auto const& rule = ctx.rules.at(rule_info.index);
+            if(!filter(rule)) continue;
+            if(term_matches(*test_pos, rule.pattern)) {
+              replace_with_substitution_at(test_pos, rule.pattern, rule.replacement);
+              goto REDUCTION_START;
+            }
+          }
+        }
+        for(auto const& rule_info : ext_info.data_rules) {
+          if(rule_info.arg_count <= unfolded.args.size()) {
+            auto test_pos = unfolded.spine.at(rule_info.arg_count);
+            auto const& rule = ctx.data_rules.at(rule_info.index);
+            if(term_matches(*test_pos, rule.pattern)) {
+              *test_pos = rule.replace(destructure_match(std::move(*test_pos), rule.pattern));
+              goto REDUCTION_START;
+            }
+          }
+        }
+      }
+      return std::move(tree);
+    }
+  }
   tree::Expression Context::reduce(tree::Expression tree) {
-  REDUCTION_START:
-    for(auto const& rule : rules) {
-      auto vec = find_all_matches(tree, rule.pattern);
-      if(!vec.empty()) {
-        replace_with_substitution_at(vec[0], rule.pattern, rule.replacement);
-        goto REDUCTION_START;
-      }
-    }
-    for(auto const& data_rule : data_rules) {
-      auto vec = find_all_matches(tree, data_rule.pattern);
-      if(!vec.empty()) {
-        *vec[0] = data_rule.replace(destructure_match(std::move(*vec[0]), data_rule.pattern));
-        goto REDUCTION_START;
-      }
-    }
-    return tree;
+    return reduce_impl(*this, std::move(tree), [](auto&&) { return true; });
   }
   tree::Expression Context::reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter) {
-    ROOT_REDUCTION_START:
-    for(auto const& rule : rules) {
-      if(!filter(rule)) continue;
-      auto vec = find_all_matches(tree, rule.pattern);
-      if(!vec.empty()) {
-        replace_with_substitution_at(vec[0], rule.pattern, rule.replacement);
-        goto ROOT_REDUCTION_START;
-      }
-    }
-    for(auto const& data_rule : data_rules) {
-      auto vec = find_all_matches(tree, data_rule.pattern);
-      if(!vec.empty()) {
-        *vec[0] = data_rule.replace(destructure_match(std::move(*vec[0]), data_rule.pattern));
-        goto ROOT_REDUCTION_START;
-      }
-    }
-    return tree;
+    return reduce_impl(*this, std::move(tree), std::move(filter));
   }
   TypedValue Context::get_external(std::uint64_t i) {
     return {
@@ -220,6 +224,27 @@ namespace expression {
       .type = external_info[i].type
     };
   }
+  void Context::add_rule(Rule rule) {
+    auto index = rules.size();
+    auto head = get_pattern_head(rule.pattern);
+    auto args = count_pattern_args(rule.pattern);
+    rules.push_back(std::move(rule));
+    external_info[head].rules.push_back({
+      .index = index,
+      .arg_count = args
+    });
+  }
+  void Context::add_data_rule(DataRule rule) {
+    auto index = data_rules.size();
+    auto head = get_pattern_head(rule.pattern);
+    auto args = count_pattern_args(rule.pattern);
+    data_rules.push_back(std::move(rule));
+    external_info[head].data_rules.push_back({
+      .index = index,
+      .arg_count = args
+    });
+  }
+
   std::optional<Context::FunctionData> Context::get_domain_and_codomain(tree::Expression in) {
     in = reduce(std::move(in));
     if(auto* lhs_apply = in.get_if_apply()) {
@@ -235,5 +260,14 @@ namespace expression {
       }
     }
     return std::nullopt;
+  }
+  tree::Expression Unfolding::fold() && {
+    for(auto& arg : args) {
+      head = tree::Apply{
+        std::move(head),
+        std::move(arg)
+      };
+    }
+    return std::move(head);
   }
 }

@@ -41,38 +41,38 @@ int main(int argc, char** argv) {
 
     auto substr = environment.declare_check("substr", "String -> U64 -> String").head;
 
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(add), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
         return u64(x + y);
       }
     );
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(mul), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
         return u64(x * y);
       }
     );
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(eq), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
         return tree::Expression{tree::External{ (x == y) ? yes : no }};
       }
     );
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(lte), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
         return tree::Expression{tree::External{ (x <= y) ? yes : no }};
       }
     );
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(lt), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
         return tree::Expression{tree::External{ (x < y) ? yes : no }};
       }
     );
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(sub_pos), match(u64), match(u64), fixed(witness)) >> [&](std::uint64_t x, std::uint64_t y) {
         return u64(x - y);
       }
     );
 
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(recurse), ignore, wildcard, wildcard, match(u64)) >> [&](Expression step, Expression base, std::uint64_t count) {
         for(std::uint64_t i = 0; i < count; ++i) {
           base = expression::multi_apply(
@@ -84,38 +84,38 @@ int main(int argc, char** argv) {
         return std::move(base);
       }
     );
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(substr), match(str), match(u64)) >> [&](auto str_holder, std::uint64_t amt) {
         return str({std::make_shared<std::string>(str_holder.data->substr(amt))});
       }
     );
     auto empty_vec = environment.declare_check("empty_vec", "(T : Type) -> Vector T").head;
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(empty_vec), wildcard) >> [&](tree::Expression type) {
         return vec(std::move(type), {});
       }
     );
     auto push_vec = environment.declare_check("push_vec", "(T : Type) -> Vector T -> T -> Vector T").head;
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(push_vec), wildcard, match(vec), wildcard) >> [&](tree::Expression type, std::vector<tree::Expression> data, tree::Expression then) {
         data.push_back(then);
         return vec(std::move(type), std::move(data));
       }
     );
     auto len_vec = environment.declare_check("len_vec", "(T : Type) -> Vector T -> U64").head;
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(len_vec), ignore, match(vec)) >> [&](std::vector<tree::Expression> const& data) {
         return u64(data.size());
       }
     );
     auto at_vec = environment.declare_check("at_vec", "(T : Type) -> (v : Vector T) -> (n : U64) -> Assert (lt n (len_vec T v)) -> T").head;
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(at_vec), ignore, match(vec), match(u64), fixed(witness)) >> [&](std::vector<tree::Expression> const& data, std::uint64_t index) {
         return data[index];
       }
     );
     auto recurse_vec = environment.declare_check("lfold_vec", "(S : Type) -> (T : Type) -> S -> (S -> T -> S) -> Vector T -> S").head;
-    environment.context().data_rules.push_back(
+    environment.context().add_data_rule(
       pattern(fixed(recurse_vec), ignore, ignore, wildcard, wildcard, match(vec)) >> [&](tree::Expression base, tree::Expression op, std::vector<tree::Expression> const& data) {
         for(auto const& expr : data) {
           base = expression::multi_apply(

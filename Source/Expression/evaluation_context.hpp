@@ -26,6 +26,12 @@ namespace expression {
   struct ExternalInfo {
     bool is_axiom;
     tree::Expression type;
+    struct RuleInfo {
+      std::uint64_t index;
+      std::uint64_t arg_count;
+    };
+    std::vector<RuleInfo> rules;
+    std::vector<RuleInfo> data_rules;
   };
   struct Primitives {
     std::uint64_t type;
@@ -47,6 +53,8 @@ namespace expression {
     Primitives primitives;
     Context();
     TypedValue get_external(std::uint64_t);
+    void add_rule(Rule);
+    void add_data_rule(DataRule);
     tree::Expression reduce(tree::Expression tree);
     tree::Expression reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);
     struct FunctionData {

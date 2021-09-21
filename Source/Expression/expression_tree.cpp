@@ -287,15 +287,50 @@ namespace expression {
       return pat.get_fixed().external_index;
     }
   }
+  std::uint64_t get_pattern_head(expression::data_pattern::Pattern const& pat) {
+    if(auto* apply = pat.get_if_apply()) {
+      return get_pattern_head(apply->lhs);
+    } else {
+      return pat.get_fixed().external_index;
+    }
+  }
+  std::uint64_t count_pattern_args(expression::pattern::Pattern const& pat) {
+    if(auto* apply = pat.get_if_apply()) {
+      return 1 + count_pattern_args(apply->lhs);
+    } else {
+      return 0;
+    }
+  }
+  std::uint64_t count_pattern_args(expression::data_pattern::Pattern const& pat) {
+    if(auto* apply = pat.get_if_apply()) {
+      return 1 + count_pattern_args(apply->lhs);
+    } else {
+      return 0;
+    }
+  }
 
-  RefUnfolding unfold_ref(tree::Expression const& tree) {
-    RefUnfolding ret{
+  CRefUnfolding unfold_ref(tree::Expression const& tree) {
+    CRefUnfolding ret{
       .head = &tree
     };
     while(auto* app = ret.head->get_if_apply()) {
       ret.head = &app->lhs;
       ret.args.push_back(&app->rhs);
     }
+    std::reverse(ret.args.begin(), ret.args.end());
+    return ret;
+  }
+  RefUnfolding unfold_ref(tree::Expression& tree) {
+    RefUnfolding ret{
+      .head = &tree
+    };
+    ret.spine.push_back(&tree);
+    while(auto* app = ret.head->get_if_apply()) {
+      ret.head = &app->lhs;
+      ret.spine.push_back(&app->lhs);
+      ret.args.push_back(&app->rhs);
+    }
+    std::reverse(ret.spine.begin(), ret.spine.end());
     std::reverse(ret.args.begin(), ret.args.end());
     return ret;
   }

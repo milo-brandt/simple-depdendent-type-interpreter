@@ -164,7 +164,7 @@ namespace expression::solver {
           rule.pattern = expression_context.reduce(std::move(rule.pattern));
           rule.replacement = expression_context.reduce(std::move(rule.replacement));
           if(auto new_rule = convert_to_rule(rule.pattern, rule.replacement, expression_context, solver_context.indeterminates)) {
-            expression_context.rules.push_back(std::move(*new_rule));
+            expression_context.add_rule(std::move(*new_rule));
             return true;
           } else if(auto constrained_pat = compiler::pattern::from_expression(rule.pattern, expression_context, solver_context.indeterminates)) {
             auto archived = archive(constrained_pat->pattern);
@@ -248,7 +248,7 @@ namespace expression::solver {
               instance->rule->replacement
             );
             if(!replaced_rule) std::terminate(); //the heck?
-            expression_context.rules.push_back({
+            expression_context.add_rule({
               .pattern = std::move(pat),
               .replacement = std::move(*replaced_rule)
             });

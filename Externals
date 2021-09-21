@@ -5,9 +5,15 @@ block {
 
   declare u_to_nat : U64 -> Nat;
   rule u_to_nat n = indexed_recurse Nat (\.succ) zero n;
+  declare nat_to_u : Nat -> U64;
+  rule nat_to_u zero = 0;
+  rule nat_to_u (succ n) = add (nat_to_u n) 1;
 
   declare cat : (T : Type) -> Vector T -> Vector T -> Vector T;
   rule cat T v1 v2 = lfold_vec _ _ v1 (push_vec _) v2;
+
+  declare flatten : (T : Type) -> Vector (Vector T) -> Vector T;
+  rule flatten T v = lfold_vec _ _ (empty_vec _) (cat _) v;
 
   declare vec_cons_type : Type -> Nat -> Type;
   rule vec_cons_type T zero = Vector T;
@@ -22,5 +28,13 @@ block {
 
   let vec_cons_u64 = \T.\n.vec_cons T (u_to_nat n);
 
-  vec_cons_u64 _ 2 (vec_cons_u64 _ 2 1 2) (vec_cons_u64 _ 3 3 4 5)
+  let nested = vec_cons_u64 _ 2 (vec_cons_u64 _ 2 1 2) (vec_cons_u64 _ 3 3 4 5);
+
+  declare vec_from_fn_nat : (T : Type) -> (n : Nat) -> (Nat -> T) -> Vector T;
+  rule vec_from_fn_nat T zero f = empty_vec _;
+  rule vec_from_fn_nat T (succ n) f = push_vec _ (vec_from_fn_nat _ n f) (f n);
+  declare vec_from_fn : (T : Type) -> (n : U64) -> (U64 -> T) -> Vector T;
+  rule vec_from_fn T n f = vec_from_fn_nat T (u_to_nat n) \x.f (nat_to_u x);
+
+  vec_from_fn _ 10 \x.vec_from_fn _ 10 (mul x)
 }

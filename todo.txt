@@ -1,6 +1,8 @@
 *************
 High priority
 *************
+- Some level optimization is rather urgent - perhaps just the obvious "sort rules by their heads"
+
 - Allow C++ to run in-language stuff and extract important info (e.g. for defining types, types of functions)
 - Add support for C++ types (string, int most importantly - maybe vector too)
 - Allow interactive loading of files

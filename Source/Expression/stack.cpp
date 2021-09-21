@@ -30,7 +30,7 @@ namespace expression {
       .is_axiom = false,
       .type = type_family_type()
     });
-    context.rules.push_back({
+    context.add_rule({
       .pattern = expression::lambda_pattern(var, depth()),
       .replacement = std::move(expr)
     });
@@ -98,11 +98,11 @@ namespace expression {
         }
         return head;
       };
-      context.rules.push_back({
+      context.add_rule({
         .pattern = expression::lambda_pattern(inner_constant_family, impl->depth + 1),
         .replacement = tree::External{context.primitives.type}
       });
-      context.rules.push_back({
+      context.add_rule({
         .pattern = expression::lambda_pattern(family_over, impl->depth),
         .replacement = expression::multi_apply(
           tree::External{context.primitives.arrow},
@@ -110,7 +110,7 @@ namespace expression {
           apply_args(tree::External{inner_constant_family}, 0, impl->depth)
         )
       });
-      context.rules.push_back({
+      context.add_rule({
         .pattern = expression::lambda_pattern(as_fibration, impl->depth + 1),
         .replacement = expression::multi_apply(
           tree::External{context.primitives.arrow},
@@ -118,7 +118,7 @@ namespace expression {
           apply_args(tree::Arg{0}, 1, impl->depth)
         )
       });
-      context.rules.push_back({
+      context.add_rule({
         .pattern = expression::lambda_pattern(var_p, 1),
         .replacement = tree::Apply{
           impl->var,
