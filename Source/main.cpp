@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
 
     auto const& u64 = environment.u64();
     auto const& str = environment.str();
+    auto const& vec = expression::data::Vector{environment.axiom_check("Vector", "Type -> Type").head};
 
     auto Bool = environment.axiom_check("Bool", "Type").head;
     auto yes = environment.axiom_check("yes", "Bool").head;
@@ -33,6 +34,7 @@ int main(int argc, char** argv) {
     auto mul = environment.declare_check("mul", "U64 -> U64 -> U64").head;
     auto eq = environment.declare_check("eq", "U64 -> U64 -> Bool").head;
     auto lte = environment.declare_check("lte", "U64 -> U64 -> Bool").head;
+    auto lt = environment.declare_check("lt", "U64 -> U64 -> Bool").head;
     auto sub_pos = environment.declare_check("sub_pos", "(x : U64) -> (y : U64) -> Assert (lte y x) -> U64").head;
 
     auto recurse = environment.declare_check("indexed_recurse", "(T : Type) -> (U64 -> T -> T) -> T -> U64 -> T").head;
@@ -60,6 +62,11 @@ int main(int argc, char** argv) {
       }
     );
     environment.context().data_rules.push_back(
+      pattern(fixed(lt), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
+        return tree::Expression{tree::External{ (x < y) ? yes : no }};
+      }
+    );
+    environment.context().data_rules.push_back(
       pattern(fixed(sub_pos), match(u64), match(u64), fixed(witness)) >> [&](std::uint64_t x, std::uint64_t y) {
         return u64(x - y);
       }
@@ -82,6 +89,45 @@ int main(int argc, char** argv) {
         return str({std::make_shared<std::string>(str_holder.data->substr(amt))});
       }
     );
+    auto empty_vec = environment.declare_check("empty_vec", "(T : Type) -> Vector T").head;
+    environment.context().data_rules.push_back(
+      pattern(fixed(empty_vec), wildcard) >> [&](tree::Expression type) {
+        return vec(std::move(type), {});
+      }
+    );
+    auto push_vec = environment.declare_check("push_vec", "(T : Type) -> Vector T -> T -> Vector T").head;
+    environment.context().data_rules.push_back(
+      pattern(fixed(push_vec), wildcard, match(vec), wildcard) >> [&](tree::Expression type, std::vector<tree::Expression> data, tree::Expression then) {
+        data.push_back(then);
+        return vec(std::move(type), std::move(data));
+      }
+    );
+    auto len_vec = environment.declare_check("len_vec", "(T : Type) -> Vector T -> U64").head;
+    environment.context().data_rules.push_back(
+      pattern(fixed(len_vec), ignore, match(vec)) >> [&](std::vector<tree::Expression> const& data) {
+        return u64(data.size());
+      }
+    );
+    auto at_vec = environment.declare_check("at_vec", "(T : Type) -> (v : Vector T) -> (n : U64) -> Assert (lt n (len_vec T v)) -> T").head;
+    environment.context().data_rules.push_back(
+      pattern(fixed(at_vec), ignore, match(vec), match(u64), fixed(witness)) >> [&](std::vector<tree::Expression> const& data, std::uint64_t index) {
+        return data[index];
+      }
+    );
+    auto recurse_vec = environment.declare_check("lfold_vec", "(S : Type) -> (T : Type) -> S -> (S -> T -> S) -> Vector T -> S").head;
+    environment.context().data_rules.push_back(
+      pattern(fixed(recurse_vec), ignore, ignore, wildcard, wildcard, match(vec)) >> [&](tree::Expression base, tree::Expression op, std::vector<tree::Expression> const& data) {
+        for(auto const& expr : data) {
+          base = expression::multi_apply(
+            op,
+            std::move(base),
+            std::move(expr)
+          );
+        }
+        return std::move(base);
+      }
+    );
+
   }
 
 

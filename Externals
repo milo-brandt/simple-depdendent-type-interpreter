@@ -1,0 +1,26 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare u_to_nat : U64 -> Nat;
+  rule u_to_nat n = indexed_recurse Nat (\.succ) zero n;
+
+  declare cat : (T : Type) -> Vector T -> Vector T -> Vector T;
+  rule cat T v1 v2 = lfold_vec _ _ v1 (push_vec _) v2;
+
+  declare vec_cons_type : Type -> Nat -> Type;
+  rule vec_cons_type T zero = Vector T;
+  rule vec_cons_type T (succ n) = T -> (vec_cons_type T n);
+
+  declare vec_cons_impl : (T : Type) -> (n : Nat) -> (base : Vector T) -> vec_cons_type T n;
+  rule vec_cons_impl T zero base = base;
+  rule vec_cons_impl T (succ n) base first = vec_cons_impl T n (push_vec _ base first);
+
+  declare vec_cons : (T : Type) -> (n : Nat) -> vec_cons_type T n;
+  rule vec_cons T n = vec_cons_impl T n (empty_vec _);
+
+  let vec_cons_u64 = \T.\n.vec_cons T (u_to_nat n);
+
+  vec_cons_u64 _ 2 (vec_cons_u64 _ 2 1 2) (vec_cons_u64 _ 3 3 4 5)
+}
