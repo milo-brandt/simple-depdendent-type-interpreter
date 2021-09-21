@@ -59,23 +59,11 @@ namespace expression::data {
         new (&ret.get_data().data.storage) Store{std::move(new_info)};
         return ret;
       }
-      std::optional<tree::Expression> remap_args(Buffer const& me, std::unordered_map<std::uint64_t, std::uint64_t> const& args) const override {
+      void visit_children(Buffer const& me, mdb::function<void(tree::Expression const&)> visitor) const override {
         auto const& info = *get(me);
-        auto new_type = expression::remap_args(args, info.type);
-        if(!new_type) return std::nullopt;
-        std::vector<tree::Expression> new_vec;
         for(auto const& expr : info.vec) {
-          auto new_expr = expression::remap_args(args, expr);
-          if(!new_expr) return std::nullopt;
-          new_vec.push_back(std::move(*new_expr));
+          visitor(expr);
         }
-        auto new_info = std::make_shared<Info>(Info{
-          .type = std::move(*new_type),
-          .vec = std::move(new_vec)
-        });
-        auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
-        new (&ret.get_data().data.storage) Store{std::move(new_info)};
-        return ret;
       }
       tree::Expression type_of(Buffer const& me) const override {
         return tree::Apply{tree::External{type_family_axiom}, get(me)->type};
@@ -140,10 +128,8 @@ namespace expression::data {
         new (&ret.get_data().data.storage) T{get(me)};
         return ret;
       }
-      std::optional<tree::Expression> remap_args(Buffer const& me, std::unordered_map<std::uint64_t, std::uint64_t> const&) const override {
-        auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
-        new (&ret.get_data().data.storage) T{get(me)};
-        return ret;
+      void visit_children(Buffer const& me, mdb::function<void(tree::Expression const&)>) const override {
+        //do nothing
       }
       tree::Expression type_of(Buffer const& me) const override {
         return tree::External{type_axiom};

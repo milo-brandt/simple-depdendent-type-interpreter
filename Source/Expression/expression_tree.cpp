@@ -235,32 +235,46 @@ namespace expression {
     });
   }
   std::optional<tree::Expression> remap_args(std::unordered_map<std::uint64_t, std::uint64_t> const& arg_map, tree::Expression const& target) {
-    return target.visit(mdb::overloaded{
-      [&](tree::Apply const& apply) -> std::optional<tree::Expression> {
-        if(auto lhs = remap_args(arg_map, apply.lhs)) {
-          if(auto rhs = remap_args(arg_map, apply.rhs)) {
-            return tree::Apply{
-              .lhs = std::move(*lhs),
-              .rhs = std::move(*rhs)
-            };
+    struct Detail {
+      std::unordered_map<std::uint64_t, std::uint64_t> const& arg_map;
+      std::uint64_t arg_count = 0;
+      bool is_acceptable(tree::Expression const& expr) {
+        return expr.visit(mdb::overloaded{
+          [&](tree::Apply const& apply) {
+            return is_acceptable(apply.lhs) && is_acceptable(apply.rhs);
+          },
+          [&](tree::External const& external) {
+            return true;
+          },
+          [&](tree::Arg const& arg) {
+            if(arg.arg_index >= arg_count) arg_count = arg.arg_index + 1;
+            return arg_map.contains(arg.arg_index);
+          },
+          [&](tree::Data const& data) {
+            bool okay = true;
+            data.data.visit_children([&](tree::Expression const& expr) {
+              okay = okay && is_acceptable(expr);
+            });
+            return okay;
+          }
+        });
+      }
+      std::vector<tree::Expression> get_remap() {
+        std::vector<tree::Expression> ret;
+        ret.reserve(arg_count);
+        for(std::uint64_t i = 0; i < arg_count; ++i) {
+          if(arg_map.contains(i)) {
+            ret.push_back(tree::Arg{arg_map.at(i)});
+          } else {
+            ret.push_back(tree::Arg{(std::uint64_t)-1});
           }
         }
-        return std::nullopt;
-      },
-      [&](tree::External const& external) -> std::optional<tree::Expression> {
-        return external; //copy
-      },
-      [&](tree::Arg const& arg) -> std::optional<tree::Expression> {
-        if(arg_map.contains(arg.arg_index)) {
-          return tree::Arg{arg_map.at(arg.arg_index)};
-        } else {
-          return std::nullopt;
-        }
-      },
-      [&](tree::Data const& data) -> std::optional<tree::Expression> {
-        return data.data.remap_args(arg_map);
+        return ret;
       }
-    });
+    };
+    Detail detail{arg_map};
+    if(!detail.is_acceptable(target)) return std::nullopt;
+    return substitute_into_replacement(detail.get_remap(), target);
   }
   void replace_with_substitution_at(tree::Expression* term, pattern::Pattern const& pattern, tree::Expression const& replacement) {
     auto captures = destructure_match(std::move(*term), pattern);
