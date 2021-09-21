@@ -2,6 +2,7 @@
 #define EXPRESSION_DATA_HELPER_HPP
 
 #include "evaluation_context.hpp"
+#include "../Utility/function_info.hpp"
 
 namespace expression::data {
   class Vector {
@@ -139,6 +140,7 @@ namespace expression::data {
     std::uint64_t type_index;
     std::uint64_t type_axiom;
   public:
+    using Type = T;
     SmallScalar(Context& context) {
       auto impl = std::make_unique<Impl>();
       type_axiom = context.create_variable({
@@ -164,8 +166,15 @@ namespace expression::data {
     std::uint64_t get_type_index() const {
       return type_index;
     }
+    tree::Expression get_type_expr() const {
+      return tree::External{type_axiom};
+    }
+    data_pattern::Pattern get_type_pattern() const {
+      return data_pattern::Data{type_index};
+    }
+    T& extract(Buffer& buffer) const { return (T&)buffer; }
+    T const& extract(Buffer const& buffer) const { return (T const&)buffer; }
   };
-  template class SmallScalar<std::uint64_t>;
 
   namespace builder {
     template<class LHS, class RHS>
@@ -272,6 +281,95 @@ namespace expression::data {
         }
       };
     }
+    struct ManufacturedRule {
+      std::uint64_t head;
+      DataRule rule;
+    };
+    template<class... Kinds>
+    struct RuleMaker {
+      Context& context;
+      std::tuple<Kinds...> kinds;
+      RuleMaker(Context& context, Kinds... kinds):context(context), kinds(std::move(kinds)...) {}
+      template<class T, std::uint64_t index>
+      auto const& get_kind_for_impl() const {
+        static_assert(index < sizeof...(Kinds));
+        using Kind = std::decay_t<decltype(std::get<index>(kinds))>;
+        if constexpr(std::is_same_v<typename Kind::Type, T>) {
+          return std::get<index>(kinds);
+        } else {
+          return get_kind_for_impl<T, index + 1>();
+        }
+      }
+      template<class T>
+      auto const& get_kind_for() const {
+        static_assert((std::is_same_v<typename Kinds::Type, T> + ...) == 1, "The selected kind must appear exactly once in the type list.");
+        return get_kind_for_impl<T, 0>();
+      }
+      template<class T>
+      tree::Expression get_type_expr() const {
+        return get_kind_for<T>().get_type_expr();
+      }
+      template<class T>
+      data_pattern::Pattern get_type_pattern() const {
+        return get_kind_for<T>().get_type_pattern();
+      }
+      template<class T>
+      decltype(auto) extract(tree::Expression& expr) const {
+        return get_kind_for<T>().extract(expr.get_data().data.storage);
+      }
+      template<class T>
+      tree::Expression embed(T&& value) const {
+        return get_kind_for<T>()(std::forward<T>(value));
+      }
+      template<class F>
+      ManufacturedRule operator()(F f) const {
+        return [&]<class Ret, class... Args>(mdb::FunctionInfo<Ret(Args...)>) {
+          struct TypeResult {
+            Context& context;
+            tree::Expression type;
+            TypeResult operator*(TypeResult const& other) {
+              auto codomain = multi_apply(
+                tree::External{context.primitives.constant},
+                tree::External{context.primitives.type},
+                std::move(other.type),
+                type
+              );
+              return TypeResult{
+                .context = context,
+                .type = multi_apply(
+                  tree::External{context.primitives.arrow},
+                  std::move(type),
+                  std::move(codomain)
+                )
+              };
+            }
+          };
+          auto type = (TypeResult{context, get_type_expr<Args>()} * ... * TypeResult{context, get_type_expr<Ret>()}).type; //this fold is a right-fold (x * (y * (z * w)))
+          std::uint64_t head = context.create_variable({
+            .is_axiom = false,
+            .type = std::move(type)
+          });
+          data_pattern::Pattern pat = data_pattern::Fixed{head};
+          ((pat = data_pattern::Apply{std::move(pat), get_type_pattern<Args>()}) , ...);
+          auto replace = [this, f = std::move(f)](std::vector<tree::Expression> input) -> tree::Expression {
+            return [&]<std::size_t... index>(std::index_sequence<index...>) {
+              return embed(
+                f(extract<Args>(input[index])...)
+              );
+            }(std::make_index_sequence<sizeof...(Args)>{});
+          };
+          return ManufacturedRule{
+            .head = head,
+            .rule = {
+              .pattern = std::move(pat),
+              .replace = std::move(replace)
+            }
+          };
+        }(mdb::function_info_for<F>);
+      }
+    };
+    template<class... Kinds> RuleMaker(Context&, Kinds...) -> RuleMaker<Kinds...>;
+
   }
 }
 

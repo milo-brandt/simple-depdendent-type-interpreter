@@ -11,8 +11,8 @@ namespace expression {
     }
     return ret;
   };
-  constexpr auto multi_apply = [](tree::Expression head, auto&&... args) {
-    ((head = tree::Apply{std::move(head), std::move(args)}) , ...);
+  constexpr auto multi_apply = []<class... Args>(tree::Expression head, Args&&... args) {
+    ((head = tree::Apply{std::move(head), std::forward<Args>(args)}) , ...);
     return head;
   };
   struct Rule {

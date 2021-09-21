@@ -21,15 +21,15 @@ namespace expression::interactive {
     expression::data::SmallScalar<StrHolder> str;
     std::unordered_map<std::string, TypedValue> names_to_values;
     std::unordered_map<std::uint64_t, std::string> externals_to_names;
+    void name_external(std::string name, std::uint64_t ext) {
+      externals_to_names.insert(std::make_pair(ext, name));
+      names_to_values.insert(std::make_pair(name, expression_context.get_external(ext)));
+    }
     Impl():u64(expression_context), str(expression_context) {
-      auto register_primitive = [&](std::string name, std::uint64_t ext) {
-        externals_to_names.insert(std::make_pair(ext, name));
-        names_to_values.insert(std::make_pair(name, expression_context.get_external(ext)));
-      };
-      register_primitive("Type", expression_context.primitives.type);
-      register_primitive("arrow", expression_context.primitives.arrow);
-      register_primitive("U64", u64.get_type_axiom());
-      register_primitive("String", str.get_type_axiom());
+      name_external("Type", expression_context.primitives.type);
+      name_external("arrow", expression_context.primitives.arrow);
+      name_external("U64", u64.get_type_axiom());
+      name_external("String", str.get_type_axiom());
     }
     struct BaseInfo {
       std::string_view source;
@@ -302,7 +302,6 @@ namespace expression::interactive {
         std::cerr << compile.get_error() << "\n";
       }
     }
-
   };
 
   Environment::Environment():impl(std::make_unique<Impl>()) {}
@@ -325,7 +324,9 @@ namespace expression::interactive {
   void Environment::debug_parse(std::string_view str) {
     return impl->debug_parse(str);
   }
-
+  void Environment::name_external(std::string name, std::uint64_t external) {
+    return impl->name_external(std::move(name), external);
+  }
   Context& Environment::context() { return impl->expression_context; }
   expression::data::SmallScalar<std::uint64_t> const& Environment::u64() const { return impl->u64; }
   expression::data::SmallScalar<StrHolder> const& Environment::str() const { return impl->str; }

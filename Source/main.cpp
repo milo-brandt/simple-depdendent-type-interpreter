@@ -15,14 +15,21 @@ void debug_print_rule(expression::Rule const& rule) {
 int main(int argc, char** argv) {
   std::string last_line = "";
   expression::interactive::Environment environment;
+  auto const& u64 = environment.u64();
+  auto const& str = environment.str();
+  auto vec = expression::data::Vector{environment.axiom_check("Vector", "Type -> Type").head};
+  expression::data::builder::RuleMaker rule_maker{environment.context(), u64, str}; //needs to live as long as the rules it creates... meh
+
   {
     using namespace expression::data::builder;
     namespace tree = expression::tree;
     using Expression = tree::Expression;
 
-    auto const& u64 = environment.u64();
-    auto const& str = environment.str();
-    auto const& vec = expression::data::Vector{environment.axiom_check("Vector", "Type -> Type").head};
+    auto add_lambda_rule = [&]<class F>(std::string name, F f) {
+      auto manufactured = rule_maker(f);
+      environment.name_external(std::move(name), manufactured.head);
+      environment.context().add_data_rule(std::move(manufactured.rule));
+    };
 
     auto Bool = environment.axiom_check("Bool", "Type").head;
     auto yes = environment.axiom_check("yes", "Bool").head;
@@ -30,8 +37,6 @@ int main(int argc, char** argv) {
     auto Assert = environment.axiom_check("Assert", "Bool -> Type").head;
     auto witness = environment.axiom_check("witness", "Assert yes").head;
 
-    auto add = environment.declare_check("add", "U64 -> U64 -> U64").head;
-    auto mul = environment.declare_check("mul", "U64 -> U64 -> U64").head;
     auto eq = environment.declare_check("eq", "U64 -> U64 -> Bool").head;
     auto lte = environment.declare_check("lte", "U64 -> U64 -> Bool").head;
     auto lt = environment.declare_check("lt", "U64 -> U64 -> Bool").head;
@@ -41,16 +46,16 @@ int main(int argc, char** argv) {
 
     auto substr = environment.declare_check("substr", "String -> U64 -> String").head;
 
-    environment.context().add_data_rule(
-      pattern(fixed(add), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
-        return u64(x + y);
-      }
-    );
-    environment.context().add_data_rule(
-      pattern(fixed(mul), match(u64), match(u64)) >> [&](std::uint64_t x, std::uint64_t y) {
-        return u64(x * y);
-      }
-    );
+    add_lambda_rule("sub", [](std::uint64_t x, std::uint64_t y) {
+      return x - y;
+    });
+    add_lambda_rule("add", [](std::uint64_t x, std::uint64_t y) {
+      return x + y;
+    });
+    add_lambda_rule("mul", [](std::uint64_t x, std::uint64_t y) {
+      return x * y;
+    });
+
     environment.context().add_data_rule(
       pattern(fixed(eq), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
         return tree::Expression{tree::External{ (x == y) ? yes : no }};

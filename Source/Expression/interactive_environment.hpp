@@ -31,6 +31,7 @@ namespace expression::interactive {
     DeclarationInfo declare_check(std::string name, std::string_view expr);
     DeclarationInfo axiom_check(std::string_view expr);
     DeclarationInfo axiom_check(std::string name, std::string_view expr);
+    void name_external(std::string name, std::uint64_t external);
 
     void debug_parse(std::string_view);
 
