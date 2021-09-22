@@ -3,17 +3,9 @@
 
 #include "evaluation_context.hpp"
 #include "data_helper.hpp"
+#include "../ImportedTypes/string_holder.hpp"
 
 namespace expression::interactive {
-  struct StrHolder {
-    std::shared_ptr<std::string> data;
-  };
-  inline bool operator==(StrHolder const& lhs, StrHolder const& rhs) {
-    return *lhs.data == *rhs.data;
-  }
-  inline std::ostream& operator<<(std::ostream& o, StrHolder const& holder) {
-    return o << "\"" << *holder.data << "\"";
-  }
   class Environment {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -37,7 +29,7 @@ namespace expression::interactive {
 
     Context& context();
     expression::data::SmallScalar<std::uint64_t> const& u64() const;
-    expression::data::SmallScalar<StrHolder> const& str() const;
+    expression::data::SmallScalar<imported_type::StringHolder> const& str() const;
 
   };
 }

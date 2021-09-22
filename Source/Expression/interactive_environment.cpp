@@ -18,7 +18,7 @@ namespace expression::interactive {
   struct Environment::Impl {
     expression::Context expression_context;
     expression::data::SmallScalar<std::uint64_t> u64;
-    expression::data::SmallScalar<StrHolder> str;
+    expression::data::SmallScalar<imported_type::StringHolder> str;
     std::unordered_map<std::string, TypedValue> names_to_values;
     std::unordered_map<std::uint64_t, std::string> externals_to_names;
     void name_external(std::string name, std::uint64_t ext) {
@@ -117,7 +117,7 @@ namespace expression::interactive {
               embeds.push_back({std::move(ret), std::move(t)});
             },
             [&](std::string literal) {
-              auto ret = str(StrHolder{std::make_shared<std::string>(std::move(literal))});
+              auto ret = str(imported_type::StringHolder{literal});
               auto t = ret.get_data().data.type_of();
               embeds.push_back({std::move(ret), std::move(t)});
             }
@@ -329,5 +329,5 @@ namespace expression::interactive {
   }
   Context& Environment::context() { return impl->expression_context; }
   expression::data::SmallScalar<std::uint64_t> const& Environment::u64() const { return impl->u64; }
-  expression::data::SmallScalar<StrHolder> const& Environment::str() const { return impl->str; }
+  expression::data::SmallScalar<imported_type::StringHolder> const& Environment::str() const { return impl->str; }
 }

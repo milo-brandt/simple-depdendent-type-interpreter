@@ -44,8 +44,6 @@ int main(int argc, char** argv) {
 
     auto recurse = environment.declare_check("indexed_recurse", "(T : Type) -> (U64 -> T -> T) -> T -> U64 -> T").head;
 
-    auto substr = environment.declare_check("substr", "String -> U64 -> String").head;
-
     add_lambda_rule("sub", [](std::uint64_t x, std::uint64_t y) {
       return x - y;
     });
@@ -55,6 +53,28 @@ int main(int argc, char** argv) {
     add_lambda_rule("mul", [](std::uint64_t x, std::uint64_t y) {
       return x * y;
     });
+    add_lambda_rule("exp", [](std::uint64_t x, std::uint64_t y) {
+      std::uint64_t ret = 1;
+      for(std::uint64_t ct = 0; ct < y; ++ct)
+        ret *= x;
+      return ret;
+    });
+    add_lambda_rule("len", [](imported_type::StringHolder const& str) {
+      return str.size();
+    });
+    add_lambda_rule("substr", [](imported_type::StringHolder str, std::uint64_t start, std::uint64_t len) {
+      return str.substr(start, len);
+    });
+    add_lambda_rule("cat", [](imported_type::StringHolder lhs, imported_type::StringHolder rhs) {
+      return imported_type::StringHolder{std::string{lhs.get_string()} + std::string{rhs.get_string()}};
+    });
+
+    auto starts_with = environment.declare_check("starts_with", "String -> String -> Bool").head;
+    environment.context().add_data_rule(
+      pattern(fixed(starts_with), match(str), match(str)) >> [&, yes, no](imported_type::StringHolder const& prefix, imported_type::StringHolder const& str) {
+        return tree::Expression{tree::External{ (str.get_string().starts_with(prefix.get_string())) ? yes : no }};
+      }
+    );
 
     environment.context().add_data_rule(
       pattern(fixed(eq), match(u64), match(u64)) >> [&, yes, no](std::uint64_t x, std::uint64_t y) {
@@ -87,11 +107,6 @@ int main(int argc, char** argv) {
           );
         }
         return std::move(base);
-      }
-    );
-    environment.context().add_data_rule(
-      pattern(fixed(substr), match(str), match(u64)) >> [&](auto str_holder, std::uint64_t amt) {
-        return str({std::make_shared<std::string>(str_holder.data->substr(amt))});
       }
     );
     auto empty_vec = environment.declare_check("empty_vec", "(T : Type) -> Vector T").head;

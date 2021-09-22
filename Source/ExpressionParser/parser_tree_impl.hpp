@@ -1690,8 +1690,8 @@ namespace expression_parser::output::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Let;
     friend Lambda;
+    friend Let;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -2520,8 +2520,8 @@ namespace expression_parser::locator::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Let;
     friend Lambda;
+    friend Let;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -3356,8 +3356,8 @@ namespace expression_parser::resolved::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Let;
     friend Lambda;
+    friend Let;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;

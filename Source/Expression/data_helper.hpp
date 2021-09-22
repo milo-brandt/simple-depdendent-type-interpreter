@@ -291,10 +291,11 @@ namespace expression::data {
       std::tuple<Kinds...> kinds;
       RuleMaker(Context& context, Kinds... kinds):context(context), kinds(std::move(kinds)...) {}
       template<class T, std::uint64_t index>
-      auto const& get_kind_for_impl() const {
-        static_assert(index < sizeof...(Kinds));
+      decltype(auto) get_kind_for_impl() const {
         using Kind = std::decay_t<decltype(std::get<index>(kinds))>;
-        if constexpr(std::is_same_v<typename Kind::Type, T>) {
+        if constexpr(index >= sizeof...(Kinds)) {
+          static_assert(index < sizeof...(Kinds), "OH NO");
+        } else if constexpr(std::is_same_v<typename Kind::Type, T>) {
           return std::get<index>(kinds);
         } else {
           return get_kind_for_impl<T, index + 1>();
@@ -307,19 +308,19 @@ namespace expression::data {
       }
       template<class T>
       tree::Expression get_type_expr() const {
-        return get_kind_for<T>().get_type_expr();
+        return get_kind_for<std::decay_t<T> >().get_type_expr();
       }
       template<class T>
       data_pattern::Pattern get_type_pattern() const {
-        return get_kind_for<T>().get_type_pattern();
+        return get_kind_for<std::decay_t<T> >().get_type_pattern();
       }
       template<class T>
       decltype(auto) extract(tree::Expression& expr) const {
-        return get_kind_for<T>().extract(expr.get_data().data.storage);
+        return get_kind_for<std::decay_t<T> >().extract(expr.get_data().data.storage);
       }
       template<class T>
       tree::Expression embed(T&& value) const {
-        return get_kind_for<T>()(std::forward<T>(value));
+        return get_kind_for<std::decay_t<T> >()(std::forward<T>(value));
       }
       template<class F>
       ManufacturedRule operator()(F f) const {
