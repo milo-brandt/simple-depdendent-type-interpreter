@@ -1,6 +1,7 @@
 #include "Expression/interactive_environment.hpp"
 #include "Expression/expression_debug_format.hpp"
 #include <fstream>
+#include "ExpressionParser/lexer_tree.hpp"
 
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
@@ -173,7 +174,24 @@ int main(int argc, char** argv) {
       }
     }
     std::string_view source = line;
-    environment.debug_parse(source);
+    expression_parser::LexerInfo info {
+      .symbol_map = {
+        {"block", 0},
+        {"->", 1},
+        {":", 2},
+        {";", 3}
+      }
+    };
+    auto ret = expression_parser::lex_string(source, info);
+    if(auto* err = ret.get_if_error()) {
+      std::cout << err->message << "\n";
+      std::cout << err->position << "\n";
+    } else {
+      std::cout << format(expression_parser::lex_output::Term{ret.get_value().output}) << "\n";
+      std::cout << format(expression_parser::lex_locator::Term{ret.get_value().locator}) << "\n";
+    }
+
+    //environment.debug_parse(source);
   }
   return 0;
 }

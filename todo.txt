@@ -1,15 +1,15 @@
 *************
 High priority
 *************
-- Allow C++ to run in-language stuff and extract important info (e.g. for defining types, types of functions)
-- Add support for C++ types (string, int most importantly - maybe vector too)
+- Add "match" statement!
+- Add backtracking to equation errors (+ note which are _errors_ and which are merely hung)
+- Add syntax for comments
+
 - Allow interactive loading of files
 - Add an IO monad
 - Add a system of traits
 - Add a module system
 - Add automated testing
-- Improve error message generation (esp. for when equations fail to solve)
-- Add syntax for comments
 - Add possibility for hidden arguments
 
 ************
