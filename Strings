@@ -1,0 +1,118 @@
+block {
+  axiom Unit : Type;
+  axiom unit : Unit;
+
+  axiom Hold : Type;
+  axiom unhold : Hold;
+
+  axiom ParseResult : Type -> Type;
+  axiom success : (T : Type) -> T -> String -> ParseResult T;
+  axiom failure : (T : Type) -> ParseResult T;
+
+  declare if : (T : Type) -> Bool -> T -> T -> T;
+  rule if T yes x y = x;
+  rule if T no x y = y;
+
+  declare is_success : (T : Type) -> ParseResult T -> Bool;
+  rule is_success T (success T x rest) = yes;
+  rule is_success T (failure T) = no;
+
+  declare get_success : (T : Type) -> (result : ParseResult T) -> (if _ (is_success _ result) T Unit);
+  rule get_success T (success T x rest) = x;
+  rule get_success T (failure T) = unit;
+
+  declare remove_prefix : U64 -> String -> String;
+  rule remove_prefix n str = substr str n (sub (len str) n);
+
+  declare parse_digit : String -> ParseResult U64;
+  rule parse_digit str =
+    if _ (starts_with "0" str)
+      (success _ 0 (remove_prefix 1 str)) \\
+    if _ (starts_with "1" str)
+      (success _ 1 (remove_prefix 1 str)) \\
+    if _ (starts_with "2" str)
+      (success _ 2 (remove_prefix 1 str)) \\
+    if _ (starts_with "3" str)
+      (success _ 3 (remove_prefix 1 str)) \\
+    if _ (starts_with "4" str)
+      (success _ 4 (remove_prefix 1 str)) \\
+    if _ (starts_with "5" str)
+      (success _ 5 (remove_prefix 1 str)) \\
+    if _ (starts_with "6" str)
+      (success _ 6 (remove_prefix 1 str)) \\
+    if _ (starts_with "7" str)
+      (success _ 7 (remove_prefix 1 str)) \\
+    if _ (starts_with "8" str)
+      (success _ 8 (remove_prefix 1 str)) \\
+    if _ (starts_with "9" str)
+      (success _ 9 (remove_prefix 1 str)) \\
+    failure _;
+
+  let Parser = \T.String -> ParseResult T;
+
+  declare held_bind_impl : (S : Type) -> (T : Type) -> ParseResult S -> (Hold -> S -> Parser T) -> ParseResult T;
+  rule held_bind_impl S T (success S value rest) then = then unhold value rest;
+  rule held_bind_impl S T (failure S) then = failure T;
+
+  declare held_bind : (S : Type) -> (T : Type) -> Parser S -> (Hold -> S -> Parser T) -> Parser T;
+  rule held_bind S T parser then = \str.held_bind_impl S T (parser str) then;
+
+  declare pure : (T : Type) -> T -> Parser T;
+  rule pure T x str = success T x str;
+
+  declare recognize : String -> Parser Unit;
+  rule recognize symbol string =
+    if _ (starts_with symbol string)
+      (success _ unit (remove_prefix (len symbol) string))
+      (failure _);
+
+  declare or_default_impl : (T : Type) -> T -> String -> ParseResult T -> ParseResult T;
+  rule or_default_impl T x str (success T value rest) = (success T value rest);
+  rule or_default_impl T x str (failure T) = success T x str;
+
+  declare or_default : (T : Type) -> T -> Parser T -> Parser T;
+  rule or_default T x f = \str.or_default_impl T x str (f str);
+
+  declare kleene_star : (T : Type) -> Parser T -> Parser (Vector T);
+  rule kleene_star T parser = block {
+    declare held_recursor : Vector T -> Hold -> Parser (Vector T);
+    rule held_recursor base unhold =
+      or_default _ base \\
+      held_bind _ _ parser (\hold.\next.held_recursor (push_vec _ base next) hold);
+
+    held_recursor (empty_vec _) unhold
+  };
+
+  declare bind : (S : Type) -> (T : Type) -> Parser S -> (S -> Parser T) -> Parser T;
+  rule bind S T f g = held_bind S T f (\.g);
+
+  declare map : (S : Type) -> (T : Type) -> Parser S -> (S -> T) -> Parser T;
+  rule map S T f g = bind S T f \x.pure T (g x);
+
+  let parse_integer =
+    bind _ _ parse_digit \first_digit.
+    bind _ _ (kleene_star _ parse_digit) \remaining_digits.
+    pure _ (lfold_vec _ _ first_digit (\x.\y.add (mul 10 x) y) remaining_digits);
+
+  axiom Tree : Type;
+  axiom node : Vector Tree -> Tree;
+  let empty_tree = node (empty_vec Tree);
+
+  declare parse_tree_held : Hold -> Parser Tree;
+  declare parse_tree_nontrivial : Parser Tree;
+  rule parse_tree_held unhold =
+    map _ _ (kleene_star _ parse_tree_nontrivial) node;
+  rule parse_tree_nontrivial =
+    held_bind _ _ (recognize "(") \hold.\.
+    bind _ _ (parse_tree_held hold) \ret.
+    map _ _ (recognize ")") \.ret;
+  let parse_tree = parse_tree_held unhold;
+
+  declare print_tree : Tree -> String;
+  rule print_tree (node vec) = block {
+      let print_inner = \value.cat (cat "{" (print_tree value)) "}";
+      lfold_vec _ _ "" (\str.\next.cat str (print_inner next)) vec
+  };
+
+  print_tree (get_success _ \\ parse_tree "()(()())()")
+}
