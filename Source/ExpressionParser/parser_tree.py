@@ -88,50 +88,50 @@ output = shape.generate_instance(namespace = "expression_parser::output", data =
 locator = shape.generate_instance(namespace = "expression_parser::locator", data = {
     "Expression": {
         "Apply": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Lambda": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Identifier": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Hole": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Arrow": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Block": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Literal": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ]
     },
     "Pattern": {
         "PatternApply": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "PatternIdentifier": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "PatternHole": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ]
     },
     "Command": {
         "Declare": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Rule": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Axiom": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ],
         "Let": [
-            ("position", "std::string_view")
+            ("position", "LexerSpanIndex")
         ]
     }
 })
@@ -183,5 +183,5 @@ main_output = get_output("THIS_impl")
 
 main_output.write(
     tree_def,
-    relative_includes = ["literals.hpp"]
+    relative_includes = ["literals.hpp", "lexer_tree.hpp"]
 )

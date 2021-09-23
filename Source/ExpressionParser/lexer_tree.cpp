@@ -212,4 +212,25 @@ namespace expression_parser {
       };
     });
   }
+  namespace {
+    lex_locator::archive_part::SpanTerm::ConstIterator get_iterator(lex_archive_index::Term parent, std::uint64_t index, lex_locator::archive_root::Term const& term) {
+      if(auto* parens = term[parent].get_if_parenthesized_expression()) {
+        return parens->body.begin() + index;
+      } else {
+        return term[parent].get_curly_brace_expression().body.begin() + index;
+      }
+    }
+  }
+  LexerLocatorSpan::LexerLocatorSpan(LexerSpanIndex index, lex_locator::archive_root::Term const& term)
+    :span_begin(get_iterator(index.parent, index.begin_index, term)),
+     span_end(get_iterator(index.parent, index.end_index, term)) {}
+
+  std::string_view position_of(lex_locator::archive_part::Term const& term) {
+    return term.visit([](auto const& t) { return t.position; });
+  }
+  std::string_view position_of(LexerLocatorSpan const& span) {
+    auto start = position_of(*span.begin());
+    auto end = position_of(*(span.end() - 1));
+    return std::string_view{start.data(), std::uint64_t{end.data() - start.data() + end.size()}};
+  }
 }

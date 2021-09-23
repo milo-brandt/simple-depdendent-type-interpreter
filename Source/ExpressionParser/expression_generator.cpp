@@ -12,17 +12,39 @@ namespace expression_parser {
       auto end() { return span_end; }
       bool empty() { return !(span_begin != span_end); }
       LexerSpan(LexerIt span_begin, LexerIt span_end):span_begin(span_begin),span_end(span_end){}
-      LexerSpan(lex_output::archive_part::ParenthesizedExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
-      LexerSpan(lex_output::archive_part::CurlyBraceExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
+      LexerSpan(lex_archive::ParenthesizedExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
+      LexerSpan(lex_archive::CurlyBraceExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
     };
-    using ExprResult = mdb::Result<output::Expression, ParseError>;
-    using CommandResult = mdb::Result<output::Command, ParseError>;
-    using PatternResult = mdb::Result<output::Pattern, ParseError>;
+    struct LocatorInfo {
+      lex_archive_index::Term parent;
+      LexerIt parent_begin;
+      LocatorInfo(lex_archive::ParenthesizedExpression const& expr):parent(expr.index()),parent_begin(expr.body.begin()) {}
+      LocatorInfo(lex_archive::CurlyBraceExpression const& expr):parent(expr.index()),parent_begin(expr.body.begin()) {}
+      LexerSpanIndex to_span(LexerSpan input) const {
+        return {
+          .parent = parent,
+          .begin_index = (std::uint64_t)(input.span_begin - parent_begin),
+          .end_index = (std::uint64_t)(input.span_end - parent_begin)
+        };
+      }
+      LexerSpanIndex to_span(LexerIt begin, LexerIt end) const {
+        return {
+          .parent = parent,
+          .begin_index = (std::uint64_t)(begin - parent_begin),
+          .end_index = (std::uint64_t)(end - parent_begin)
+        };
+      }
 
-    ExprResult parse_expression(LexerSpan& span);
-    ExprResult parse_block(lex_archive::CurlyBraceExpression const& span);
-    ExprResult parse_lambda(LexerSpan& span) { //precondition: span is after backslash
+    };
+    using ExprResult = mdb::Result<located_output::Expression, ParseError>;
+    using CommandResult = mdb::Result<located_output::Command, ParseError>;
+    using PatternResult = mdb::Result<located_output::Pattern, ParseError>;
+
+    ExprResult parse_expression(LocatorInfo const&, LexerSpan& span);
+    ExprResult parse_block(LexerSpanIndex position, lex_archive::CurlyBraceExpression const& span);
+    ExprResult parse_lambda(LocatorInfo const& locator, LexerSpan& span) { //precondition: span is after backslash
       //Is: an optional variable name, followed, optionally, by : <type>, then by . <body>
+      auto lambda_start = span.span_begin - 1;
       if(span.empty()) return ParseError{
         .position = (span.span_begin - 1)->index(),
         .message = "Lambda declaration before EOF."
@@ -74,18 +96,20 @@ namespace expression_parser {
           };
         }
         if(type_span) {
-          return mdb::gather_map([&](output::Expression type, output::Expression body) -> output::Expression {
-            return output::Lambda{
+          return mdb::gather_map([&](located_output::Expression type, located_output::Expression body) -> located_output::Expression {
+            return located_output::Lambda{
               .body = std::move(body),
               .type = std::move(type),
-              .arg_name = var_name
+              .arg_name = var_name,
+              .position = locator.to_span(lambda_start, span.span_begin)
             };
-          }, [&] { return parse_expression(*type_span); }, [&] { return parse_expression(span); });
+          }, [&] { return parse_expression(locator, *type_span); }, [&] { return parse_expression(locator, span); });
         } else {
-          return mdb::map(parse_expression(span), [&](output::Expression body) -> output::Expression {
-            return output::Lambda {
+          return mdb::map(parse_expression(locator, span), [&](located_output::Expression body) -> located_output::Expression {
+            return located_output::Lambda {
               .body = std::move(body),
-              .arg_name = var_name
+              .arg_name = var_name,
+              .position = locator.to_span(lambda_start, span.span_begin)
             };
           });
         }
@@ -112,7 +136,8 @@ namespace expression_parser {
         return false;
       }
     }
-    ExprResult parse_dependent_arrow(lex_archive::ParenthesizedExpression const& parens, LexerSpan& span) {
+    ExprResult parse_dependent_arrow(LocatorInfo const& locator, lex_archive::ParenthesizedExpression const& parens, LexerSpan& span) {
+      auto dependent_arrow_begin = span.span_begin - 1;
       LexerSpan parens_span{parens};
       auto arg_name = parens.body[0].get_word().text;
       parens_span.span_begin = parens_span.span_begin + 2;
@@ -135,15 +160,16 @@ namespace expression_parser {
           .message = "Expected an expression after ':'."
         };
       }
-      return mdb::gather_map([&](output::Expression domain, output::Expression codomain) -> output::Expression {
-        return output::Arrow{
+      return mdb::gather_map([&](located_output::Expression domain, located_output::Expression codomain) -> located_output::Expression {
+        return located_output::Arrow{
           .domain = std::move(domain),
           .codomain = std::move(codomain),
-          .arg_name = arg_name
+          .arg_name = arg_name,
+          .position = locator.to_span(dependent_arrow_begin, span.span_begin)
         };
-      }, [&] { return parse_expression(parens_span); }, [&] { return parse_expression(span); });
+      }, [&] { return parse_expression(parens, parens_span); }, [&] { return parse_expression(locator, span); });
     }
-    ExprResult parse_term(LexerSpan& span) { //precondition: span is not empty.
+    ExprResult parse_term(LocatorInfo const& locator, LexerSpan& span) { //precondition: span is not empty.
       auto const& head = *span.span_begin;
       ++span.span_begin;
       return head.visit(mdb::overloaded{
@@ -157,7 +183,7 @@ namespace expression_parser {
               };
             } else if(auto* brace = span.span_begin->get_if_curly_brace_expression()) {
               ++span.span_begin;
-              return parse_block(*brace);
+              return parse_block(locator.to_span(span.span_begin - 2, span.span_begin), *brace);
             } else {
               return ParseError {
                 .position = head.index(),
@@ -171,10 +197,10 @@ namespace expression_parser {
                 .message = "Expected expression after '\\\\'."
               };
             } else {
-              return parse_expression(span); //right associative term
+              return parse_expression(locator, span); //right associative term
             }
           case symbols::backslash:
-            return parse_lambda(span);
+            return parse_lambda(locator, span);
           default:
             return ParseError{
               .position = head.index(),
@@ -183,23 +209,26 @@ namespace expression_parser {
           }
         },
         [&](lex_archive::Word const& word) -> ExprResult {
-          return output::Expression{output::Identifier{
-            .id = word.text
+          return located_output::Expression{located_output::Identifier{
+            .id = word.text,
+            .position = locator.to_span(span.span_begin - 1, span.span_begin)
           }};
         },
         [&](lex_archive::StringLiteral const& literal) -> ExprResult {
-          return output::Expression{output::Literal{
-            .value = literal.text
+          return located_output::Expression{located_output::Literal{
+            .value = literal.text,
+            .position = locator.to_span(span.span_begin - 1, span.span_begin)
           }};
         },
         [&](lex_archive::IntegerLiteral const& literal) -> ExprResult {
-          return output::Expression{output::Literal{
-            .value = literal.value
+          return located_output::Expression{located_output::Literal{
+            .value = literal.value,
+            .position = locator.to_span(span.span_begin - 1, span.span_begin)
           }};
         },
         [&](lex_archive::ParenthesizedExpression const& parens) -> ExprResult {
           if(should_parse_dependent_arrow(parens)) {
-            return parse_dependent_arrow(parens, span);
+            return parse_dependent_arrow(locator, parens, span);
           } else {
             LexerSpan parens_span = parens;
             if(parens_span.empty()) {
@@ -208,7 +237,7 @@ namespace expression_parser {
                 .message = "Expected expression inside parentheses."
               };
             } else {
-              return parse_expression(parens_span);
+              return parse_expression(parens, parens_span);
             }
           }
         },
@@ -220,10 +249,11 @@ namespace expression_parser {
         }
       });
     }
-    ExprResult parse_applications(LexerSpan& span) {
+    ExprResult parse_applications(LocatorInfo const& locator, LexerSpan& span) {
       //precondition: span is not empty.
       //will always either empty the span or leave it at an arrow.
-      auto head_result = parse_term(span);
+      auto apply_begin = span.begin();
+      auto head_result = parse_term(locator, span);
       if(head_result.holds_error()) return std::move(head_result);
       auto result = std::move(head_result.get_value());
       while(!span.empty()) {
@@ -233,18 +263,20 @@ namespace expression_parser {
             break; //don't parse through arrows (lower precedence)
           }
         }
-        auto next_term = parse_term(span);
+        auto next_term = parse_term(locator, span);
         if(next_term.holds_error()) return std::move(next_term);
-        result = output::Apply{
+        result = located_output::Apply{
           .lhs = std::move(result),
-          .rhs = std::move(next_term.get_value())
+          .rhs = std::move(next_term.get_value()),
+          .position = locator.to_span(apply_begin, span.span_begin)
         };
       }
       return result;
     }
-    ExprResult parse_expression(LexerSpan& span) {
+    ExprResult parse_expression(LocatorInfo const& locator, LexerSpan& span) {
       //precondition: span is not empty. Must consume whole span.
-      auto head_result = parse_applications(span);
+      auto expr_begin = span.begin();
+      auto head_result = parse_applications(locator, span);
       if(head_result.holds_error()) return std::move(head_result);
       if(span.empty()) {
         return std::move(head_result);
@@ -257,16 +289,18 @@ namespace expression_parser {
             .message = "Expected expression after '->'."
           };
         } else {
-          auto codomain = parse_expression(span);
+          auto codomain = parse_expression(locator, span);
           if(codomain.holds_error()) return std::move(codomain);
-          return output::Expression{output::Arrow{
+          return located_output::Expression{located_output::Arrow{
             .domain = std::move(head_result.get_value()),
-            .codomain = std::move(codomain.get_value())
+            .codomain = std::move(codomain.get_value()),
+            .position = locator.to_span(expr_begin, span.span_begin)
           }};
         }
       }
     }
-    CommandResult parse_declare_or_axiom(LexerSpan& span, bool axiom) { //pointed *at* "declare"
+    CommandResult parse_declare_or_axiom(LocatorInfo const& locator, LexerSpan& span, bool axiom) { //pointed *at* "declare"
+      auto declare_start = span.begin();
       ++span.span_begin;
       if(span.empty() || !span.span_begin->holds_word()) {
         return ParseError{
@@ -289,17 +323,19 @@ namespace expression_parser {
           .message = "Expected type expression after ':'."
         };
       }
-      auto expr = parse_expression(span);
+      auto expr = parse_expression(locator, span);
       if(expr.holds_error()) return std::move(expr.get_error());
       if(axiom) {
-        return output::Command{output::Axiom{
+        return located_output::Command{located_output::Axiom{
           .type = std::move(expr.get_value()),
-          .name = var_name
+          .name = var_name,
+          .position = locator.to_span(declare_start, span.span_begin)
         }};
       } else {
-        return output::Command{output::Declare{
+        return located_output::Command{located_output::Declare{
           .type = std::move(expr.get_value()),
-          .name = var_name
+          .name = var_name,
+          .position = locator.to_span(declare_start, span.span_begin)
         }};
       }
     }
@@ -310,20 +346,23 @@ namespace expression_parser {
       }
       return end;
     }
-    PatternResult parse_pattern(LexerSpan& span) {
+    PatternResult parse_pattern(LocatorInfo const& locator, LexerSpan& span) {
       auto parse_term = [&]() -> PatternResult {
         if(auto* word = span.span_begin->get_if_word()) {
           ++span.span_begin;
-          return output::Pattern{output::PatternIdentifier{
-            .id = word->text
+          return located_output::Pattern{located_output::PatternIdentifier{
+            .id = word->text,
+            .position = locator.to_span(span.span_begin - 1, span.span_begin)
           }};
         } else if(span.span_begin->holds_symbol() && span.span_begin->get_symbol().symbol_index == symbols::underscore) {
           ++span.span_begin;
-          return output::Pattern{output::PatternHole{}};
+          return located_output::Pattern{located_output::PatternHole{
+            .position = locator.to_span(span.span_begin - 1, span.span_begin)
+          }};
         } else if(auto* parens = span.span_begin->get_if_parenthesized_expression()) {
           ++span.span_begin;
           LexerSpan inner_span = *parens;
-          return parse_pattern(inner_span);
+          return parse_pattern(*parens, inner_span);
         } else {
           return ParseError{
             .position = span.span_begin->index(),
@@ -331,20 +370,22 @@ namespace expression_parser {
           };
         }
       };
+      auto pattern_begin = span.begin();
       auto head = parse_term();
       if(head.holds_error()) return std::move(head);
       auto ret = std::move(head.get_value());
       while(!span.empty()) {
         auto next = parse_term();
         if(next.holds_error()) return std::move(next);
-        ret = output::PatternApply{
+        ret = located_output::PatternApply{
           .lhs = std::move(ret),
-          .rhs = std::move(next.get_value())
+          .rhs = std::move(next.get_value()),
+          .position = locator.to_span(pattern_begin, span.span_begin)
         };
       }
       return ret;
     }
-    CommandResult parse_rule(LexerSpan& span) { //pointed *after* "rule"
+    CommandResult parse_rule(LocatorInfo const& locator, LexerSpan& span) { //pointed *after* "rule"
       auto equals_sign = find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
         return term.holds_symbol() && term.get_symbol().symbol_index == symbols::equals;
       });
@@ -361,7 +402,7 @@ namespace expression_parser {
           .message = "Expected pattern before '='."
         };
       }
-      auto pattern_result = parse_pattern(pattern_span);
+      auto pattern_result = parse_pattern(locator, pattern_span);
       if(pattern_result.holds_error()) return std::move(pattern_result.get_error());
       LexerSpan replacement_span{equals_sign + 1, span.end()};
       if(replacement_span.empty()) {
@@ -370,19 +411,20 @@ namespace expression_parser {
           .message = "Expected expression after '='."
         };
       }
-      auto replacement = parse_expression(replacement_span);
+      auto replacement = parse_expression(locator, replacement_span);
       if(replacement.holds_error()) return std::move(replacement.get_error());
-      return output::Command{output::Rule{
+      return located_output::Command{located_output::Rule{
         .pattern = std::move(pattern_result.get_value()),
-        .replacement = std::move(replacement.get_value())
+        .replacement = std::move(replacement.get_value()),
+        .position = locator.to_span(span)
       }};
     }
 
-    CommandResult parse_statement(LexerSpan& span, bool final) { //must consume span
+    CommandResult parse_statement(LocatorInfo const& locator, LexerSpan& span, bool final) { //must consume span
       if(auto* symbol = span.span_begin->get_if_symbol()) {
         switch(symbol->symbol_index) {
-          case symbols::declare: return parse_declare_or_axiom(span, false);
-          case symbols::axiom: return parse_declare_or_axiom(span, true);
+          case symbols::declare: return parse_declare_or_axiom(locator, span, false);
+          case symbols::axiom: return parse_declare_or_axiom(locator, span, true);
           case symbols::rule: {
             ++span.span_begin;
             if(span.empty()) {
@@ -391,7 +433,7 @@ namespace expression_parser {
                 .message = "Expected equality after 'rule'."
               };
             } else {
-              return parse_rule(span);
+              return parse_rule(locator, span);
             }
           }
           default:
@@ -401,7 +443,7 @@ namespace expression_parser {
       if(find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
         return term.holds_symbol() && term.get_symbol().symbol_index == symbols::equals;
       }) != span.end()) {
-        return parse_rule(span);
+        return parse_rule(locator, span);
       }
       if(final) {
         return ParseError{
@@ -415,16 +457,17 @@ namespace expression_parser {
         };
       }
     }
-    ExprResult parse_block(lex_archive::CurlyBraceExpression const& braces) {
+    ExprResult parse_block(LexerSpanIndex position, lex_archive::CurlyBraceExpression const& braces) {
       std::vector<LexerIt> expression_splits;
       LexerSpan span = braces;
+      LocatorInfo locator = braces;
       if(span.empty()) {
         return ParseError{
           .position = braces.index(),
           .message = "Expected statements and expression in block."
         };
       }
-      std::vector<output::Command> commands;
+      std::vector<located_output::Command> commands;
       while(true) {
         auto next_semi = find_if(span.begin(), span.end(), [&](lex_archive::Term const& term) {
           return term.holds_symbol() && term.get_symbol().symbol_index == symbols::semicolon;
@@ -432,7 +475,7 @@ namespace expression_parser {
         if(next_semi == span.end()) break;
         LexerSpan command_span{span.begin(), next_semi};
         if(command_span.empty()) continue; //ignore empty statements
-        auto next_command_result = parse_statement(command_span, next_semi + 1 == span.end());
+        auto next_command_result = parse_statement(locator, command_span, next_semi + 1 == span.end());
         if(next_command_result.holds_error()) return std::move(next_command_result.get_error());
         commands.push_back(std::move(next_command_result.get_value()));
         span.span_begin = next_semi + 1;
@@ -443,19 +486,21 @@ namespace expression_parser {
           .message = "Expected expression after last ';' in block."
         };
       }
-      auto expr_result = parse_expression(span);
+      auto expr_result = parse_expression(locator, span);
       if(expr_result.holds_error()) return std::move(expr_result);
-      return output::Expression{output::Block{
+      return located_output::Expression{located_output::Block{
         .statements = std::move(commands),
-        .value = std::move(expr_result.get_value())
+        .value = std::move(expr_result.get_value()),
+        .position = position
       }};
     }
-    mdb::Result<output::Expression, ParseError> parse_lexed_impl(lex_output::archive_part::Term const& term) {
+    mdb::Result<located_output::Expression, ParseError> parse_lexed_impl(lex_archive::Term const& term) {
       LexerSpan span = term.get_parenthesized_expression();
-      return parse_expression(span);
+      LocatorInfo locator = term.get_parenthesized_expression();
+      return parse_expression(locator, span);
     }
   }
-  mdb::Result<output::Expression, ParseError> parse_lexed(lex_output::archive_part::Term const& term) {
+  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_archive::Term const& term) {
     return parse_lexed_impl(term);
   }
 }
