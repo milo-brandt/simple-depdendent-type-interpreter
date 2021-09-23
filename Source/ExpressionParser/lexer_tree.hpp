@@ -40,6 +40,7 @@ namespace expression_parser {
   };
   std::string_view position_of(lex_locator::archive_part::Term const&);
   std::string_view position_of(LexerLocatorSpan const&);
+  std::string_view position_of(LexerSpanIndex const&, lex_locator::archive_root::Term const&);
 
   mdb::Result<lex_located_output::Term, LexerError> lex_string(std::string_view, LexerInfo const&); //not really parenthesized; just a convenient way to return vector
 }

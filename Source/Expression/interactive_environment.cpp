@@ -1,11 +1,11 @@
 #include "interactive_environment.hpp"
 #include "../CLI/format.hpp"
 #include "data_helper.hpp"
-#include "../ExpressionParser/expression_parser.hpp"
 #include "expression_debug_format.hpp"
 #include "../Utility/result.hpp"
 #include "../Compiler/instructions.hpp"
 #include "../Compiler/evaluator.hpp"
+#include "../ExpressionParser/expression_generator.hpp"
 #include "solver.hpp"
 #include "standard_solver_context.hpp"
 #include "solve_routine.hpp"
@@ -34,7 +34,11 @@ namespace expression::interactive {
     struct BaseInfo {
       std::string_view source;
     };
-    struct ReadInfo : BaseInfo {
+    struct LexInfo : BaseInfo {
+      expression_parser::lex_output::archive_root::Term lexer_output;
+      expression_parser::lex_locator::archive_root::Term lexer_locator;
+    };
+    struct ReadInfo : LexInfo {
       expression_parser::output::archive_root::Expression parser_output;
       expression_parser::locator::archive_root::Expression parser_locator;
     };
@@ -76,18 +80,50 @@ namespace expression::interactive {
         return std::nullopt;
       }
     };
-    mdb::Result<ReadInfo, std::string> read_code(BaseInfo input) {
-      auto ret = expression_parser::parser::expression(input.source);
-      if(auto* success = parser::get_if_success(&ret)) {
-        return ReadInfo{
+    mdb::Result<LexInfo, std::string> lex_code(BaseInfo input) {
+      expression_parser::LexerInfo lexer_info {
+        .symbol_map = {
+          {"block", 0},
+          {"declare", 1},
+          {"axiom", 2},
+          {"rule", 3},
+          {"let", 4},
+          {"->", 5},
+          {":", 6},
+          {";", 7},
+          {"=", 8},
+          {"\\", 9},
+          {"\\\\", 10},
+          {".", 11},
+          {"_", 12}
+        }
+      };
+      auto ret = expression_parser::lex_string(input.source, lexer_info);
+      if(auto* success = ret.get_if_value()) {
+        return LexInfo{
           input,
-          archive(std::move(success->value.output)),
-          archive(std::move(success->value.locator))
+          archive(std::move(success->output)),
+          archive(std::move(success->locator))
         };
       } else {
-        auto const& error = parser::get_error(ret);
+        auto const& error = ret.get_error();
         std::stringstream err;
-        err << "Error: " << error.error << "\nAt " << format_error(input.source.substr(error.position.begin() - input.source.begin()), input.source);
+        err << "Error: " << error.message << "\nAt " << format_error(input.source.substr(error.position.begin() - input.source.begin()), input.source);
+        return err.str();
+      }
+    }
+    mdb::Result<ReadInfo, std::string> read_code(LexInfo input) {
+      auto ret = expression_parser::parse_lexed(input.lexer_output.root());
+      if(auto* success = ret.get_if_value()) {
+        return ReadInfo{
+          std::move(input),
+          archive(std::move(success->output)),
+          archive(std::move(success->locator))
+        };
+      } else {
+        auto const& error = ret.get_error();
+        std::stringstream err;
+        err << "Error: " << error.message << "\nAt " << format_error(expression_parser::position_of(input.lexer_locator[error.position]), input.source);
         return err.str();
       }
     }
@@ -136,11 +172,11 @@ namespace expression::interactive {
         auto const& err = resolved.get_error();
         for(auto const& bad_id : err.bad_ids) {
           auto bad_pos = input.parser_locator[bad_id].position;
-          err_out << "Bad id: " << format_error(bad_pos, input.source) << "\n";
+          err_out << "Bad id: " << format_error(expression_parser::position_of(bad_pos, input.lexer_locator), input.source) << "\n";
         }
         for(auto const& bad_id : err.bad_pattern_ids) {
           auto bad_pos = input.parser_locator[bad_id].position;
-          err_out << "Bad pattern id: " << format_error(bad_pos, input.source) << "\n";
+          err_out << "Bad pattern id: " << format_error(expression_parser::position_of(bad_pos, input.lexer_locator), input.source) << "\n";
         }
         return err_out.str();
       }
@@ -173,7 +209,8 @@ namespace expression::interactive {
     }
     mdb::Result<EvaluateInfo, std::string> full_compile(std::string_view str) {
       return map(bind(
-        read_code({str}),
+        lex_code({str}),
+        [this](auto last) { return read_code(std::move(last)); },
         [this](auto last) { return resolve(std::move(last)); }
       ), [this](auto last) { return evaluate(std::move(last)); });
     }
@@ -277,7 +314,7 @@ namespace expression::interactive {
           auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
           auto const& locator_pos = value->parser_locator[locator_index];
           auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-          std::cout << "Position: " << format_info(str_pos, value->source) << "\n";
+          std::cout << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
         }
         std::vector<expression::Rule> new_rules;
         for(auto i = value->rule_begin; i < value->rule_end; ++i) {

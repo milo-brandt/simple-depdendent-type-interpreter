@@ -233,4 +233,10 @@ namespace expression_parser {
     auto end = position_of(*(span.end() - 1));
     return std::string_view{start.data(), std::uint64_t{end.data() - start.data() + end.size()}};
   }
+  std::string_view position_of(LexerSpanIndex const& span, lex_locator::archive_root::Term const& locator) {
+    return position_of(LexerLocatorSpan{
+      span,
+      locator
+    });
+  }
 }
