@@ -201,6 +201,10 @@ namespace expression_parser {
             }
           case symbols::backslash:
             return parse_lambda(locator, span);
+          case symbols::underscore:
+            return located_output::Expression{located_output::Hole{
+              .position = locator.to_span(span.span_begin - 1, span.span_begin)
+            }};
           default:
             return ParseError{
               .position = head.index(),
