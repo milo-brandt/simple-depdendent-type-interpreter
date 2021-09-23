@@ -104,7 +104,7 @@ namespace expression_parser {
     }
     std::string_view parse_identifier(std::string_view& str) { //precondition: str[0] exists and is alpha or '_'
       std::string_view total = str;
-      while(!str.empty() && (std::isalpha(str[0]) || str[0] == '_')) {
+      while(!str.empty() && (std::isalnum(str[0]) || str[0] == '_')) {
         str.remove_prefix(1);
       }
       return string_between(total.data(), str.data());
