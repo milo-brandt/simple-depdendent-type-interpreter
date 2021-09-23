@@ -127,6 +127,7 @@ archive_part::{{ tree.kinds[0].name }}
     {{ classname }}& operator=({{classname}}&&) = delete;
 {%- endmacro %}
 {%- macro getter_declarations(name) -%}
+    bool holds_{{name|underscore}}() const;
     {{name}}& get_{{name|underscore}}();
     {{name}} const& get_{{name|underscore}}() const;
     {{name}}* get_if_{{name|underscore}}();
@@ -135,6 +136,7 @@ archive_part::{{ tree.kinds[0].name }}
 {%- macro component_getter_declaration(classname, component) -%}
     {{ getter_declarations(component.name) }}
     {%- call in_extension("cpp") %}
+  bool {{ classname }}::holds_{{component.name|underscore}}() const { return discriminator == {{component.global_index}}; }
   {{component.name}}& {{ classname }}::get_{{component.name|underscore}}() { if(discriminator == {{component.global_index}}) return *({{component.name}}*)this; else std::terminate(); }
   {{component.name}} const& {{ classname }}::get_{{component.name|underscore}}() const { if(discriminator == {{component.global_index}}) return *({{component.name}} const*)this; else std::terminate(); }
   {{component.name}}* {{ classname }}::get_if_{{component.name|underscore}}() { if(discriminator == {{component.global_index}}) return ({{component.name}}*)this; else return nullptr; }
@@ -144,6 +146,7 @@ archive_part::{{ tree.kinds[0].name }}
 {%- macro kind_getter_declaration(classname, kind) -%}
     {{ getter_declarations(kind.name) }}
 {%- call in_extension("cpp") %}
+  bool {{ classname }}::holds_{{kind.name|underscore}}() const { return archive_detail::kind_table[discriminator] == {{kind.kind_index}}; }
   {{kind.name}}& {{ classname }}::get_{{kind.name|underscore}}() { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return *({{kind.name}}*)this; else std::terminate(); }
   {{kind.name}} const& {{ classname }}::get_{{kind.name|underscore}}() const { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return *({{kind.name}} const*)this; else std::terminate(); }
   {{kind.name}}* {{ classname }}::get_if_{{kind.name|underscore}}() { if(archive_detail::kind_table[discriminator] == {{kind.kind_index}}) return ({{kind.name}}*)this; else return nullptr; }
