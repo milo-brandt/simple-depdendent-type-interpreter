@@ -304,7 +304,13 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
       {{ kind.name }}* operator->() const { return *pos; }
       Iterator& operator++() { ++pos; return *this; }
       Iterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      Iterator& operator--() { --pos; return *this; }
+      Iterator operator--(int) { auto ret = *this; --pos; return ret; }
+      Iterator operator+(std::ptrdiff_t offset) const { return Iterator{pos + offset}; }
+      Iterator operator-(std::ptrdiff_t offset) const { return Iterator{pos - offset}; }
+      std::ptrdiff_t operator-(Iterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(Iterator const& lhs, Iterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(Iterator const& lhs, Iterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     class ConstIterator {
       {{ kind.name }} const** pos;
@@ -316,7 +322,13 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
       {{ kind.name }} const* operator->() const { return *pos; }
       ConstIterator& operator++() { ++pos; return *this; }
       ConstIterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      ConstIterator& operator--() { --pos; return *this; }
+      ConstIterator operator--(int) { auto ret = *this; --pos; return ret; }
+      ConstIterator operator+(std::ptrdiff_t offset) const { return ConstIterator{pos + offset}; }
+      ConstIterator operator-(std::ptrdiff_t offset) const { return ConstIterator{pos - offset}; }
+      std::ptrdiff_t operator-(ConstIterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos == rhs.pos; }
     };
 
     {{ no_copy("Span" + kind.name) }}
