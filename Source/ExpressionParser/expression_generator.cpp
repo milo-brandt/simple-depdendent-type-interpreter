@@ -350,6 +350,63 @@ namespace expression_parser {
       }
       return end;
     }
+    CommandResult parse_let(LocatorInfo const& locator, LexerSpan& span) { //pointed *at* "let"
+      auto let_start = span.begin();
+      ++span.span_begin;
+      if(span.empty() || !span.span_begin->holds_word()) {
+        return ParseError{
+          .position = (span.span_begin - 1)->index(),
+          .message = "Expected variable name after 'declare' or 'axiom'."
+        };
+      }
+      std::string_view var_name = span.span_begin->get_word().text;
+      ++span.span_begin;
+      std::optional<located_output::Expression> let_type;
+      if(!span.empty() && span.span_begin->holds_symbol() && span.span_begin->get_symbol().symbol_index == symbols::colon) {
+        auto equals_sign = find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
+          return term.holds_symbol() && term.get_symbol().symbol_index == symbols::equals;
+        });
+        if(equals_sign == span.end()) {
+          return ParseError{
+            .position = span.span_begin->index(),
+            .message = "Let statement does not contain '='."
+          };
+        }
+        ++span.span_begin;
+        if(span.span_begin == equals_sign) {
+          return ParseError {
+            .position = (span.span_begin - 1)->index(),
+            .message = "Expected type between ':' and '='."
+          };
+        }
+        LexerSpan type_span{span.span_begin, equals_sign};
+        auto type = parse_expression(locator, type_span);
+        if(type.holds_error()) return std::move(type.get_error());
+        let_type = std::move(type.get_value());
+        span.span_begin = equals_sign;
+      } else if(span.empty() || !span.span_begin->holds_symbol() || span.span_begin->get_symbol().symbol_index != symbols::equals) {
+        return ParseError {
+          .position = (span.span_begin - 1)->index(),
+          .message = "Expected '=' or ':' after let variable name."
+        };
+      }
+      //we are now pointed at an equals sign...
+      ++span.span_begin;
+      if(span.empty()) {
+        return ParseError{
+          .position = (span.span_begin - 1)->index(),
+          .message = "Expected expression after '='."
+        };
+      }
+      auto expr = parse_expression(locator, span);
+      if(expr.holds_error()) return std::move(expr.get_error());
+      return located_output::Command{located_output::Let{
+        .value = std::move(expr.get_value()),
+        .type = std::move(let_type),
+        .name = var_name,
+        .position = locator.to_span(let_start, span.span_begin)
+      }};
+    }
     PatternResult parse_pattern(LocatorInfo const& locator, LexerSpan& span) {
       auto parse_term = [&]() -> PatternResult {
         if(auto* word = span.span_begin->get_if_word()) {
@@ -396,7 +453,7 @@ namespace expression_parser {
       if(equals_sign == span.end()) {
         return ParseError{
           .position = span.span_begin->index(),
-          .message = "Rule declarations must include '='."
+          .message = "Rule declaration does not contain '='."
         };
       }
       LexerSpan pattern_span{span.span_begin, equals_sign};
@@ -429,6 +486,7 @@ namespace expression_parser {
         switch(symbol->symbol_index) {
           case symbols::declare: return parse_declare_or_axiom(locator, span, false);
           case symbols::axiom: return parse_declare_or_axiom(locator, span, true);
+          case symbols::let: return parse_let(locator, span);
           case symbols::rule: {
             ++span.span_begin;
             if(span.empty()) {
