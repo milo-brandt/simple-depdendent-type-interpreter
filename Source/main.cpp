@@ -179,7 +179,9 @@ int main(int argc, char** argv) {
         {"block", 0},
         {"->", 1},
         {":", 2},
-        {";", 3}
+        {";", 3},
+        {"\\", 4},
+        {"\\\\", 5}
       }
     };
     auto ret = expression_parser::lex_string(source, info);

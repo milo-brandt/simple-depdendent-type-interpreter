@@ -45,9 +45,10 @@ namespace expression_parser {
       { //search for symbols
         auto candidates_end = map.upper_bound(str); //first index greater than the string
         auto candidates_begin = map.lower_bound(str.substr(0, 1)); //first index at least the string's first character.
-        for(auto it = candidates_begin; it != candidates_end; ++it) {
-          if(str.starts_with(it->first)) {
-            return token(tokens::Symbol{.length = it->first.size(), .symbol_index = it->second}, it->first.size());
+        while(candidates_begin != candidates_end) {
+          --candidates_end;
+          if(str.starts_with(candidates_end->first)) {
+            return token(tokens::Symbol{.length = candidates_end->first.size(), .symbol_index = candidates_end->second}, candidates_end->first.size());
           }
         }
       }
