@@ -1543,70 +1543,87 @@ namespace expression_parser::output::archive_part{
     PolymorphicKind& operator=(PolymorphicKind const&) = delete;
     PolymorphicKind& operator=(PolymorphicKind&&) = delete;
     expression_parser::archive_index::PolymorphicKind index() const { return expression_parser::archive_index::PolymorphicKind{private_index}; }
+    bool holds_expression() const;
     Expression& get_expression();
     Expression const& get_expression() const;
     Expression* get_if_expression();
     Expression const* get_if_expression() const;
+    bool holds_pattern() const;
     Pattern& get_pattern();
     Pattern const& get_pattern() const;
     Pattern* get_if_pattern();
     Pattern const* get_if_pattern() const;
+    bool holds_command() const;
     Command& get_command();
     Command const& get_command() const;
     Command* get_if_command();
     Command const* get_if_command() const;
+    bool holds_apply() const;
     Apply& get_apply();
     Apply const& get_apply() const;
     Apply* get_if_apply();
     Apply const* get_if_apply() const;
+    bool holds_lambda() const;
     Lambda& get_lambda();
     Lambda const& get_lambda() const;
     Lambda* get_if_lambda();
     Lambda const* get_if_lambda() const;
+    bool holds_identifier() const;
     Identifier& get_identifier();
     Identifier const& get_identifier() const;
     Identifier* get_if_identifier();
     Identifier const* get_if_identifier() const;
+    bool holds_hole() const;
     Hole& get_hole();
     Hole const& get_hole() const;
     Hole* get_if_hole();
     Hole const* get_if_hole() const;
+    bool holds_arrow() const;
     Arrow& get_arrow();
     Arrow const& get_arrow() const;
     Arrow* get_if_arrow();
     Arrow const* get_if_arrow() const;
+    bool holds_block() const;
     Block& get_block();
     Block const& get_block() const;
     Block* get_if_block();
     Block const* get_if_block() const;
+    bool holds_literal() const;
     Literal& get_literal();
     Literal const& get_literal() const;
     Literal* get_if_literal();
     Literal const* get_if_literal() const;
+    bool holds_pattern_apply() const;
     PatternApply& get_pattern_apply();
     PatternApply const& get_pattern_apply() const;
     PatternApply* get_if_pattern_apply();
     PatternApply const* get_if_pattern_apply() const;
+    bool holds_pattern_identifier() const;
     PatternIdentifier& get_pattern_identifier();
     PatternIdentifier const& get_pattern_identifier() const;
     PatternIdentifier* get_if_pattern_identifier();
     PatternIdentifier const* get_if_pattern_identifier() const;
+    bool holds_pattern_hole() const;
     PatternHole& get_pattern_hole();
     PatternHole const& get_pattern_hole() const;
     PatternHole* get_if_pattern_hole();
     PatternHole const* get_if_pattern_hole() const;
+    bool holds_declare() const;
     Declare& get_declare();
     Declare const& get_declare() const;
     Declare* get_if_declare();
     Declare const* get_if_declare() const;
+    bool holds_rule() const;
     Rule& get_rule();
     Rule const& get_rule() const;
     Rule* get_if_rule();
     Rule const* get_if_rule() const;
+    bool holds_axiom() const;
     Axiom& get_axiom();
     Axiom const& get_axiom() const;
     Axiom* get_if_axiom();
     Axiom const* get_if_axiom() const;
+    bool holds_let() const;
     Let& get_let();
     Let const& get_let() const;
     Let* get_if_let();
@@ -1654,30 +1671,37 @@ namespace expression_parser::output::archive_part{
     Expression& operator=(Expression const&) = delete;
     Expression& operator=(Expression&&) = delete;
     expression_parser::archive_index::Expression index() const { return expression_parser::archive_index::Expression{private_index}; }
+    bool holds_apply() const;
     Apply& get_apply();
     Apply const& get_apply() const;
     Apply* get_if_apply();
     Apply const* get_if_apply() const;
+    bool holds_lambda() const;
     Lambda& get_lambda();
     Lambda const& get_lambda() const;
     Lambda* get_if_lambda();
     Lambda const* get_if_lambda() const;
+    bool holds_identifier() const;
     Identifier& get_identifier();
     Identifier const& get_identifier() const;
     Identifier* get_if_identifier();
     Identifier const* get_if_identifier() const;
+    bool holds_hole() const;
     Hole& get_hole();
     Hole const& get_hole() const;
     Hole* get_if_hole();
     Hole const* get_if_hole() const;
+    bool holds_arrow() const;
     Arrow& get_arrow();
     Arrow const& get_arrow() const;
     Arrow* get_if_arrow();
     Arrow const* get_if_arrow() const;
+    bool holds_block() const;
     Block& get_block();
     Block const& get_block() const;
     Block* get_if_block();
     Block const* get_if_block() const;
+    bool holds_literal() const;
     Literal& get_literal();
     Literal const& get_literal() const;
     Literal* get_if_literal();
@@ -1690,8 +1714,8 @@ namespace expression_parser::output::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Lambda;
     friend Let;
+    friend Lambda;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -1729,14 +1753,17 @@ namespace expression_parser::output::archive_part{
     Pattern& operator=(Pattern const&) = delete;
     Pattern& operator=(Pattern&&) = delete;
     expression_parser::archive_index::Pattern index() const { return expression_parser::archive_index::Pattern{private_index}; }
+    bool holds_pattern_apply() const;
     PatternApply& get_pattern_apply();
     PatternApply const& get_pattern_apply() const;
     PatternApply* get_if_pattern_apply();
     PatternApply const* get_if_pattern_apply() const;
+    bool holds_pattern_identifier() const;
     PatternIdentifier& get_pattern_identifier();
     PatternIdentifier const& get_pattern_identifier() const;
     PatternIdentifier* get_if_pattern_identifier();
     PatternIdentifier const* get_if_pattern_identifier() const;
+    bool holds_pattern_hole() const;
     PatternHole& get_pattern_hole();
     PatternHole const& get_pattern_hole() const;
     PatternHole* get_if_pattern_hole();
@@ -1775,18 +1802,22 @@ namespace expression_parser::output::archive_part{
     Command& operator=(Command const&) = delete;
     Command& operator=(Command&&) = delete;
     expression_parser::archive_index::Command index() const { return expression_parser::archive_index::Command{private_index}; }
+    bool holds_declare() const;
     Declare& get_declare();
     Declare const& get_declare() const;
     Declare* get_if_declare();
     Declare const* get_if_declare() const;
+    bool holds_rule() const;
     Rule& get_rule();
     Rule const& get_rule() const;
     Rule* get_if_rule();
     Rule const* get_if_rule() const;
+    bool holds_axiom() const;
     Axiom& get_axiom();
     Axiom const& get_axiom() const;
     Axiom* get_if_axiom();
     Axiom const* get_if_axiom() const;
+    bool holds_let() const;
     Let& get_let();
     Let const& get_let() const;
     Let* get_if_let();
@@ -1813,7 +1844,13 @@ namespace expression_parser::output::archive_part{
       Command* operator->() const { return *pos; }
       Iterator& operator++() { ++pos; return *this; }
       Iterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      Iterator& operator--() { --pos; return *this; }
+      Iterator operator--(int) { auto ret = *this; --pos; return ret; }
+      Iterator operator+(std::ptrdiff_t offset) const { return Iterator{pos + offset}; }
+      Iterator operator-(std::ptrdiff_t offset) const { return Iterator{pos - offset}; }
+      std::ptrdiff_t operator-(Iterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(Iterator const& lhs, Iterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(Iterator const& lhs, Iterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     class ConstIterator {
       Command const** pos;
@@ -1825,7 +1862,13 @@ namespace expression_parser::output::archive_part{
       Command const* operator->() const { return *pos; }
       ConstIterator& operator++() { ++pos; return *this; }
       ConstIterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      ConstIterator& operator--() { --pos; return *this; }
+      ConstIterator operator--(int) { auto ret = *this; --pos; return ret; }
+      ConstIterator operator+(std::ptrdiff_t offset) const { return ConstIterator{pos + offset}; }
+      ConstIterator operator-(std::ptrdiff_t offset) const { return ConstIterator{pos - offset}; }
+      std::ptrdiff_t operator-(ConstIterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     SpanCommand(SpanCommand const&) = delete;
     SpanCommand(SpanCommand&&) = delete;
@@ -2373,70 +2416,87 @@ namespace expression_parser::locator::archive_part{
     PolymorphicKind& operator=(PolymorphicKind const&) = delete;
     PolymorphicKind& operator=(PolymorphicKind&&) = delete;
     expression_parser::archive_index::PolymorphicKind index() const { return expression_parser::archive_index::PolymorphicKind{private_index}; }
+    bool holds_expression() const;
     Expression& get_expression();
     Expression const& get_expression() const;
     Expression* get_if_expression();
     Expression const* get_if_expression() const;
+    bool holds_pattern() const;
     Pattern& get_pattern();
     Pattern const& get_pattern() const;
     Pattern* get_if_pattern();
     Pattern const* get_if_pattern() const;
+    bool holds_command() const;
     Command& get_command();
     Command const& get_command() const;
     Command* get_if_command();
     Command const* get_if_command() const;
+    bool holds_apply() const;
     Apply& get_apply();
     Apply const& get_apply() const;
     Apply* get_if_apply();
     Apply const* get_if_apply() const;
+    bool holds_lambda() const;
     Lambda& get_lambda();
     Lambda const& get_lambda() const;
     Lambda* get_if_lambda();
     Lambda const* get_if_lambda() const;
+    bool holds_identifier() const;
     Identifier& get_identifier();
     Identifier const& get_identifier() const;
     Identifier* get_if_identifier();
     Identifier const* get_if_identifier() const;
+    bool holds_hole() const;
     Hole& get_hole();
     Hole const& get_hole() const;
     Hole* get_if_hole();
     Hole const* get_if_hole() const;
+    bool holds_arrow() const;
     Arrow& get_arrow();
     Arrow const& get_arrow() const;
     Arrow* get_if_arrow();
     Arrow const* get_if_arrow() const;
+    bool holds_block() const;
     Block& get_block();
     Block const& get_block() const;
     Block* get_if_block();
     Block const* get_if_block() const;
+    bool holds_literal() const;
     Literal& get_literal();
     Literal const& get_literal() const;
     Literal* get_if_literal();
     Literal const* get_if_literal() const;
+    bool holds_pattern_apply() const;
     PatternApply& get_pattern_apply();
     PatternApply const& get_pattern_apply() const;
     PatternApply* get_if_pattern_apply();
     PatternApply const* get_if_pattern_apply() const;
+    bool holds_pattern_identifier() const;
     PatternIdentifier& get_pattern_identifier();
     PatternIdentifier const& get_pattern_identifier() const;
     PatternIdentifier* get_if_pattern_identifier();
     PatternIdentifier const* get_if_pattern_identifier() const;
+    bool holds_pattern_hole() const;
     PatternHole& get_pattern_hole();
     PatternHole const& get_pattern_hole() const;
     PatternHole* get_if_pattern_hole();
     PatternHole const* get_if_pattern_hole() const;
+    bool holds_declare() const;
     Declare& get_declare();
     Declare const& get_declare() const;
     Declare* get_if_declare();
     Declare const* get_if_declare() const;
+    bool holds_rule() const;
     Rule& get_rule();
     Rule const& get_rule() const;
     Rule* get_if_rule();
     Rule const* get_if_rule() const;
+    bool holds_axiom() const;
     Axiom& get_axiom();
     Axiom const& get_axiom() const;
     Axiom* get_if_axiom();
     Axiom const* get_if_axiom() const;
+    bool holds_let() const;
     Let& get_let();
     Let const& get_let() const;
     Let* get_if_let();
@@ -2484,30 +2544,37 @@ namespace expression_parser::locator::archive_part{
     Expression& operator=(Expression const&) = delete;
     Expression& operator=(Expression&&) = delete;
     expression_parser::archive_index::Expression index() const { return expression_parser::archive_index::Expression{private_index}; }
+    bool holds_apply() const;
     Apply& get_apply();
     Apply const& get_apply() const;
     Apply* get_if_apply();
     Apply const* get_if_apply() const;
+    bool holds_lambda() const;
     Lambda& get_lambda();
     Lambda const& get_lambda() const;
     Lambda* get_if_lambda();
     Lambda const* get_if_lambda() const;
+    bool holds_identifier() const;
     Identifier& get_identifier();
     Identifier const& get_identifier() const;
     Identifier* get_if_identifier();
     Identifier const* get_if_identifier() const;
+    bool holds_hole() const;
     Hole& get_hole();
     Hole const& get_hole() const;
     Hole* get_if_hole();
     Hole const* get_if_hole() const;
+    bool holds_arrow() const;
     Arrow& get_arrow();
     Arrow const& get_arrow() const;
     Arrow* get_if_arrow();
     Arrow const* get_if_arrow() const;
+    bool holds_block() const;
     Block& get_block();
     Block const& get_block() const;
     Block* get_if_block();
     Block const* get_if_block() const;
+    bool holds_literal() const;
     Literal& get_literal();
     Literal const& get_literal() const;
     Literal* get_if_literal();
@@ -2520,8 +2587,8 @@ namespace expression_parser::locator::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Lambda;
     friend Let;
+    friend Lambda;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -2559,14 +2626,17 @@ namespace expression_parser::locator::archive_part{
     Pattern& operator=(Pattern const&) = delete;
     Pattern& operator=(Pattern&&) = delete;
     expression_parser::archive_index::Pattern index() const { return expression_parser::archive_index::Pattern{private_index}; }
+    bool holds_pattern_apply() const;
     PatternApply& get_pattern_apply();
     PatternApply const& get_pattern_apply() const;
     PatternApply* get_if_pattern_apply();
     PatternApply const* get_if_pattern_apply() const;
+    bool holds_pattern_identifier() const;
     PatternIdentifier& get_pattern_identifier();
     PatternIdentifier const& get_pattern_identifier() const;
     PatternIdentifier* get_if_pattern_identifier();
     PatternIdentifier const* get_if_pattern_identifier() const;
+    bool holds_pattern_hole() const;
     PatternHole& get_pattern_hole();
     PatternHole const& get_pattern_hole() const;
     PatternHole* get_if_pattern_hole();
@@ -2605,18 +2675,22 @@ namespace expression_parser::locator::archive_part{
     Command& operator=(Command const&) = delete;
     Command& operator=(Command&&) = delete;
     expression_parser::archive_index::Command index() const { return expression_parser::archive_index::Command{private_index}; }
+    bool holds_declare() const;
     Declare& get_declare();
     Declare const& get_declare() const;
     Declare* get_if_declare();
     Declare const* get_if_declare() const;
+    bool holds_rule() const;
     Rule& get_rule();
     Rule const& get_rule() const;
     Rule* get_if_rule();
     Rule const* get_if_rule() const;
+    bool holds_axiom() const;
     Axiom& get_axiom();
     Axiom const& get_axiom() const;
     Axiom* get_if_axiom();
     Axiom const* get_if_axiom() const;
+    bool holds_let() const;
     Let& get_let();
     Let const& get_let() const;
     Let* get_if_let();
@@ -2643,7 +2717,13 @@ namespace expression_parser::locator::archive_part{
       Command* operator->() const { return *pos; }
       Iterator& operator++() { ++pos; return *this; }
       Iterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      Iterator& operator--() { --pos; return *this; }
+      Iterator operator--(int) { auto ret = *this; --pos; return ret; }
+      Iterator operator+(std::ptrdiff_t offset) const { return Iterator{pos + offset}; }
+      Iterator operator-(std::ptrdiff_t offset) const { return Iterator{pos - offset}; }
+      std::ptrdiff_t operator-(Iterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(Iterator const& lhs, Iterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(Iterator const& lhs, Iterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     class ConstIterator {
       Command const** pos;
@@ -2655,7 +2735,13 @@ namespace expression_parser::locator::archive_part{
       Command const* operator->() const { return *pos; }
       ConstIterator& operator++() { ++pos; return *this; }
       ConstIterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      ConstIterator& operator--() { --pos; return *this; }
+      ConstIterator operator--(int) { auto ret = *this; --pos; return ret; }
+      ConstIterator operator+(std::ptrdiff_t offset) const { return ConstIterator{pos + offset}; }
+      ConstIterator operator-(std::ptrdiff_t offset) const { return ConstIterator{pos - offset}; }
+      std::ptrdiff_t operator-(ConstIterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     SpanCommand(SpanCommand const&) = delete;
     SpanCommand(SpanCommand&&) = delete;
@@ -3209,70 +3295,87 @@ namespace expression_parser::resolved::archive_part{
     PolymorphicKind& operator=(PolymorphicKind const&) = delete;
     PolymorphicKind& operator=(PolymorphicKind&&) = delete;
     expression_parser::archive_index::PolymorphicKind index() const { return expression_parser::archive_index::PolymorphicKind{private_index}; }
+    bool holds_expression() const;
     Expression& get_expression();
     Expression const& get_expression() const;
     Expression* get_if_expression();
     Expression const* get_if_expression() const;
+    bool holds_pattern() const;
     Pattern& get_pattern();
     Pattern const& get_pattern() const;
     Pattern* get_if_pattern();
     Pattern const* get_if_pattern() const;
+    bool holds_command() const;
     Command& get_command();
     Command const& get_command() const;
     Command* get_if_command();
     Command const* get_if_command() const;
+    bool holds_apply() const;
     Apply& get_apply();
     Apply const& get_apply() const;
     Apply* get_if_apply();
     Apply const* get_if_apply() const;
+    bool holds_lambda() const;
     Lambda& get_lambda();
     Lambda const& get_lambda() const;
     Lambda* get_if_lambda();
     Lambda const* get_if_lambda() const;
+    bool holds_identifier() const;
     Identifier& get_identifier();
     Identifier const& get_identifier() const;
     Identifier* get_if_identifier();
     Identifier const* get_if_identifier() const;
+    bool holds_hole() const;
     Hole& get_hole();
     Hole const& get_hole() const;
     Hole* get_if_hole();
     Hole const* get_if_hole() const;
+    bool holds_arrow() const;
     Arrow& get_arrow();
     Arrow const& get_arrow() const;
     Arrow* get_if_arrow();
     Arrow const* get_if_arrow() const;
+    bool holds_block() const;
     Block& get_block();
     Block const& get_block() const;
     Block* get_if_block();
     Block const* get_if_block() const;
+    bool holds_literal() const;
     Literal& get_literal();
     Literal const& get_literal() const;
     Literal* get_if_literal();
     Literal const* get_if_literal() const;
+    bool holds_pattern_apply() const;
     PatternApply& get_pattern_apply();
     PatternApply const& get_pattern_apply() const;
     PatternApply* get_if_pattern_apply();
     PatternApply const* get_if_pattern_apply() const;
+    bool holds_pattern_identifier() const;
     PatternIdentifier& get_pattern_identifier();
     PatternIdentifier const& get_pattern_identifier() const;
     PatternIdentifier* get_if_pattern_identifier();
     PatternIdentifier const* get_if_pattern_identifier() const;
+    bool holds_pattern_hole() const;
     PatternHole& get_pattern_hole();
     PatternHole const& get_pattern_hole() const;
     PatternHole* get_if_pattern_hole();
     PatternHole const* get_if_pattern_hole() const;
+    bool holds_declare() const;
     Declare& get_declare();
     Declare const& get_declare() const;
     Declare* get_if_declare();
     Declare const* get_if_declare() const;
+    bool holds_rule() const;
     Rule& get_rule();
     Rule const& get_rule() const;
     Rule* get_if_rule();
     Rule const* get_if_rule() const;
+    bool holds_axiom() const;
     Axiom& get_axiom();
     Axiom const& get_axiom() const;
     Axiom* get_if_axiom();
     Axiom const* get_if_axiom() const;
+    bool holds_let() const;
     Let& get_let();
     Let const& get_let() const;
     Let* get_if_let();
@@ -3320,30 +3423,37 @@ namespace expression_parser::resolved::archive_part{
     Expression& operator=(Expression const&) = delete;
     Expression& operator=(Expression&&) = delete;
     expression_parser::archive_index::Expression index() const { return expression_parser::archive_index::Expression{private_index}; }
+    bool holds_apply() const;
     Apply& get_apply();
     Apply const& get_apply() const;
     Apply* get_if_apply();
     Apply const* get_if_apply() const;
+    bool holds_lambda() const;
     Lambda& get_lambda();
     Lambda const& get_lambda() const;
     Lambda* get_if_lambda();
     Lambda const* get_if_lambda() const;
+    bool holds_identifier() const;
     Identifier& get_identifier();
     Identifier const& get_identifier() const;
     Identifier* get_if_identifier();
     Identifier const* get_if_identifier() const;
+    bool holds_hole() const;
     Hole& get_hole();
     Hole const& get_hole() const;
     Hole* get_if_hole();
     Hole const* get_if_hole() const;
+    bool holds_arrow() const;
     Arrow& get_arrow();
     Arrow const& get_arrow() const;
     Arrow* get_if_arrow();
     Arrow const* get_if_arrow() const;
+    bool holds_block() const;
     Block& get_block();
     Block const& get_block() const;
     Block* get_if_block();
     Block const* get_if_block() const;
+    bool holds_literal() const;
     Literal& get_literal();
     Literal const& get_literal() const;
     Literal* get_if_literal();
@@ -3356,8 +3466,8 @@ namespace expression_parser::resolved::archive_part{
   class OptionalExpression {
     Expression* ptr;
     OptionalExpression(Expression* ptr):ptr(ptr) {}
-    friend Lambda;
     friend Let;
+    friend Lambda;
   public:
     OptionalExpression(OptionalExpression const&) = delete;
     OptionalExpression(OptionalExpression&&) = delete;
@@ -3395,14 +3505,17 @@ namespace expression_parser::resolved::archive_part{
     Pattern& operator=(Pattern const&) = delete;
     Pattern& operator=(Pattern&&) = delete;
     expression_parser::archive_index::Pattern index() const { return expression_parser::archive_index::Pattern{private_index}; }
+    bool holds_pattern_apply() const;
     PatternApply& get_pattern_apply();
     PatternApply const& get_pattern_apply() const;
     PatternApply* get_if_pattern_apply();
     PatternApply const* get_if_pattern_apply() const;
+    bool holds_pattern_identifier() const;
     PatternIdentifier& get_pattern_identifier();
     PatternIdentifier const& get_pattern_identifier() const;
     PatternIdentifier* get_if_pattern_identifier();
     PatternIdentifier const* get_if_pattern_identifier() const;
+    bool holds_pattern_hole() const;
     PatternHole& get_pattern_hole();
     PatternHole const& get_pattern_hole() const;
     PatternHole* get_if_pattern_hole();
@@ -3441,18 +3554,22 @@ namespace expression_parser::resolved::archive_part{
     Command& operator=(Command const&) = delete;
     Command& operator=(Command&&) = delete;
     expression_parser::archive_index::Command index() const { return expression_parser::archive_index::Command{private_index}; }
+    bool holds_declare() const;
     Declare& get_declare();
     Declare const& get_declare() const;
     Declare* get_if_declare();
     Declare const* get_if_declare() const;
+    bool holds_rule() const;
     Rule& get_rule();
     Rule const& get_rule() const;
     Rule* get_if_rule();
     Rule const* get_if_rule() const;
+    bool holds_axiom() const;
     Axiom& get_axiom();
     Axiom const& get_axiom() const;
     Axiom* get_if_axiom();
     Axiom const* get_if_axiom() const;
+    bool holds_let() const;
     Let& get_let();
     Let const& get_let() const;
     Let* get_if_let();
@@ -3479,7 +3596,13 @@ namespace expression_parser::resolved::archive_part{
       Command* operator->() const { return *pos; }
       Iterator& operator++() { ++pos; return *this; }
       Iterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      Iterator& operator--() { --pos; return *this; }
+      Iterator operator--(int) { auto ret = *this; --pos; return ret; }
+      Iterator operator+(std::ptrdiff_t offset) const { return Iterator{pos + offset}; }
+      Iterator operator-(std::ptrdiff_t offset) const { return Iterator{pos - offset}; }
+      std::ptrdiff_t operator-(Iterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(Iterator const& lhs, Iterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(Iterator const& lhs, Iterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     class ConstIterator {
       Command const** pos;
@@ -3491,7 +3614,13 @@ namespace expression_parser::resolved::archive_part{
       Command const* operator->() const { return *pos; }
       ConstIterator& operator++() { ++pos; return *this; }
       ConstIterator operator++(int) { auto ret = *this; ++pos; return ret; }
+      ConstIterator& operator--() { --pos; return *this; }
+      ConstIterator operator--(int) { auto ret = *this; --pos; return ret; }
+      ConstIterator operator+(std::ptrdiff_t offset) const { return ConstIterator{pos + offset}; }
+      ConstIterator operator-(std::ptrdiff_t offset) const { return ConstIterator{pos - offset}; }
+      std::ptrdiff_t operator-(ConstIterator const& other) const { return pos - other.pos; }
       friend constexpr bool operator!=(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos != rhs.pos; }
+      friend constexpr bool operator==(ConstIterator const& lhs, ConstIterator const& rhs) { return lhs.pos == rhs.pos; }
     };
     SpanCommand(SpanCommand const&) = delete;
     SpanCommand(SpanCommand&&) = delete;

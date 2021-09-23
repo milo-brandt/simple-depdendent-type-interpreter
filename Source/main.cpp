@@ -2,6 +2,7 @@
 #include "Expression/expression_debug_format.hpp"
 #include <fstream>
 #include "ExpressionParser/lexer_tree.hpp"
+#include "ExpressionParser/expression_generator.hpp"
 
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
@@ -177,11 +178,16 @@ int main(int argc, char** argv) {
     expression_parser::LexerInfo info {
       .symbol_map = {
         {"block", 0},
-        {"->", 1},
-        {":", 2},
-        {";", 3},
-        {"\\", 4},
-        {"\\\\", 5}
+        {"declare", 1},
+        {"axiom", 2},
+        {"rule", 3},
+        {"->", 4},
+        {":", 5},
+        {";", 6},
+        {"=", 7},
+        {"\\", 8},
+        {"\\\\", 9},
+        {".", 10}
       }
     };
     auto ret = expression_parser::lex_string(source, info);
@@ -191,6 +197,24 @@ int main(int argc, char** argv) {
     } else {
       std::cout << format(expression_parser::lex_output::Term{ret.get_value().output}) << "\n";
       std::cout << format(expression_parser::lex_locator::Term{ret.get_value().locator}) << "\n";
+      auto lex_archive = archive(ret.get_value().output);
+      auto par = expression_parser::parse_lexed(lex_archive.root());
+      if(auto* err = par.get_if_error()) {
+        std::cout << err->message << "\n";
+      } else {
+        std::cout << format(par.get_value(), mdb::overloaded{
+          [&]<class T>(std::ostream& o, std::optional<T> const& opt) {
+            if(opt) o << *opt;
+            else o << "(none)";
+          },
+          [&]<class T>(std::ostream& o, T const& v) {
+            o << v;
+          },
+          [&]<class... Ts>(std::ostream& o, std::variant<Ts...> const& v) {
+            std::visit([&](auto const& x) { o << x; }, v);
+          }
+        }) << "\n";
+      }
     }
 
     //environment.debug_parse(source);
