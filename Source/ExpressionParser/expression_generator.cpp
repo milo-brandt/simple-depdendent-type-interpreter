@@ -17,6 +17,7 @@ namespace expression_parser {
     };
     using ExprResult = mdb::Result<output::Expression, ParseError>;
     using CommandResult = mdb::Result<output::Command, ParseError>;
+    using PatternResult = mdb::Result<output::Pattern, ParseError>;
 
     ExprResult parse_expression(LexerSpan& span);
     ExprResult parse_block(lex_archive::CurlyBraceExpression const& span);
@@ -309,6 +310,40 @@ namespace expression_parser {
       }
       return end;
     }
+    PatternResult parse_pattern(LexerSpan& span) {
+      auto parse_term = [&]() -> PatternResult {
+        if(auto* word = span.span_begin->get_if_word()) {
+          ++span.span_begin;
+          return output::Pattern{output::PatternIdentifier{
+            .id = word->text
+          }};
+        } else if(span.span_begin->holds_symbol() && span.span_begin->get_symbol().symbol_index == symbols::underscore) {
+          ++span.span_begin;
+          return output::Pattern{output::PatternHole{}};
+        } else if(auto* parens = span.span_begin->get_if_parenthesized_expression()) {
+          ++span.span_begin;
+          LexerSpan inner_span = *parens;
+          return parse_pattern(inner_span);
+        } else {
+          return ParseError{
+            .position = span.span_begin->index(),
+            .message = "Expected identifier, '_', or '(' in pattern."
+          };
+        }
+      };
+      auto head = parse_term();
+      if(head.holds_error()) return std::move(head);
+      auto ret = std::move(head.get_value());
+      while(!span.empty()) {
+        auto next = parse_term();
+        if(next.holds_error()) return std::move(next);
+        ret = output::PatternApply{
+          .lhs = std::move(ret),
+          .rhs = std::move(next.get_value())
+        };
+      }
+      return ret;
+    }
     CommandResult parse_rule(LexerSpan& span) { //pointed *after* "rule"
       auto equals_sign = find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
         return term.holds_symbol() && term.get_symbol().symbol_index == symbols::equals;
@@ -319,18 +354,26 @@ namespace expression_parser {
           .message = "Rule declarations must include '='."
         };
       }
-      auto pattern = output::Pattern{output::PatternHole{}}; //oop
+      LexerSpan pattern_span{span.span_begin, equals_sign};
+      if(pattern_span.empty()) {
+        return ParseError{
+          .position = equals_sign->index(),
+          .message = "Expected pattern before '='."
+        };
+      }
+      auto pattern_result = parse_pattern(pattern_span);
+      if(pattern_result.holds_error()) return std::move(pattern_result.get_error());
       LexerSpan replacement_span{equals_sign + 1, span.end()};
       if(replacement_span.empty()) {
         return ParseError{
-          .position = span.span_begin->index(),
+          .position = equals_sign->index(),
           .message = "Expected expression after '='."
         };
       }
       auto replacement = parse_expression(replacement_span);
       if(replacement.holds_error()) return std::move(replacement.get_error());
       return output::Command{output::Rule{
-        .pattern = std::move(pattern),
+        .pattern = std::move(pattern_result.get_value()),
         .replacement = std::move(replacement.get_value())
       }};
     }

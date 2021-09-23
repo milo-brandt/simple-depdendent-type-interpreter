@@ -27,6 +27,7 @@ namespace expression_parser {
     constexpr std::uint64_t backslash = 8;
     constexpr std::uint64_t double_backslash = 9;
     constexpr std::uint64_t dot = 10;
+    constexpr std::uint64_t underscore = 11;
   };
   mdb::Result<output::Expression, ParseError> parse_lexed(lex_output::archive_part::Term const&);
 }
