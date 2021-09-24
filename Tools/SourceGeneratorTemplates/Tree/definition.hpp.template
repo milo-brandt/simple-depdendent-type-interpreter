@@ -6,6 +6,11 @@
 	struct {{ component.name }};
 {%- endfor %}
 {%- endmacro %}
+{%- macro kind_prototypes_small(tree) -%}
+{%- for kind in tree.kinds %}
+	class {{ kind.name }};
+{%- endfor %}
+{%- endmacro %}
 {%- macro kind_prototype(kind) -%}
 	{{ visitor_requirement(kind, kind.name + "Visitor", reference.ref) }}
 	{{ visitor_requirement(kind, kind.name + "ConstVisitor", reference.cref) }}
@@ -192,7 +197,10 @@ std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<
 	General definition
 #}
 {%- macro tree_definition(tree) -%}
+{%- call in_extension("proto.hpp") %}
 {{ tree_component_prototypes(tree) }}
+{{ kind_prototypes_small(tree) }}
+{%- endcall %}
 {{ tree_kind_prototypes(tree) }}
 {{ tree_component_declarations(tree) }}
 {{ tree_kind_definitions(tree) }}
