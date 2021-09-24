@@ -11,6 +11,7 @@ namespace compiler::evaluate {
       std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
       std::vector<Cast> casts;
       std::vector<Rule> rules;
+      std::vector<RuleExplanation> rule_explanations;
       std::vector<expression::TypedValue> locals;
 
       expression::TypedValue make_variable_typed(expression::tree::Expression type, variable_explanation::Any explanation, expression::Stack& local_context) {
@@ -179,6 +180,9 @@ namespace compiler::evaluate {
               .replacement_type = std::move(replacement.type),
               .replacement = std::move(replacement.value)
             });
+            rule_explanations.push_back({
+              rule.index()
+            });
           },
           [&](instruction_archive::Let const& let) {
             if(let.type) {
@@ -231,6 +235,7 @@ namespace compiler::evaluate {
       .variables = std::move(detail.variables),
       .casts = std::move(detail.casts),
       .rules = std::move(detail.rules),
+      .rule_explanations = std::move(detail.rule_explanations),
       .result = std::move(result)
     };
   }

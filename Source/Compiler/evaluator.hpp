@@ -23,6 +23,9 @@ namespace compiler::evaluate {
     expression::tree::Expression replacement_type;
     expression::tree::Expression replacement;
   };
+  struct RuleExplanation {
+    instruction::archive_index::Rule index;
+  };
   namespace variable_explanation {
     namespace archive_index = instruction::archive_index;
     struct ApplyRHSCast {
@@ -106,6 +109,7 @@ namespace compiler::evaluate {
     std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
     std::vector<Cast> casts;
     std::vector<Rule> rules;
+    std::vector<RuleExplanation> rule_explanations;
     expression::TypedValue result;
   };
   EvaluateResult evaluate_tree(instruction::output::archive_part::ProgramRoot const& tree, expression::Context& expression_context, mdb::function<expression::TypedValue(std::uint64_t)> embed);

@@ -285,7 +285,7 @@ namespace expression::solver {
                 .lhs = std::move(eq.lhs),
                 .rhs = std::move(eq.rhs),
                 .source_kind = SourceKind::rule_equation,
-                .source_index = (std::uint64_t)-1,
+                .source_index = eq.source_index - input.casts.size(),
                 .failed = eq.failed
               };
             }

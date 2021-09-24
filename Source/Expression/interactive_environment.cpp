@@ -332,7 +332,7 @@ namespace expression::interactive {
         std::cout << "\n";
         //print failures first
         std::vector<solver::HungRoutineEquation> hung_equations = value->remaining_equations;
-        std::partition(hung_equations.begin(), hung_equations.end(), [](auto const& eq) { return eq.failed; });
+        std::stable_partition(hung_equations.begin(), hung_equations.end(), [](auto const& eq) { return eq.failed; });
         for(auto const& eq : hung_equations) {
           if(eq.failed) {
             std::cout << termcolor::red << "False Equation: " << termcolor::reset;
@@ -368,6 +368,13 @@ namespace expression::interactive {
             } else {
               std::cout << "From cast #" << eq.source_index << ". Could not be located.";
             }
+          } else if(eq.source_index != -1) {
+            auto const& reason = value->evaluate_result.rule_explanations[eq.source_index];
+            auto const& pos = value->instruction_locator[reason.index];
+            auto const& locator_index = pos.source.index;
+            auto const& locator_pos = value->parser_locator[locator_index];
+            auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+            std::cout << "While checking the LHS and RHS of rule have same type: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
           } else {
             std::cout << "Unknown source.";
           }
