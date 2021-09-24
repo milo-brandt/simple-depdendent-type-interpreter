@@ -30,3 +30,5 @@ Low priority
 - Revamp web interface
 - Add other rules for equation solving
   - e.g. elimination of variables not held in common, expansion of tuple-like types,
+
+- Archive generation should be more extensible - doesn't make sense to have internals of instruction.hpp in parser_tree.py

@@ -16,6 +16,7 @@ archive_part::{{ tree.kinds[0].name }}
         friend class {{friend.namespace}}::archive_part::{{classname}};
         {%- endfor %}
     public:
+        static {{ classname }} from_index(std::uint64_t index) { return {{classname}}{index}; }
         {{- caller() }}
         std::uint64_t index() const { return private_index; }
         friend bool operator==({{classname}} const& lhs, {{classname}} const& rhs) { return lhs.private_index == rhs.private_index; }
@@ -652,6 +653,55 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- endif %}
 {%- endcall %}
 {%- endmacro %}
+{#
+  Index generation functions
+#}
+{%- macro index_generation_for_tree(tree, archive) -%}
+{%- for kind in tree.kinds %}
+  template<class Callback> void archive_indices_of({{kind.name}} const& target, Callback&& callback);
+{%- endfor %}
+{%- call in_extension("inl") %}
+{%- call in_namespace_relative("detail") %}
+{%- for kind in tree.kinds %}
+{%- for component in kind.components %}
+  template<class Callback> void archive_indices_of({{kind.name}} const* parent, {{component.name}} const& component, std::uint64_t& index, Callback& callback);
+{%- endfor %}
+  template<class Callback> void archive_indices_of({{kind.name}} const& target, std::uint64_t& index, Callback& callback) {
+    target.visit([&](auto const& part) { archive_indices_of(&target, part, index, callback); });
+  }
+{%- endfor %}
+{%- for kind in tree.kinds %}
+{%- for component in kind.components %}
+  template<class Callback> void archive_indices_of({{kind.name}} const* parent, {{component.name}} const& term, std::uint64_t& index, Callback& callback) {
+    std::uint64_t my_index = index++;
+    callback(parent, &term, {{archive.namespace}}::{{component.name}}::from_index(my_index));
+    {%- for member in component.base_members %}
+    {%- if member.type_info.is_vector() %}
+    for({{ tree.namespace }}::{{ member.type_info.base_kind() }} const& member : term.{{member.name}}) {
+      archive_indices_of(member, index, callback);
+    }
+    {%- elif member.type_info.is_optional() %}
+    if(term.{{member.name}}) {
+      return archive_indices_of(*term.{{member.name}}, index, callback);
+    }
+    {%- else %}
+    archive_indices_of(term.{{member.name}}, index, callback);
+    {%- endif %}
+    {%- endfor %}
+  }
+{%- endfor %}
+{%- endfor %}
+{%- endcall %}
+{%- for kind in tree.kinds %}
+template<class Callback>
+void archive_indices_of({{kind.name}} const& target, Callback&& callback) {
+  std::uint64_t index = 0;
+  detail::archive_indices_of(target, index, callback);
+}
+{%- endfor %}
+{%- endcall %}
+
+{%- endmacro %}
 {%- macro archive_definition_for_tree(tree, archive) -%}
   {{ detail_definition(tree) }}
   {{ archive_part_definition(tree, archive) }}
@@ -661,6 +711,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
   inline archive_root::{{kind.name}} archive({{kind.name}}{{ref.suffix}} target) { return archive_root::{{kind.name}}{ {%- call ref.forward() %}target{% endcall -%} }; }
 {%- endfor %}
 {%- endfor %}
+{{ index_generation_for_tree(tree, archive) }}
 {%- endmacro %}
 {%- macro archive_definition(archive) -%}
     {%- call in_extension("proto.hpp") %}
