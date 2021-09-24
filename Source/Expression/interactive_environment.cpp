@@ -332,7 +332,7 @@ namespace expression::interactive {
         std::cout << "\n";
         //print failures first
         std::vector<solver::HungRoutineEquation> hung_equations = value->remaining_equations;
-        std::stable_partition(hung_equations.begin(), hung_equations.end(), [](auto const& eq) { return eq.failed; });
+        //std::stable_partition(hung_equations.begin(), hung_equations.end(), [](auto const& eq) { return eq.failed; });
         for(auto const& eq : hung_equations) {
           if(eq.failed) {
             std::cout << termcolor::red << "False Equation: " << termcolor::reset;
