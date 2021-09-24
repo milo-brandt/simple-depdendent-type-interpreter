@@ -6,6 +6,16 @@
 #include "standard_solver_context.hpp"
 
 namespace expression::solver {
+  enum class SourceKind {
+    cast_equation, rule_equation
+  };
+  struct HungRoutineEquation {
+    tree::Expression lhs;
+    tree::Expression rhs;
+    SourceKind source_kind;
+    std::uint64_t source_index;
+    bool failed;
+  };
   class Routine {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -15,7 +25,7 @@ namespace expression::solver {
     Routine& operator=(Routine&&);
     ~Routine();
     void run();
-    std::vector<std::pair<tree::Expression, tree::Expression> > get_equations();
+    std::vector<HungRoutineEquation> get_hung_equations();
   };
 };
 

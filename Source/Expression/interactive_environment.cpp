@@ -47,19 +47,18 @@ namespace expression::interactive {
       expression_parser::resolved::archive_root::Expression parser_resolved;
     };
     struct EvaluateInfo : ResolveInfo {
+      compiler::evaluate::EvaluateResult evaluate_result;
       compiler::instruction::output::archive_root::Program instruction_output;
       compiler::instruction::locator::archive_root::Program instruction_locator;
-      std::unordered_map<std::uint64_t, compiler::evaluate::variable_explanation::Any> variable_explanations;
       std::uint64_t rule_begin;
       std::uint64_t rule_end;
-      std::vector<std::pair<tree::Expression, tree::Expression> > remaining_equations;
-      TypedValue value;
+      std::vector<solver::HungRoutineEquation> remaining_equations;
 
       bool is_solved() const { return remaining_equations.empty(); }
       std::optional<std::string_view> get_explicit_name(std::uint64_t ext_index) const {
         namespace explanation = compiler::evaluate::variable_explanation;
-        if(!variable_explanations.contains(ext_index)) return std::nullopt;
-        auto const& reason = variable_explanations.at(ext_index);
+        if(!evaluate_result.variables.contains(ext_index)) return std::nullopt;
+        auto const& reason = evaluate_result.variables.at(ext_index);
         if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
           auto const& location = instruction_locator[declared->index];
           if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
@@ -195,16 +194,16 @@ namespace expression::interactive {
       expression::solver::Routine solve_routine{eval_result, expression_context, solver_context};
       solve_routine.run();
       auto rule_end = expression_context.rules.size();
+      auto hung_equations = solve_routine.get_hung_equations();
 
       return EvaluateInfo{
         std::move(input),
+        std::move(eval_result), //copies because... well... someone apparently cares about the result?
         std::move(instruction_output),
         std::move(instruction_locator),
-        std::move(eval_result.variables),
         rule_start,
         rule_end,
-        solve_routine.get_equations(),
-        std::move(eval_result.result)
+        std::move(hung_equations)
       };
     }
     mdb::Result<EvaluateInfo, std::string> full_compile(std::string_view str) {
@@ -248,14 +247,14 @@ namespace expression::interactive {
     DeclarationInfo declare_or_axiom_check(std::string name, std::string_view expr, bool axiom) {
       auto compile = full_compile(expr);
       if(auto* value = compile.get_if_value()) {
-        auto ret = expression_context.reduce(std::move(value->value.value));
-        auto ret_type = expression_context.reduce(std::move(value->value.type));
+        auto ret = expression_context.reduce(std::move(value->evaluate_result.result.value));
+        auto ret_type = expression_context.reduce(std::move(value->evaluate_result.result.type));
         if(!value->is_solved()) {
           std::cerr << "While compiling: " << expr << "\n";
           std::cerr << "Solving failed.\n";
           auto fancy = fancy_format(*value);
-          for(auto const& [lhs, rhs] : value->remaining_equations) {
-            std::cout << fancy(lhs) << " =?= " << fancy(rhs) << "\n";
+          for(auto const& eq : value->remaining_equations) {
+            std::cout << fancy(eq.lhs) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs) << "\n";
           }
           std::terminate();
         }
@@ -289,7 +288,7 @@ namespace expression::interactive {
       auto compile = full_compile(expr);
       if(auto* value = compile.get_if_value()) {
         std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
-        for(auto const& entry : value->variable_explanations) sorted_variables.insert(entry);
+        for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
         for(auto const& [var, reason] : sorted_variables) {
           std::cout << std::visit(mdb::overloaded{
             [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
@@ -316,6 +315,7 @@ namespace expression::interactive {
           auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
           std::cout << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
         }
+        std::cout << "\n";
         std::vector<expression::Rule> new_rules;
         for(auto i = value->rule_begin; i < value->rule_end; ++i) {
           new_rules.push_back(expression_context.rules[i]);
@@ -329,11 +329,52 @@ namespace expression::interactive {
         for(auto const& rule : new_rules) {
           std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
         }
-        for(auto const& [lhs, rhs] : value->remaining_equations) {
-          std::cout << fancy(lhs) << " =?= " << fancy(rhs) << "\n";
+        std::cout << "\n";
+        //print failures first
+        std::vector<solver::HungRoutineEquation> hung_equations = value->remaining_equations;
+        std::partition(hung_equations.begin(), hung_equations.end(), [](auto const& eq) { return eq.failed; });
+        for(auto const& eq : hung_equations) {
+          if(eq.failed) {
+            std::cout << termcolor::red << "False Equation: " << termcolor::reset;
+          } else {
+            std::cout << termcolor::yellow << "Undetermined Equation: " << termcolor::reset;
+          }
+          std::cout << fancy(eq.lhs) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs) << "\n";
+          if(eq.source_kind == solver::SourceKind::cast_equation) {
+            auto const& cast = value->evaluate_result.casts[eq.source_index];
+            auto cast_var = cast.variable;
+            if(value->evaluate_result.variables.contains(cast_var)) {
+              auto const& reason = value->evaluate_result.variables.at(cast_var);
+              auto reason_string = std::visit(mdb::overloaded{
+                [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "While matching RHS to domain type in application: "; },
+                [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "While matching LHS to function type in application: "; },
+                [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "While matching the type of a type family: "; },
+                [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "While matching the type of a hole: "; },
+                [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "While matching the declaration type against Type: "; },
+                [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "While matching the axiom type against Type: "; },
+                [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "While matching the let type against Type: "; },
+                [&](compiler::evaluate::variable_explanation::LetCast const&) { return "While matching the declared type of the let with the expression type: "; },
+                [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "While matching the for all type against Type: "; },
+                [&](auto const&) { return "For unknown reasons: "; }
+              }, reason);
+              auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
+                return reason.index;
+              }, reason);
+              auto const& pos = value->instruction_locator[index];
+              auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
+              auto const& locator_pos = value->parser_locator[locator_index];
+              auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+              std::cout << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+            } else {
+              std::cout << "From cast #" << eq.source_index << ". Could not be located.";
+            }
+          } else {
+            std::cout << "Unknown source.";
+          }
+          std::cout << "\n\n";
         }
-        std::cout << "Final: " << fancy_format(*value)(value->value.value) << " of type " << fancy_format(*value)(value->value.type) << "\n";
-        std::cout << "Deep: " << deep_format(*value)(value->value.value) << " of type " << deep_format(*value)(value->value.type) << "\n";
+        std::cout << "Final: " << fancy_format(*value)(value->evaluate_result.result.value) << " of type " << fancy_format(*value)(value->evaluate_result.result.type) << "\n";
+        std::cout << "Deep: " << deep_format(*value)(value->evaluate_result.result.value) << " of type " << deep_format(*value)(value->evaluate_result.result.type) << "\n";
       } else {
         std::cerr << "While compiling: " << expr << "\n";
         std::cerr << compile.get_error() << "\n";

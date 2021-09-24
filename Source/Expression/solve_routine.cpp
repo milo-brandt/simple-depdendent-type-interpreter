@@ -265,11 +265,44 @@ namespace expression::solver {
     void run() {
       while(step());
     }
-    std::vector<std::pair<tree::Expression, tree::Expression> > get_equations() {
-      std::vector<std::pair<tree::Expression, tree::Expression> > ret;
+    std::vector<HungRoutineEquation> get_hung_equations() {
+      std::vector<HungRoutineEquation> ret;
+      bool first = true;
       for(auto& solver : solvers) {
-        auto eqs = solver.get_equations();
-        ret.insert(ret.end(), eqs.begin(), eqs.end());
+        auto eqs = solver.get_hung_equations();
+        if(first) {
+          std::transform(eqs.begin(), eqs.end(), std::back_inserter(ret), [&](HungEquation& eq) {
+            if(eq.source_index < input.casts.size()) {
+              return HungRoutineEquation{
+                .lhs = std::move(eq.lhs),
+                .rhs = std::move(eq.rhs),
+                .source_kind = SourceKind::cast_equation,
+                .source_index = eq.source_index,
+                .failed = eq.failed
+              };
+            } else {
+              return HungRoutineEquation{
+                .lhs = std::move(eq.lhs),
+                .rhs = std::move(eq.rhs),
+                .source_kind = SourceKind::rule_equation,
+                .source_index = (std::uint64_t)-1,
+                .failed = eq.failed
+              };
+            }
+          });
+        } else {
+          std::transform(eqs.begin(), eqs.end(), std::back_inserter(ret), [&](HungEquation& eq) {
+            return HungRoutineEquation{
+              .lhs = std::move(eq.lhs),
+              .rhs = std::move(eq.rhs),
+              .source_kind = SourceKind::rule_equation,
+              .source_index = (std::uint64_t)-1,
+              .failed = eq.failed
+            };
+          });
+          //???
+        }
+        //ret.insert(ret.end(), eqs.begin(), eqs.end());
       }
       return ret;
     }
@@ -279,5 +312,5 @@ namespace expression::solver {
   Routine& Routine::operator=(Routine&&) = default;
   Routine::~Routine() = default;
   void Routine::run() { return impl->run(); }
-  std::vector<std::pair<tree::Expression, tree::Expression> > Routine::get_equations() { return impl->get_equations(); }
+  std::vector<HungRoutineEquation> Routine::get_hung_equations() { return impl->get_hung_equations(); }
 }

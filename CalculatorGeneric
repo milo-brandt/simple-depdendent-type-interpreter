@@ -25,7 +25,7 @@ block {
   axiom Unit : Type;
   axiom unit : Unit;
 
-  axiom Hold : Type;
+  axiom Hold : Type;        # This is a hack to force pattern matching - which ensures that overzealous simplifiers don't get stuck in a loop
   axiom unhold : Hold;
 
   axiom ParseResult : Type -> Type;

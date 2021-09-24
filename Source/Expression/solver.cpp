@@ -379,11 +379,24 @@ namespace expression::solver {
   bool Solver::try_to_make_progress() {
     return impl->try_to_make_progress();
   }
-  std::vector<std::pair<tree::Expression, tree::Expression> > Solver::get_equations() {
-    std::vector<std::pair<tree::Expression, tree::Expression> > ret;
-    for(auto const& equation : impl->equations) {
+  std::vector<HungEquation> Solver::get_hung_equations() {
+    auto get_source_index = [this](std::uint64_t index) {
+      while(true) {
+        auto next_index = impl->equations[index].parent;
+        if(next_index == -1) return index;
+        else index = next_index;
+      }
+    };
+    std::vector<HungEquation> ret;
+    for(std::uint64_t i = 0; i < impl->equations.size(); ++i) {
+      auto const& equation = impl->equations[i];
       if(equation.handled) continue;
-      ret.emplace_back(equation.lhs, equation.rhs);
+      ret.push_back(HungEquation{
+        .lhs = equation.lhs,
+        .rhs = equation.rhs,
+        .source_index = get_source_index(i),
+        .failed = equation.failed
+      });
     }
     return ret;
   }
