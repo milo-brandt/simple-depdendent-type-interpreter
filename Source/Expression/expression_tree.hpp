@@ -41,6 +41,9 @@ namespace expression {
   struct TypedValue {
     tree::Expression value;
     tree::Expression type;
+    friend bool operator==(TypedValue const& lhs, TypedValue const& rhs) {
+      return lhs.value == rhs.value && lhs.type == rhs.type;
+    }
   };
 
   struct CRefUnfolding {

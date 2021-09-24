@@ -89,12 +89,32 @@ locator = shape.generate_instance(namespace = "compiler::instruction::locator", 
         "ProgramRoot": [("source", "Explanation")]
     }
 })
+forward_locator = shape.generate_instance(namespace = "compiler::instruction::forward_locator", data = {
+    "Expression": {
+        "Apply": [],
+        "Local": [],
+        "Embed": [],
+        "PrimitiveExpression": [],
+        "TypeFamilyOver": []
+    },
+    "Command": {
+        "DeclareHole": [("result", "expression::TypedValue")],
+        "Declare": [("result", "expression::TypedValue")],
+        "Rule": [],
+        "Axiom": [("result", "expression::TypedValue")],
+        "Let": [("result", "expression::TypedValue")],
+        "ForAll": []
+    },
+    "Program": {
+        "ProgramRoot": []
+    }
+})
 located_output = Multitree("compiler::instruction::located_output", {
     "output": output,
     "locator": locator
 })
 tree_def = TreeOutput(
-    trees = [output, locator],
+    trees = [output, locator, forward_locator],
     multitrees = [located_output],
     archive_namespace = "compiler::instruction::archive_index"
 )
@@ -103,6 +123,6 @@ main_output = get_output("THIS_impl")
 
 main_output.write(
     tree_def,
-    source_includes = ["Source/ExpressionParser/parser_tree.hpp"],
+    source_includes = ["Source/ExpressionParser/parser_tree.hpp", "Source/Expression/expression_tree.hpp"],
     relative_includes = ["instruction_tree_explanation.hpp"]
 )
