@@ -345,9 +345,10 @@ namespace expression::interactive {
             auto cast_var = cast.variable;
             if(value->evaluate_result.variables.contains(cast_var)) {
               auto const& reason = value->evaluate_result.variables.at(cast_var);
+              bool is_apply_cast = false;
               auto reason_string = std::visit(mdb::overloaded{
-                [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "While matching RHS to domain type in application: "; },
-                [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "While matching LHS to function type in application: "; },
+                [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { is_apply_cast = true; return "While matching RHS to domain type in application: "; },
+                [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { is_apply_cast = true; return "While matching LHS to function type in application: "; },
                 [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "While matching the type of a type family: "; },
                 [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "While matching the type of a hole: "; },
                 [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "While matching the declaration type against Type: "; },
@@ -363,8 +364,19 @@ namespace expression::interactive {
               auto const& pos = value->instruction_locator[index];
               auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
               auto const& locator_pos = value->parser_locator[locator_index];
-              auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-              std::cout << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+              if(is_apply_cast && locator_pos.holds_apply()) {
+                auto const& apply = locator_pos.get_apply();
+                auto const& lhs_pos = apply.lhs.visit([&](auto const& o) { return o.position; });
+                auto const& rhs_pos = apply.rhs.visit([&](auto const& o) { return o.position; });
+                std::cout << reason_string << format_info_pair(
+                  expression_parser::position_of(lhs_pos, value->lexer_locator),
+                  expression_parser::position_of(rhs_pos, value->lexer_locator),
+                  value->source
+                );
+              } else {
+                auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+                std::cout << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+              }
             } else {
               std::cout << "From cast #" << eq.source_index << ". Could not be located.";
             }
@@ -373,7 +385,6 @@ namespace expression::interactive {
             auto const& pos = value->instruction_locator[reason.index];
             auto const& locator_index = pos.source.index;
             auto const& locator_pos = value->parser_locator[locator_index];
-            auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
             switch(eq.source_kind) {
               case solver::SourceKind::rule_equation:
                 std::cout << "While checking the LHS and RHS of rule have same type: "; break;
@@ -384,7 +395,22 @@ namespace expression::interactive {
               default:
                 std::cout << "While doing unknown task with rule: "; break;
             }
-            std::cout << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+            if(locator_pos.holds_rule()) {
+              auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
+              auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
+              std::cout << format_info_pair(
+                expression_parser::position_of(lhs_pos, value->lexer_locator),
+                expression_parser::position_of(rhs_pos, value->lexer_locator),
+                value->source
+              );
+            } else {
+              //this shouldn't be reachable
+              auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
+              std::cout << format_info(
+                expression_parser::position_of(pos, value->lexer_locator),
+                value->source
+              );
+            }
           } else {
             std::cout << "Unknown source.";
           }
