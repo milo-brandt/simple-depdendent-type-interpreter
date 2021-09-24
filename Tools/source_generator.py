@@ -92,11 +92,13 @@ class TemplateCommandSegment:
             self.source_includes.add(filebase + ".hpp")
         if extension == "hpp" and "inl" in context.output_pieces:
             self.write("\n#include \"" + os.path.basename(filebase) + ".inl\"\n", "")
+        if extension == "hpp" and "proto.hpp" in context.output_pieces:
+            self.source_includes.add(filebase + ".proto.hpp")
 
         ifndefguard = ""
         ifndefguardend = ""
         if extension != "cpp":
-            var = "FILE_" + inflection.underscore(filebase.replace("/","_").replace("\\","_").replace(" ","_")).upper() + "_" + inflection.underscore(extension).upper()
+            var = "FILE_" + inflection.underscore(filebase.replace("/","_").replace("\\","_").replace(" ","_")).upper() + "_" + inflection.underscore(extension).replace(".","_").upper()
             ifndefguard = "#ifndef " + var + "\n#define " + var + "\n"
             ifndefguardend = "#endif"
 

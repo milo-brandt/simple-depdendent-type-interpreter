@@ -661,14 +661,17 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
   inline archive_root::{{kind.name}} archive({{kind.name}}{{ref.suffix}} target) { return archive_root::{{kind.name}}{ {%- call ref.forward() %}target{% endcall -%} }; }
 {%- endfor %}
 {%- endfor %}
-{%- endmacro -%}
+{%- endmacro %}
 {%- macro archive_definition(archive) -%}
+    {%- call in_extension("proto.hpp") %}
+    {{- absolute_include("cstdint") }}
     {%- for tree in archive.trees %}
     {%- call in_namespace(tree.namespace) %}
     {{ forward_definitions(tree) }}
     {%- endcall %}
     {%- endfor %}
     {{ archive_index_definition(archive.shape, archive.namespace, archive.trees) }}
+    {%- endcall %}
     {%- for tree in archive.trees %}
     {%- call in_namespace(tree.namespace) %}
     {{ archive_definition_for_tree(tree, archive) }}
