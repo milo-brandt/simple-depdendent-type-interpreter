@@ -1,7 +1,7 @@
 #include <fstream>
 #include "Expression/interactive_environment.hpp"
+#include "Expression/expression_debug_format.hpp"
 
-/*
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
 }
@@ -11,7 +11,7 @@ void debug_print_pattern(expression::pattern::Pattern const& pat) {
 void debug_print_rule(expression::Rule const& rule) {
   std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
 }
-*/
+
 int main(int argc, char** argv) {
   std::string last_line = "";
 

@@ -73,6 +73,7 @@ namespace expression::solver {
   struct HungEquation {
     tree::Expression lhs;
     tree::Expression rhs;
+    std::uint64_t depth;
     std::uint64_t source_index; //which introduction led to this one
     bool failed; //"false" means merely stuck
   };

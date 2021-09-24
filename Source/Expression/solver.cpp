@@ -394,6 +394,7 @@ namespace expression::solver {
       ret.push_back(HungEquation{
         .lhs = equation.lhs,
         .rhs = equation.rhs,
+        .depth = equation.stack.depth(),
         .source_index = get_source_index(i),
         .failed = equation.failed
       });

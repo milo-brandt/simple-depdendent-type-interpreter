@@ -19,16 +19,14 @@ namespace expression::format {
   struct Formatter {
     FormatContext& context;
     tree::Expression const& expr;
+    std::uint64_t base_depth;
   };
   struct FormatContext {
     Context& expression_context;
     std::function<bool(std::uint64_t)> force_expansion; //for lambdas
     std::function<void(std::ostream&, std::uint64_t)> write_external;
-    Formatter operator()(tree::Expression const& expr) & {
-      return Formatter{*this, expr};
-    }
-    Formatter operator()(tree::Expression const& expr) && {
-      return (*this)(expr);
+    Formatter operator()(tree::Expression const& expr, std::uint64_t depth = 0) {
+      return Formatter{*this, expr, depth};
     }
   };
   std::ostream& operator<<(std::ostream&, Formatter);

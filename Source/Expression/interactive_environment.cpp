@@ -254,7 +254,7 @@ namespace expression::interactive {
           std::cerr << "Solving failed.\n";
           auto fancy = fancy_format(*value);
           for(auto const& eq : value->remaining_equations) {
-            std::cout << fancy(eq.lhs) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs) << "\n";
+            std::cout << fancy(eq.lhs, eq.depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs, eq.depth) << "\n";
           }
           std::terminate();
         }
@@ -339,7 +339,7 @@ namespace expression::interactive {
           } else {
             std::cout << termcolor::yellow << "Undetermined Equation: " << termcolor::reset;
           }
-          std::cout << fancy(eq.lhs) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs) << "\n";
+          std::cout << fancy(eq.lhs, eq.depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs, eq.depth) << "\n";
           if(eq.source_kind == solver::SourceKind::cast_equation) {
             auto const& cast = value->evaluate_result.casts[eq.source_index];
             auto cast_var = cast.variable;

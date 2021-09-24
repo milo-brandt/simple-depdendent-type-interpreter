@@ -284,6 +284,7 @@ namespace expression::solver {
               return HungRoutineEquation{
                 .lhs = std::move(eq.lhs),
                 .rhs = std::move(eq.rhs),
+                .depth = eq.depth,
                 .source_kind = SourceKind::cast_equation,
                 .source_index = eq.source_index,
                 .failed = eq.failed
@@ -292,6 +293,7 @@ namespace expression::solver {
               return HungRoutineEquation{
                 .lhs = std::move(eq.lhs),
                 .rhs = std::move(eq.rhs),
+                .depth = eq.depth,
                 .source_kind = SourceKind::rule_equation,
                 .source_index = eq.source_index - input.casts.size(),
                 .failed = eq.failed
@@ -304,6 +306,7 @@ namespace expression::solver {
             return HungRoutineEquation{
               .lhs = std::move(eq.lhs),
               .rhs = std::move(eq.rhs),
+              .depth = eq.depth,
               .source_kind = info.final_stage ? SourceKind::rule_skeleton_verify : SourceKind::rule_skeleton,
               .source_index = info.rule_index,
               .failed = eq.failed

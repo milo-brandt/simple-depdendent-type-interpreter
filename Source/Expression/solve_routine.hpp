@@ -15,6 +15,7 @@ namespace expression::solver {
   struct HungRoutineEquation {
     tree::Expression lhs;
     tree::Expression rhs;
+    std::uint64_t depth;
     SourceKind source_kind;
     std::uint64_t source_index;
     bool failed;

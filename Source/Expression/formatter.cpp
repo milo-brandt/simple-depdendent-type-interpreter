@@ -58,7 +58,8 @@ namespace expression::format {
                   .arg_count = options.arg_count + 1
                 });
                 if(options.parenthesize_arrow) options.o << "(";
-                if(response.args_used.contains(options.arg_count)) {
+                bool is_dependent = response.args_used.contains(options.arg_count);
+                if(is_dependent) {
                   options.o << "($" << options.arg_count << " : ";
                 }
                 response.merge(write_expression(std::move(domain), {
@@ -68,7 +69,7 @@ namespace expression::format {
                   .parenthesize_arrow = true,
                   .arg_count = options.arg_count
                 }));
-                if(response.args_used.contains(options.arg_count)) {
+                if(is_dependent) {
                   options.o << ")";
                 }
                 options.o << " -> " << temp.str();
@@ -147,7 +148,7 @@ namespace expression::format {
       .parenthesize_application = false,
       .parenthesize_lambda = false,
       .parenthesize_arrow = false,
-      .arg_count = 0
+      .arg_count = format.base_depth
     });
     return o;
   }
