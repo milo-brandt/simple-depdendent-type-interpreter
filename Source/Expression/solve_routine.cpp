@@ -95,12 +95,17 @@ namespace expression::solver {
       }
       return std::nullopt;
     }
+    struct SolverInfo {
+      std::uint64_t rule_index;
+      bool final_stage = false;
+    };
   }
   struct Routine::Impl {
     compiler::evaluate::EvaluateResult& input;
     expression::Context& expression_context;
     StandardSolverContext solver_context;
     std::vector<Solver> solvers;
+    std::vector<SolverInfo> solver_info;
     std::vector<CastInfo> casts;
     std::vector<RuleInfo> rules;
     std::vector<mdb::Indirect<RuleInstance> > rule_routines;
@@ -110,6 +115,7 @@ namespace expression::solver {
        solver_context(std::move(in_solver_context))
      {
       solvers.emplace_back(mdb::ref(solver_context));
+      solver_info.push_back({.rule_index = (std::uint64_t)-1}); //not associated to a rule
       for(auto [var, reason] : input.variables) {
         if(is_variable(reason))
           solvers[0].register_variable(var);
@@ -171,6 +177,7 @@ namespace expression::solver {
             auto evaluated = compiler::evaluate::evaluate_pattern(archived.root(), expression_context);
             auto solve_index = solvers.size();
             solvers.emplace_back(mdb::ref(solver_context));
+            solver_info.push_back({.rule_index = (std::uint64_t)(&rule - input.rules.data())});
             auto& solver = solvers.back();
             rule_routines.emplace_back(mdb::in_place, RuleInstance{
               .solver_index = solve_index,
@@ -213,6 +220,7 @@ namespace expression::solver {
           if(solvers[instance->solver_index].is_fully_satisfied()) {
             auto solve_index = solvers.size();
             solvers.emplace_back(mdb::ref(solver_context));
+            solver_info.push_back({.rule_index = solver_info[instance->solver_index].rule_index, .final_stage = true});
             auto& solver = solvers.back();
             std::vector<expression::tree::Expression> capture_vec;
             for(auto cast_var : instance->evaluated.capture_point_variables) capture_vec.push_back(expression::tree::External{cast_var});
@@ -267,10 +275,10 @@ namespace expression::solver {
     }
     std::vector<HungRoutineEquation> get_hung_equations() {
       std::vector<HungRoutineEquation> ret;
-      bool first = true;
+      std::uint64_t solve_index = 0;
       for(auto& solver : solvers) {
         auto eqs = solver.get_hung_equations();
-        if(first) {
+        if(solve_index == 0) {
           std::transform(eqs.begin(), eqs.end(), std::back_inserter(ret), [&](HungEquation& eq) {
             if(eq.source_index < input.casts.size()) {
               return HungRoutineEquation{
@@ -291,18 +299,19 @@ namespace expression::solver {
             }
           });
         } else {
+          auto const& info = solver_info[solve_index];
           std::transform(eqs.begin(), eqs.end(), std::back_inserter(ret), [&](HungEquation& eq) {
             return HungRoutineEquation{
               .lhs = std::move(eq.lhs),
               .rhs = std::move(eq.rhs),
-              .source_kind = SourceKind::rule_equation,
-              .source_index = (std::uint64_t)-1,
+              .source_kind = info.final_stage ? SourceKind::rule_skeleton_verify : SourceKind::rule_skeleton,
+              .source_index = info.rule_index,
               .failed = eq.failed
             };
           });
           //???
         }
-        //ret.insert(ret.end(), eqs.begin(), eqs.end());
+        ++solve_index;
       }
       return ret;
     }

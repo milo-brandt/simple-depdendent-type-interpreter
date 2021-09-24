@@ -374,7 +374,17 @@ namespace expression::interactive {
             auto const& locator_index = pos.source.index;
             auto const& locator_pos = value->parser_locator[locator_index];
             auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-            std::cout << "While checking the LHS and RHS of rule have same type: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+            switch(eq.source_kind) {
+              case solver::SourceKind::rule_equation:
+                std::cout << "While checking the LHS and RHS of rule have same type: "; break;
+              case solver::SourceKind::rule_skeleton:
+                std::cout << "While deducing relations among the capture-point skeleton of: "; break;
+              case solver::SourceKind::rule_skeleton_verify:
+                std::cout << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
+              default:
+                std::cout << "While doing unknown task with rule: "; break;
+            }
+            std::cout << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
           } else {
             std::cout << "Unknown source.";
           }
