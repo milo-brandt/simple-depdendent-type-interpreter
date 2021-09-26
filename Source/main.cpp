@@ -158,6 +158,12 @@ int main(int argc, char** argv) {
       if(last_line.empty()) continue;
       line = last_line;
     }
+    while(line.back() == '\\') { //keep reading
+      line.back() = '\n'; //replace backslash with new line
+      std::string next_line;
+      std::getline(std::cin, next_line);
+      line += next_line;
+    }
     last_line = line;
     if(line == "q") return 0;
     if(line.starts_with("file ")) {
@@ -177,40 +183,3 @@ int main(int argc, char** argv) {
   }
   return 0;
 }
-
-/*
-block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; declare add : Nat -> Nat -> Nat; rule add zero x = x; rule add (succ x) y = succ (add x y); declare mul : Nat -> Nat -> Nat; rule mul zero x = zero; rule mul (succ x) y = add y (mul x y); mul (succ \\ succ \\ succ \\ succ zero) (succ \\ succ \\ succ \\ succ \\ succ zero) }
-*/
-
-/*
-block { axiom String : Type; axiom One : Type; axiom Parser : Type -> Type; axiom Recognize : (T: Type) -> String -> Parser T -> Parser T; axiom Accept : (T : Type) -> T -> Parser T; axiom dot : String; f Recognize _ dot \\ Recognize _ dot \\ Accept _ Type }
-*/
-/*
-block { axiom Id : Type -> Type; axiom pure : (T : Type) -> T -> Id T; declare extract : (T : Type) -> Id T -> T; rule extract T (pure T x) = x; extract }
-block { axiom Id : Type -> Type; axiom pure : (T : Type) -> T -> Id T; pure }
-
-block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; axiom Vec : Nat -> Type; axiom empty : Vec zero; axiom cons : (n : Nat) -> Nat -> Vec n -> Vec (succ n); declare fold : Nat -> (Nat -> Nat -> Nat) -> (n : Nat) -> Vec n -> Nat; fold }
-
-block { axiom Nat : Type; declare mul : Nat -> Nat -> Nat; axiom Square : Nat -> Type; axiom witness : (n : Nat) -> Square (mul n n); declare sqrt : (n : Nat) -> (Square n) -> Nat; rule sqrt (mul n n) (witness n) = n; sqrt }
-
-block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; axiom Vec : Nat -> Type; axiom empty : Vec zero; axiom cons : (n : Nat) -> Nat -> Vec n -> Vec (succ n); declare fold : Nat -> (Nat -> Nat -> Nat) -> (n : Nat) -> Vec n -> Nat; rule fold base combine zero empty = base; rule fold base combine (succ n) (cons n head tail) = fold (combine base head) combine n tail; declare mul : Nat -> Nat -> Nat; declare fst : Nat; fold fst mul _ (cons _ zero (cons _ (succ zero) empty)) }
-block {
-  axiom Nat : Type;
-  axiom zero : Nat;
-  axiom succ : Nat -> Nat;
-  axiom Routine : Type -> Type;
-  axiom return : (T : Type) -> T -> Routine T;
-  axiom read : (T : Type) -> (Nat -> Routine T) -> Routine T;
-
-  declare bind : (S : Type) -> (T : Type) -> Routine S -> (S -> Routine T) -> Routine T;
-  bind S T (return S x) then = then x;
-  bind S T (read S f) then = read T \n.bind S T (f n) then;
-}
-
-block { axiom Nat : Type; axiom zero : Nat; axiom succ : Nat -> Nat; axiom Routine : Type -> Type; axiom return : (T : Type) -> T -> Routine T; axiom read : (T : Type) -> (Nat -> Routine T) -> Routine T; declare bind : (S : Type) -> (T : Type) -> Routine S -> (S -> Routine T) -> Routine T; rule bind S T (return S x) then = then x; rule bind S T (read S f) then = read T \n.bind S T (f n) then; bind }
-
-
-block { axiom Id : (T : Type) -> T -> T -> Type; axiom refl : (T : Type) -> (x : T) -> Id T x x; declare compose : (T : Type) -> (x : T) -> (y : T) -> (z : T) -> Id T x y -> Id T y z -> Id T x z; rule compose T x x x (refl T x) (refl T x) = refl T x; compose }
-
-...this could be a good use case for coroutines, probably? - let things wait for whatever's blocking their progress
-*/
