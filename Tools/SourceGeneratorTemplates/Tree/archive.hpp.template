@@ -402,9 +402,34 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- endfor %}
 {%- endcall %}
 {%- endmacro %}
-{%- macro detail_definition(tree) -%}
+{%- macro detail_definition(tree, archive) -%}
 {%- call in_namespace_relative("archive_detail") %}
     struct Detail;
+    class IndexRange {
+      std::uint64_t begin_index;
+      std::uint64_t end_index;
+      explicit IndexRange(std::uint64_t begin_index, std::uint64_t end_index):begin_index(begin_index), end_index(end_index) {}
+    public:
+      class Iterator {
+        std::uint64_t index;
+        explicit Iterator(std::uint64_t index):index(index) {}
+        friend IndexRange;
+      public:
+        Iterator& operator++() { ++index; return *this; }
+        friend bool operator==(Iterator const& lhs, Iterator const& rhs) { return lhs.index == rhs.index; }
+        friend bool operator!=(Iterator const& lhs, Iterator const& rhs) { return lhs.index != rhs.index; }
+        {%- if tree.multikind %}
+        {{ archive.namespace }}::PolymorphicKind operator*() const { return {{ archive.namespace }}::PolymorphicKind::from_index(index); }
+        {%- else %}
+        {{ archive.namespace }}::{{ tree.kinds[0].name }} operator*() const { return {{ archive.namespace }}::{{ tree.kinds[0].name }}::from_index(index); }
+        {%- endif %}
+      };
+      static IndexRange from_indices(std::uint64_t begin_index, std::uint64_t end_index) {
+        return IndexRange{begin_index, end_index};
+      }
+      Iterator begin() const { return Iterator{begin_index}; }
+      Iterator end() const { return Iterator{end_index}; }
+    };
     static constexpr std::uint64_t kind_table[] = {
     {%- for component in tree.components -%}
     {{ component.kind_index }}{%- if not loop.last %}, {% endif -%}
@@ -476,7 +501,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     }
     {%- for ref in [reference.cref, reference.rref] %}
     {%- for kind in tree.kinds %}
-    static void* allocate_and_fill_{{ kind.name | underscore }}_{{ref.name}}({{kind.name}}{{ref.suffix}} target) {
+    static std::pair<std::uint64_t, void*> allocate_and_fill_{{ kind.name | underscore }}_{{ref.name}}({{kind.name}}{{ref.suffix}} target) {
       SizeData sizer;
       sizer.add_{{ kind.name | underscore }}_to_size(target);
       void* ret = std::aligned_alloc(max_alignment, sizer.get_size());
@@ -484,7 +509,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
       Writer writer{ret, sizer.get_size(), sizer.count};
       writer.write_{{ kind.name | underscore }}_to_{{ref.name}}({%call ref.forward() %}target{% endcall %});
       writer.finish();
-      return ret;
+      return std::make_pair(sizer.count, ret);
     }
     {%- endfor %}
     {%- endfor %}
@@ -596,6 +621,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
 {%- endmacro %}
 {%- macro archive_base_definition(tree, classname, kinds, is_poly) %}
   class {{classname}} {
+    std::uint64_t node_count;
     void* data;
     {%- for ref in [reference.cref, reference.rref] %}
     {{ archive_root_part(tree) }}{{ ref.const_qualifier }}* get_index(std::uint64_t index){{ ref.const_qualifier }} { return *(({{ archive_root_part(tree) }}**)data + index); }
@@ -603,22 +629,23 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- if tree.multikind and not is_poly %}
     friend PolymorphicKind;
     {%- endif %}
+    explicit {{classname}}(std::pair<std::uint64_t, void*> pair_data):node_count(pair_data.first), data(pair_data.second) {}
   public:
     {%- for kind in kinds %}
     {%- for ref in [reference.cref, reference.rref] %}
     {{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}});
     {%- call in_extension("cpp") %}
-  {{classname}}::{{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}} target):data(archive_detail::Detail::allocate_and_fill_{{kind.name|underscore}}_{{ref.name}}({% call ref.forward() %}target{% endcall %})) {}
+  {{classname}}::{{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}} target):{{classname}}(archive_detail::Detail::allocate_and_fill_{{kind.name|underscore}}_{{ref.name}}({% call ref.forward() %}target{% endcall %})) {}
     {%- endcall %}
     {%- endfor %}
     {%- endfor %}
     {%- if is_poly %}
     {%- for kind in kinds %}
-    {{classname}}({{kind.name}}&& other):data(other.data) { other.data = nullptr; }
+    {{classname}}({{kind.name}}&& other):node_count(other.node_count), data(other.data) { other.data = nullptr; }
     {%- endfor %}
     {%- endif %}
-    {{classname}}({{classname}}&& other):data(other.data) { other.data = nullptr; }
-    {{classname}}& operator=({{classname}}&& other) { std::swap(data, other.data); return *this; }
+    {{classname}}({{classname}}&& other):node_count(other.node_count), data(other.data) { other.data = nullptr; }
+    {{classname}}& operator=({{classname}}&& other) { std::swap(node_count, other.node_count); std::swap(data, other.data); return *this; }
     ~{{classname}}();
     {%- call(const) const_variant() %}
     archive_part::{{classname}}{{const}}& root(){{const}} { return *(archive_part::{{classname}}{{const}}*)get_index(0); }
@@ -632,8 +659,12 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- for component in tree.components %}
     {{ index_operation(component.name) }}
     {%- endfor %}
+    archive_detail::IndexRange all_indices();
   };
   {%- call in_extension("cpp") %}
+  archive_detail::IndexRange {{classname}}::all_indices() {
+    return archive_detail::IndexRange::from_indices(0, node_count);
+  }
   {{classname}}::~{{classname}}() {
     if(data) {
       archive_detail::Detail::destroy_parts(data);
@@ -703,7 +734,7 @@ void archive_indices_of({{kind.name}} const& target, Callback&& callback) {
 
 {%- endmacro %}
 {%- macro archive_definition_for_tree(tree, archive) -%}
-  {{ detail_definition(tree) }}
+  {{ detail_definition(tree, archive) }}
   {{ archive_part_definition(tree, archive) }}
   {{ archive_unique_definition(tree, archive) }}
 {%- for kind in tree.kinds %}
