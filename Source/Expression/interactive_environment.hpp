@@ -25,7 +25,7 @@ namespace expression::interactive {
     DeclarationInfo axiom_check(std::string name, std::string_view expr);
     void name_external(std::string name, std::uint64_t external);
 
-    void debug_parse(std::string_view);
+    void debug_parse(std::string_view, std::ostream& output = std::cout);
 
     Context& context();
     expression::data::SmallScalar<std::uint64_t> const& u64() const;

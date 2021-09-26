@@ -13,7 +13,7 @@ namespace expression::tree {
 }
 
 namespace expression::data {
-  using Buffer = std::aligned_storage_t<24, alignof(void*)>;
+  using Buffer = std::aligned_storage_t<24, std::max(alignof(void*), alignof(std::uint64_t))>;
   class DataType {
   public:
     virtual bool compare(Buffer const&, Buffer const&) const = 0;

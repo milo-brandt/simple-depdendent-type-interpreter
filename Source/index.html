@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <style>
+        body {background-color: black; color:gray; }
+    </style>
+</head>
+
+<body >
+  <div align="center">
+    <div id="output">Call run_script to do something</div>
+<script>
+  var Module = {
+    print: console.log,
+    printerr: console.err,
+    onRuntimeInitialized: function() {
+      console.log("Ready.")
+    }
+  };
+  function run_script(str) {
+    document.getElementById("output").innerHTML = Module.run_script(str)
+  }
+</script>
+
+<script async src="index.js"></script>
+
+  </div>
+</body>
+
+</html>

@@ -180,7 +180,7 @@ namespace expression::interactive {
       std::vector<TypedValue> embeds;
       std::unordered_map<std::string, std::uint64_t> names_to_embeds;
       auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda {
-        .lookup = [&](std::string_view str) -> std::optional<std::uint64_t> {
+        [&](std::string_view str) -> std::optional<std::uint64_t> { //lookup
           std::string s{str};
           if(names_to_embeds.contains(s)) {
             return names_to_embeds.at(s);
@@ -193,7 +193,7 @@ namespace expression::interactive {
             return std::nullopt;
           }
         },
-        .embed_literal = [&](auto const& literal) -> std::uint64_t {
+        [&](auto const& literal) -> std::uint64_t { //embed_literal
           auto ret = embeds.size();
           std::visit(mdb::overloaded{
             [&](std::uint64_t literal) {
@@ -334,7 +334,7 @@ namespace expression::interactive {
         std::terminate();
       }
     }
-    void debug_parse(std::string_view expr) {
+    void debug_parse(std::string_view expr, std::ostream& output) {
       auto compile = full_compile(expr);
       if(auto* value = compile.get_if_value()) {
         /*
@@ -344,7 +344,7 @@ namespace expression::interactive {
         std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
         for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
         for(auto const& [var, reason] : sorted_variables) {
-          std::cout << std::visit(mdb::overloaded{
+          output << std::visit(mdb::overloaded{
             [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
             [&](compiler::evaluate::variable_explanation::ApplyCodomain const&) { return "ApplyCodomain: "; },
             [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "ApplyLHSCast: "; },
@@ -367,9 +367,9 @@ namespace expression::interactive {
           auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
           auto const& locator_pos = value->parser_locator[locator_index];
           auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-          std::cout << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
+          output << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
         }
-        std::cout << "\n";*/
+        output << "\n";*/
         auto fancy = fancy_format(*value); //get the formatters
         auto deep = deep_format(*value);
         /*
@@ -383,17 +383,17 @@ namespace expression::interactive {
           return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
         });
         for(auto const& rule : new_rules) {
-          std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+          output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
         }
-        std::cout << "\n";
+        output << "\n";
         */
         for(auto const& eq : value->remaining_equations) {
           if(eq.failed) {
-            std::cout << termcolor::red << "False Equation: " << termcolor::reset;
+            output << red_string("False Equation: ");
           } else {
-            std::cout << termcolor::yellow << "Undetermined Equation: " << termcolor::reset;
+            output << yellow_string("Undetermined Equation: ");
           }
-          std::cout << fancy(eq.lhs, eq.depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs, eq.depth) << "\n";
+          output << fancy(eq.lhs, eq.depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs, eq.depth) << "\n";
           if(eq.source_kind == solver::SourceKind::cast_equation) {
             auto const& cast = value->evaluate_result.casts[eq.source_index];
             auto cast_var = cast.variable;
@@ -422,17 +422,17 @@ namespace expression::interactive {
                 auto const& apply = locator_pos.get_apply();
                 auto const& lhs_pos = apply.lhs.visit([&](auto const& o) { return o.position; });
                 auto const& rhs_pos = apply.rhs.visit([&](auto const& o) { return o.position; });
-                std::cout << reason_string << format_info_pair(
+                output << reason_string << format_info_pair(
                   expression_parser::position_of(lhs_pos, value->lexer_locator),
                   expression_parser::position_of(rhs_pos, value->lexer_locator),
                   value->source
                 );
               } else {
                 auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-                std::cout << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+                output << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
               }
             } else {
-              std::cout << "From cast #" << eq.source_index << ". Could not be located.";
+              output << "From cast #" << eq.source_index << ". Could not be located.";
             }
           } else if(eq.source_index != -1) {
             auto const& reason = value->evaluate_result.rule_explanations[eq.source_index];
@@ -441,18 +441,18 @@ namespace expression::interactive {
             auto const& locator_pos = value->parser_locator[locator_index];
             switch(eq.source_kind) {
               case solver::SourceKind::rule_equation:
-                std::cout << "While checking the LHS and RHS of rule have same type: "; break;
+                output << "While checking the LHS and RHS of rule have same type: "; break;
               case solver::SourceKind::rule_skeleton:
-                std::cout << "While deducing relations among the capture-point skeleton of: "; break;
+                output << "While deducing relations among the capture-point skeleton of: "; break;
               case solver::SourceKind::rule_skeleton_verify:
-                std::cout << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
+                output << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
               default:
-                std::cout << "While doing unknown task with rule: "; break;
+                output << "While doing unknown task with rule: "; break;
             }
             if(locator_pos.holds_rule()) {
               auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
               auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
-              std::cout << format_info_pair(
+              output << format_info_pair(
                 expression_parser::position_of(lhs_pos, value->lexer_locator),
                 expression_parser::position_of(rhs_pos, value->lexer_locator),
                 value->source
@@ -460,19 +460,19 @@ namespace expression::interactive {
             } else {
               //this shouldn't be reachable
               auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
-              std::cout << format_info(
+              output << format_info(
                 expression_parser::position_of(pos, value->lexer_locator),
                 value->source
               );
             }
           } else {
-            std::cout << "Unknown source.";
+            output << "Unknown source.";
           }
-          std::cout << "\n\n";
+          output << "\n\n";
         }
         //throw new variables into context
         for(auto const& entry : value->get_outer_values()) {
-          //std::cout << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
+          //output << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
           names_to_values.insert_or_assign(entry.first, entry.second);
         }
         for(auto const& var_data : value->evaluate_result.variables) {
@@ -481,11 +481,10 @@ namespace expression::interactive {
             externals_to_names.insert(std::make_pair(var_index, std::move(*str)));
           }
         }
-        std::cout << "Final: " << fancy_format(*value)(value->evaluate_result.result.value) << " of type " << fancy_format(*value)(value->evaluate_result.result.type) << "\n";
-        std::cout << "Deep: " << deep_format(*value)(value->evaluate_result.result.value) << " of type " << deep_format(*value)(value->evaluate_result.result.type) << "\n";
+        output << "Final: " << fancy_format(*value)(value->evaluate_result.result.value) << " of type " << fancy_format(*value)(value->evaluate_result.result.type) << "\n";
+        output << "Deep: " << deep_format(*value)(value->evaluate_result.result.value) << " of type " << deep_format(*value)(value->evaluate_result.result.type) << "\n";
       } else {
-        std::cerr << "While compiling: " << expr << "\n";
-        std::cerr << compile.get_error() << "\n";
+        output << compile.get_error() << "\n";
       }
     }
   };
@@ -507,8 +506,8 @@ namespace expression::interactive {
   Environment::DeclarationInfo Environment::axiom_check(std::string name, std::string_view expr) {
     return impl->declare_or_axiom_check(std::move(name), expr, true);
   }
-  void Environment::debug_parse(std::string_view str) {
-    return impl->debug_parse(str);
+  void Environment::debug_parse(std::string_view str, std::ostream& output) {
+    return impl->debug_parse(str, output);
   }
   void Environment::name_external(std::string name, std::uint64_t external) {
     return impl->name_external(std::move(name), external);

@@ -10,15 +10,15 @@ archive_part::{{ tree.kinds[0].name }}
 {%- endmacro %}
 {%- macro index_class_definition(classname, friend_trees) %}
     class {{ classname }} {
-        std::uint64_t private_index;
-        explicit {{ classname }}(std::uint64_t private_index):private_index(private_index) {}
+        std::size_t private_index;
+        explicit {{ classname }}(std::size_t private_index):private_index(private_index) {}
         {%- for friend in friend_trees %}
         friend class {{friend.namespace}}::archive_part::{{classname}};
         {%- endfor %}
     public:
-        static {{ classname }} from_index(std::uint64_t index) { return {{classname}}{index}; }
+        static {{ classname }} from_index(std::size_t index) { return {{classname}}{index}; }
         {{- caller() }}
-        std::uint64_t index() const { return private_index; }
+        std::size_t index() const { return private_index; }
         friend bool operator==({{classname}} const& lhs, {{classname}} const& rhs) { return lhs.private_index == rhs.private_index; }
         friend bool operator!=({{classname}} const& lhs, {{classname}} const& rhs) { return lhs.private_index != rhs.private_index; }
     };
@@ -226,9 +226,9 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- for component in tree.components %}
     friend {{ component.name }};
     {%- endfor %}
-    std::uint64_t const discriminator;
-    std::uint64_t const private_index;
-    PolymorphicKind(std::uint64_t discriminator, std::uint64_t private_index):discriminator(discriminator),private_index(private_index){}
+    std::size_t const discriminator;
+    std::size_t const private_index;
+    PolymorphicKind(std::size_t discriminator, std::size_t private_index):discriminator(discriminator),private_index(private_index){}
     ~PolymorphicKind() {}
   public:
     {{ no_copy("PolymorphicKind") }}
@@ -256,9 +256,9 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     {%- endfor %}
     {%- if not tree.multikind %}
     std::uint64_t const discriminator;
-    std::uint64_t const private_index;
+    std::size_t const private_index;
     {%- endif %}
-    {{ kind.name }}(std::uint64_t discriminator, std::uint64_t index):{%- if tree.multikind %}PolymorphicKind(discriminator, index){% else %}discriminator(discriminator), private_index(index){% endif %}{}
+    {{ kind.name }}(std::uint64_t discriminator, std::size_t index):{%- if tree.multikind %}PolymorphicKind(discriminator, index){% else %}discriminator(discriminator), private_index(index){% endif %}{}
     ~{{ kind.name }}() {}
   public:
     {{ no_copy(kind.name) }}
@@ -406,13 +406,13 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
 {%- call in_namespace_relative("archive_detail") %}
     struct Detail;
     class IndexRange {
-      std::uint64_t begin_index;
-      std::uint64_t end_index;
-      explicit IndexRange(std::uint64_t begin_index, std::uint64_t end_index):begin_index(begin_index), end_index(end_index) {}
+      std::size_t begin_index;
+      std::size_t end_index;
+      explicit IndexRange(std::size_t begin_index, std::size_t end_index):begin_index(begin_index), end_index(end_index) {}
     public:
       class Iterator {
-        std::uint64_t index;
-        explicit Iterator(std::uint64_t index):index(index) {}
+        std::size_t index;
+        explicit Iterator(std::size_t index):index(index) {}
         friend IndexRange;
       public:
         Iterator& operator++() { ++index; return *this; }
@@ -424,7 +424,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
         {{ archive.namespace }}::{{ tree.kinds[0].name }} operator*() const { return {{ archive.namespace }}::{{ tree.kinds[0].name }}::from_index(index); }
         {%- endif %}
       };
-      static IndexRange from_indices(std::uint64_t begin_index, std::uint64_t end_index) {
+      static IndexRange from_indices(std::size_t begin_index, std::size_t end_index) {
         return IndexRange{begin_index, end_index};
       }
       Iterator begin() const { return Iterator{begin_index}; }
@@ -437,18 +437,18 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     };
   {%- call in_extension("cpp") %}
   struct Detail {
-    static constexpr auto max_alignment = std::max({alignof(std::uint64_t)
+    static constexpr auto max_alignment = std::max({alignof(void*)
       {%- for component in tree.components -%}
         , alignof(archive_part::{{ component.name }})
       {%- endfor -%}
     });
-    static std::uint64_t next_multiple_of(std::uint64_t base, std::uint64_t multiple) {
+    static std::size_t next_multiple_of(std::size_t base, std::size_t multiple) {
         return multiple * ((base + multiple - 1) / multiple);
     }
     struct SizeData {
-      std::uint64_t count = 0;
-      std::uint64_t offset = 0;
-      void round_up(std::uint64_t alignment) { offset = next_multiple_of(offset, alignment); }
+      std::size_t count = 0;
+      std::size_t offset = 0;
+      void round_up(std::size_t alignment) { offset = next_multiple_of(offset, alignment); }
       template<class T> void add_to_size() { round_up(alignof(T)); offset += sizeof(T); }
       template<class T> void add_span_to_size(std::size_t span_size) { round_up(alignof(T)); offset += sizeof(T) * span_size; }
       {%- for kind in tree.kinds %}
@@ -457,21 +457,20 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
       {%- for component in tree.components %}
       void add_{{ component.name|underscore }}_to_size({{tree.namespace}}::{{ component.name }} const&);
       {%- endfor %}
-      std::uint64_t get_size() const {
-          std::uint64_t ret = (count + 1) * sizeof({{ archive_root_part(tree) }}**);
+      std::size_t get_size() const {
+          std::size_t ret = (count + 1) * sizeof({{ archive_root_part(tree) }}**);
           ret = next_multiple_of(ret, max_alignment);
           return ret + next_multiple_of(offset, max_alignment);
       }
     };
     struct Writer {
-        std::uint64_t index = 0;
+        std::size_t index = 0;
         {{ archive_root_part(tree) }}** indexes;
         void* head;
-        std::uint64_t size_left;
-        void align_to(std::uint64_t alignment) { std::align(alignment, 0, head, size_left); }
+        std::size_t size_left;
         template<class T> void* position_for() { auto ret = std::align(alignof(T), sizeof(T), head, size_left); head = (std::uint8_t*)head + sizeof(T); size_left -= sizeof(T); return ret; }
         template<class T> T* position_for_span(std::size_t count) { auto ret = (T*)std::align(alignof(T), sizeof(T), head, size_left); head = (std::uint8_t*)head + count * sizeof(T); size_left -= count * sizeof(T); return ret; }
-        Writer(void* head, std::uint64_t size_left, std::uint64_t index_count):head(head), size_left(size_left) {
+        Writer(void* head, std::size_t size_left, std::size_t index_count):head(head), size_left(size_left) {
           auto old_head = head;
           indexes = position_for_span<{{ archive_root_part(tree) }}*>(index_count + 1);
           if(old_head != indexes) std::terminate();
@@ -501,10 +500,10 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     }
     {%- for ref in [reference.cref, reference.rref] %}
     {%- for kind in tree.kinds %}
-    static std::pair<std::uint64_t, void*> allocate_and_fill_{{ kind.name | underscore }}_{{ref.name}}({{kind.name}}{{ref.suffix}} target) {
+    static std::pair<std::size_t, void*> allocate_and_fill_{{ kind.name | underscore }}_{{ref.name}}({{kind.name}}{{ref.suffix}} target) {
       SizeData sizer;
       sizer.add_{{ kind.name | underscore }}_to_size(target);
-      void* ret = std::aligned_alloc(max_alignment, sizer.get_size());
+      void* ret = aligned_alloc(max_alignment, sizer.get_size());
       if(!ret) std::terminate();
       Writer writer{ret, sizer.get_size(), sizer.count};
       writer.write_{{ kind.name | underscore }}_to_{{ref.name}}({%call ref.forward() %}target{% endcall %});
@@ -529,7 +528,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     add_to_size<archive_part::{{component.name}}>();
     {%- for member in component.base_members %}
     {%- if member.type_info.is_vector() %}
-    add_span_to_size<std::uint64_t>(part.{{member.name}}.size());
+    add_span_to_size<archive_part::{{ member.type_info.base_kind() }}*>(part.{{member.name}}.size());
     for({{ tree.namespace }}::{{ member.type_info.base_kind() }} const& member : part.{{member.name}}) {
       add_{{ member.type_info.base_kind()|underscore }}_to_size(member);
     }
@@ -621,15 +620,15 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
 {%- endmacro %}
 {%- macro archive_base_definition(tree, classname, kinds, is_poly) %}
   class {{classname}} {
-    std::uint64_t node_count;
+    std::size_t node_count;
     void* data;
     {%- for ref in [reference.cref, reference.rref] %}
-    {{ archive_root_part(tree) }}{{ ref.const_qualifier }}* get_index(std::uint64_t index){{ ref.const_qualifier }} { return *(({{ archive_root_part(tree) }}**)data + index); }
+    {{ archive_root_part(tree) }}{{ ref.const_qualifier }}* get_index(std::size_t index){{ ref.const_qualifier }} { return *(({{ archive_root_part(tree) }}**)data + index); }
     {%- endfor %}
     {%- if tree.multikind and not is_poly %}
     friend PolymorphicKind;
     {%- endif %}
-    explicit {{classname}}(std::pair<std::uint64_t, void*> pair_data):node_count(pair_data.first), data(pair_data.second) {}
+    explicit {{classname}}(std::pair<std::size_t, void*> pair_data):node_count(pair_data.first), data(pair_data.second) {}
   public:
     {%- for kind in kinds %}
     {%- for ref in [reference.cref, reference.rref] %}
@@ -695,16 +694,16 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
 {%- call in_namespace_relative("detail") %}
 {%- for kind in tree.kinds %}
 {%- for component in kind.components %}
-  template<class Callback> void archive_indices_of({{kind.name}} const* parent, {{component.name}} const& component, std::uint64_t& index, Callback& callback);
+  template<class Callback> void archive_indices_of({{kind.name}} const* parent, {{component.name}} const& component, std::size_t& index, Callback& callback);
 {%- endfor %}
-  template<class Callback> void archive_indices_of({{kind.name}} const& target, std::uint64_t& index, Callback& callback) {
+  template<class Callback> void archive_indices_of({{kind.name}} const& target, std::size_t& index, Callback& callback) {
     target.visit([&](auto const& part) { archive_indices_of(&target, part, index, callback); });
   }
 {%- endfor %}
 {%- for kind in tree.kinds %}
 {%- for component in kind.components %}
-  template<class Callback> void archive_indices_of({{kind.name}} const* parent, {{component.name}} const& term, std::uint64_t& index, Callback& callback) {
-    std::uint64_t my_index = index++;
+  template<class Callback> void archive_indices_of({{kind.name}} const* parent, {{component.name}} const& term, std::size_t& index, Callback& callback) {
+    std::size_t my_index = index++;
     callback(parent, &term, {{archive.namespace}}::{{component.name}}::from_index(my_index));
     {%- for member in component.base_members %}
     {%- if member.type_info.is_vector() %}
@@ -726,7 +725,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
 {%- for kind in tree.kinds %}
 template<class Callback>
 void archive_indices_of({{kind.name}} const& target, Callback&& callback) {
-  std::uint64_t index = 0;
+  std::size_t index = 0;
   detail::archive_indices_of(target, index, callback);
 }
 {%- endfor %}
@@ -747,6 +746,7 @@ void archive_indices_of({{kind.name}} const& target, Callback&& callback) {
 {%- macro archive_definition(archive) -%}
     {%- call in_extension("proto.hpp") %}
     {{- absolute_include("cstdint") }}
+    {{- absolute_include("cstddef") }}
     {%- for tree in archive.trees %}
     {%- call in_namespace(tree.namespace) %}
     {{ forward_definitions(tree) }}

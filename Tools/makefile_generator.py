@@ -105,14 +105,10 @@ jinja_env = Environment(
 );
 makefile = jinja_env.get_template('makefile_template').render(
     targets = [{
-        "program": "Debug/program",
+        "program": "Debug/index.html",
         "objects": objects_to_compile("Source/main.cpp", "Debug"),
-        "phony": {
-            "name": "debug",
-            "command": "gdb -x Tools/gdb_init Debug/program"
-        },
-        "compile_options": "-O0 -ggdb",
-        "link_options": "-O0 -ggdb"
+        "compile_options": "-DCOMPILE_FOR_EMSCRIPTEN -O3",
+        "link_options": "--bind -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1"
     }],
     source_generators = source_generators
 );

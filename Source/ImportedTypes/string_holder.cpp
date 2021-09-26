@@ -55,7 +55,7 @@ namespace imported_type {
   StringHolder::~StringHolder() {
     if(allocation) unref_data(allocation);
   }
-  std::uint64_t StringHolder::size() const {
+  std::size_t StringHolder::size() const {
     return m_end - m_begin;
   }
   StringHolder StringHolder::substr(std::uint64_t start, std::uint64_t len) && {

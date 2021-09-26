@@ -13,7 +13,7 @@ namespace expression::data {
     };
     using Store = std::shared_ptr<Info>;
     struct Impl : DataType {
-      static_assert(sizeof(Store) <= 24 && alignof(Store) <= alignof(void*));
+      static_assert(sizeof(Store) <= 24 && alignof(Store) <= std::max(alignof(void*), alignof(std::uint64_t)));
       std::uint64_t type_index;
       std::uint64_t type_family_axiom;
       Store const& get(Buffer const& buf) const { return (Store const&)buf; }
@@ -99,7 +99,7 @@ namespace expression::data {
       return type_index;
     }
   };
-  template<class T> requires (sizeof(T) <= 24 && alignof(T) <= alignof(void*))
+  template<class T> requires (sizeof(T) <= 24 && alignof(T) <= std::max(alignof(void*), alignof(std::uint64_t)))
   class SmallScalar {
     struct Impl : DataType {
       std::uint64_t type_index;

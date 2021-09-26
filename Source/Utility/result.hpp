@@ -62,7 +62,7 @@ namespace mdb {
       }
     }
   };
-  template<class Callback, class V, class E, class OutV = std::invoke_result_t<Callback&&, V&>::ValueType>
+  template<class Callback, class V, class E, class OutV = typename std::invoke_result_t<Callback&&, V&>::ValueType>
   Result<OutV, E> bind(Result<V, E>& result, Callback&& callback) {
     static_assert(std::is_same_v<typename std::invoke_result_t<Callback&&, V&>::ErrorType, E>, "Error type of bind result must be same as input error type.");
     if(auto* value = result.get_if_value()) {
@@ -71,7 +71,7 @@ namespace mdb {
       return {in_place_error, std::move(result.get_error())};
     }
   }
-  template<class Callback, class V, class E, class OutV = std::invoke_result_t<Callback&&, V const&>::ValueType>
+  template<class Callback, class V, class E, class OutV = typename std::invoke_result_t<Callback&&, V const&>::ValueType>
   Result<OutV, E> bind(Result<V, E> const& result, Callback&& callback) {
     static_assert(std::is_same_v<typename std::invoke_result_t<Callback&&, V const&>::ErrorType, E>, "Error type of bind result must be same as input error type.");
     if(auto* value = result.get_if_value()) {

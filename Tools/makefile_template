@@ -1,4 +1,4 @@
-compiler = g++-10
+compiler = em++
 compiler_cmd = $(compiler) -std=c++20
 {% for target in targets %}
 {% if target.phony %}
@@ -8,7 +8,7 @@ compiler_cmd = $(compiler) -std=c++20
 {% endif %}
 
 {{ target.program }}:{% for object in target.objects %} {{ object.file }}{% endfor %}
-	$(compiler_cmd){% for object in target.objects %} {{ object.file }}{% endfor %} -LDependencies/lib -Wl,-rpath='$$ORIGIN' -lpthread {{ target.link_options }} -o {{ target.program }}
+	$(compiler_cmd){% for object in target.objects %} {{ object.file }}{% endfor %} -LDependencies/lib {{ target.link_options }} -o {{ target.program }}
 
 {% for object in target.objects %}
 {{ object.file }}:{% for source_file in object.sources_needed %} {{source_file}}{% endfor %}

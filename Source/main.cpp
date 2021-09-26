@@ -12,9 +12,7 @@ void debug_print_rule(expression::Rule const& rule) {
   std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
 }
 
-int main(int argc, char** argv) {
-  std::string last_line = "";
-
+expression::interactive::Environment setup_enviroment() {
   expression::interactive::Environment environment;
   auto const& u64 = environment.u64();
   auto const& str = environment.str();
@@ -61,7 +59,7 @@ int main(int argc, char** argv) {
       return ret;
     });
     add_lambda_rule("len", [](imported_type::StringHolder const& str) {
-      return str.size();
+      return (std::uint64_t)str.size();
     });
     add_lambda_rule("substr", [](imported_type::StringHolder str, std::uint64_t start, std::uint64_t len) {
       return str.substr(start, len);
@@ -148,8 +146,41 @@ int main(int argc, char** argv) {
         return std::move(base);
       }
     );
-
   }
+  return environment;
+}
+
+#ifdef COMPILE_FOR_EMSCRIPTEN
+
+#include <emscripten/bind.h>
+#include <sstream>
+
+std::string replace_newlines_with_br(std::string input) {
+  while(true) { //this isn't very efficient - but not a bottleneck either
+    auto next_new_line = input.find('\n');
+    if(next_new_line == std::string::npos) return input;
+    input.replace(next_new_line, 1, "<br/>");
+  }
+}
+std::string run_script(std::string script) {
+  std::stringstream ret;
+  auto environment = setup_enviroment();
+  std::string_view source = script;
+  environment.debug_parse(source, ret);
+  return replace_newlines_with_br(ret.str());
+}
+
+using namespace emscripten;
+EMSCRIPTEN_BINDINGS(my_module) {
+    function("run_script", &run_script);
+}
+
+#else
+
+int main(int argc, char** argv) {
+  std::string last_line = "";
+
+  auto environment = setup_enviroment();
 
   while(true) {
     std::string line;
@@ -183,3 +214,4 @@ int main(int argc, char** argv) {
   }
   return 0;
 }
+#endif

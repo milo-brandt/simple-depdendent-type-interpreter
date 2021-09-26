@@ -18,7 +18,7 @@ namespace imported_type {
     StringHolder& operator=(StringHolder const&);
     StringHolder& operator=(StringHolder&&);
     ~StringHolder();
-    std::uint64_t size() const;
+    std::size_t size() const;
     StringHolder substr(std::uint64_t start, std::uint64_t len) &&;
     StringHolder substr(std::uint64_t start, std::uint64_t len) const&;
     StringHolder substr(std::uint64_t start) &&;

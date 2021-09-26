@@ -102,20 +102,78 @@ std::ostream& operator<<(std::ostream& o, Format<Formats...> const& format) {
   }
   return o;
 }
-template<class... Formats>
-Format<Formats...> format_substring(std::string_view substring, std::string_view full_string, Formats... formats) {
-  return Format<Formats...>{full_string, substring, std::move(formats)...};
-}
+#ifdef COMPILE_FOR_EMSCRIPTEN
 inline auto format_error(std::string_view substring, std::string_view full) {
-  return format_substring(substring, full, termcolor::red, termcolor::bold, termcolor::underline);
+  return Print {
+    [=](std::ostream& o) {
+      detail::string_around(o, full, substring, [&] {
+        o << "<strong><u><span style=\"color:red;\">" << substring << "</span></u></strong>";
+      });
+    }
+  };
 }
 inline auto format_info(std::string_view substring, std::string_view full) {
-  return format_substring(substring, full, termcolor::green, termcolor::bold);
+  return Print {
+    [=](std::ostream& o) {
+      detail::string_around(o, full, substring, [&] {
+        o << "<strong><span style=\"color:green;\">" << substring << "</span></strong>";
+      });
+    }
+  };
 }
 inline auto format_info_pair(std::string_view substring_1, std::string_view substring_2, std::string_view full) {
   //TODO: I don't know, but not this for sure
-  std::string_view joined{substring_1.data(), (std::uint64_t)(&*substring_2.end() - substring_1.data())};
-  std::string_view between{&*substring_1.end(), (std::uint64_t)(substring_2.data() - &*substring_1.end())};
+  std::string_view joined{substring_1.data(), (std::size_t)(&*substring_2.end() - substring_1.data())};
+  std::string_view between{&*substring_1.end(), (std::size_t)(substring_2.data() - &*substring_1.end())};
+  return Print {
+    [=](std::ostream& o) {
+      detail::string_around(o, full, joined, [&] {
+        o << "<strong><span style=\"color:cyan;\">" << substring_1 << "</span></strong>"
+          << between
+          << "<strong><span style=\"color:green;\">" << substring_2 << "</span></strong>";
+      });
+    }
+  };
+}
+template<class T>
+inline auto red_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << "<span style=\"color:red;\">" << std::forward<T>(inner) << "</span>";
+    }
+  };
+}
+template<class T>
+inline auto yellow_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << "<span style=\"color:yellow;\">" << std::forward<T>(inner) << "</span>";
+    }
+  };
+}
+#else
+inline auto format_error(std::string_view substring, std::string_view full) {
+  return Print {
+    [=](std::ostream& o) {
+      detail::string_around(o, full, substring, [&] {
+        o << termcolor::red << termcolor::bold << termcolor::underline << substring << termcolor::reset;
+      });
+    }
+  };
+}
+inline auto format_info(std::string_view substring, std::string_view full) {
+  return Print {
+    [=](std::ostream& o) {
+      detail::string_around(o, full, substring, [&] {
+        o << termcolor::bold << termcolor::green << substring << termcolor::reset;
+      });
+    }
+  };
+}
+inline auto format_info_pair(std::string_view substring_1, std::string_view substring_2, std::string_view full) {
+  //TODO: I don't know, but not this for sure
+  std::string_view joined{substring_1.data(), (std::size_t)(&*substring_2.end() - substring_1.data())};
+  std::string_view between{&*substring_1.end(), (std::size_t)(substring_2.data() - &*substring_1.end())};
   return Print {
     [=](std::ostream& o) {
       detail::string_around(o, full, joined, [&] {
@@ -126,5 +184,22 @@ inline auto format_info_pair(std::string_view substring_1, std::string_view subs
     }
   };
 }
+template<class T>
+inline auto red_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << termcolor::red << std::forward<T>(inner) << termcolor::reset;
+    }
+  };
+}
+template<class T>
+inline auto yellow_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << termcolor::yellow << std::forward<T>(inner) << termcolor::reset;
+    }
+  };
+}
+#endif
 
 #endif
