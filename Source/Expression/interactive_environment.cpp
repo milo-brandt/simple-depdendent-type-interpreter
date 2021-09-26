@@ -78,6 +78,56 @@ namespace expression::interactive {
         }
         return std::nullopt;
       }
+      std::unordered_map<std::string, expression::TypedValue> get_outer_values() { //values in outermost block, if such a thing makes sense.
+        if(!parser_output.root().holds_block()) return {}; //only do anything if block is outermost thing
+        auto const& block = parser_output.root().get_block();
+        struct IndexHasher { std::size_t operator()(expression_parser::archive_index::PolymorphicKind const& i) const { return i.index(); }};
+        std::unordered_map<expression_parser::archive_index::PolymorphicKind, std::string, IndexHasher> outer_block;
+        //list which parser tree elements we want to look up
+        //ideally, this would be done through forward_locator data generated
+        //with the various steps - but for now it's just done with the backwards
+        //locator data, since that's implemented :)
+        for(auto const& block_element : block.statements) {
+          namespace part = expression_parser::output::archive_part;
+          block_element.visit(mdb::overloaded{
+            [&](part::Declare const& declaration) {
+              outer_block.insert(std::make_pair(declaration.index(), declaration.name));
+            },
+            [&](part::Axiom const& axiom) {
+              outer_block.insert(std::make_pair(axiom.index(), axiom.name));
+            },
+            [&](part::Let const& let) {
+              outer_block.insert(std::make_pair(let.index(), let.name));
+            },
+            [](auto const&) {} //ignore other things (rules)
+          });
+        }
+        //using the locators for evaluator, lookup what corresponds to the prior points
+        std::unordered_map<std::string, expression::TypedValue> values;
+        for(auto index : instruction_locator.all_indices()) {
+          auto const& forward = evaluate_result.forward_locator[index];
+          expression::TypedValue const* candidate = forward.visit([](auto const& forward) -> expression::TypedValue const* {
+            if constexpr(requires{ forward.result; }) {
+              return &forward.result;
+            } else {
+              return nullptr;
+            }
+          });
+          if(!candidate) continue;
+          //now check if we can trace back further
+          auto const& location_source = instruction_locator[index].visit([](auto const& v) { return v.source; });
+          if(location_source.kind == compiler::instruction::ExplanationKind::declare
+          || location_source.kind == compiler::instruction::ExplanationKind::axiom
+          || location_source.kind == compiler::instruction::ExplanationKind::let) {
+            auto const& parsed_position = parser_output[location_source.index];
+            if(outer_block.contains(parsed_position.index())) {
+              auto name = outer_block.at(parsed_position.index());
+              values.insert_or_assign(name, *candidate);
+            }
+          }
+        }
+        return values;
+      }
     };
     mdb::Result<LexInfo, std::string> lex_code(BaseInfo input) {
       expression_parser::LexerInfo lexer_info {
@@ -415,6 +465,9 @@ namespace expression::interactive {
             std::cout << "Unknown source.";
           }
           std::cout << "\n\n";
+        }
+        for(auto const& entry : value->get_outer_values()) {
+          std::cout << entry.first << ": " << fancy_format(*value)(entry.second.value) << " of type " << fancy_format(*value)(entry.second.type) << "\n";
         }
         std::cout << "Final: " << fancy_format(*value)(value->evaluate_result.result.value) << " of type " << fancy_format(*value)(value->evaluate_result.result.type) << "\n";
         std::cout << "Deep: " << deep_format(*value)(value->evaluate_result.result.value) << " of type " << deep_format(*value)(value->evaluate_result.result.type) << "\n";

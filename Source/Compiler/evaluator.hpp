@@ -111,7 +111,7 @@ namespace compiler::evaluate {
     std::vector<Rule> rules;
     std::vector<RuleExplanation> rule_explanations;
     expression::TypedValue result;
-    instruction::forward_locator::ProgramRoot forward_locator;
+    compiler::instruction::forward_locator::archive_root::Program forward_locator;
   };
   EvaluateResult evaluate_tree(instruction::output::archive_part::ProgramRoot const& tree, expression::Context& expression_context, mdb::function<expression::TypedValue(std::uint64_t)> embed);
   struct PatternEvaluateResult {

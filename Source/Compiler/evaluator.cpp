@@ -284,10 +284,10 @@ namespace compiler::evaluate {
       .rules = std::move(detail.rules),
       .rule_explanations = std::move(detail.rule_explanations),
       .result = std::move(result.first),
-      .forward_locator = forward_locator::ProgramRoot{
+      .forward_locator = archive(forward_locator::ProgramRoot{
         .commands = std::move(command_forwards),
         .value = std::move(result.second)
-      }
+      })
     };
   }
   PatternEvaluateResult evaluate_pattern(pattern::archive_part::Pattern const& pattern, expression::Context& expression_context) {
