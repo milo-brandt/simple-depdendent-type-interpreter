@@ -78,7 +78,7 @@ namespace expression::interactive {
         }
         return std::nullopt;
       }
-      std::unordered_map<std::string, expression::TypedValue> get_outer_values() { //values in outermost block, if such a thing makes sense.
+      std::vector<std::pair<std::string, expression::TypedValue> > get_outer_values() { //values in outermost block, if such a thing makes sense.
         if(!parser_output.root().holds_block()) return {}; //only do anything if block is outermost thing
         auto const& block = parser_output.root().get_block();
         struct IndexHasher { std::size_t operator()(expression_parser::archive_index::PolymorphicKind const& i) const { return i.index(); }};
@@ -103,7 +103,7 @@ namespace expression::interactive {
           });
         }
         //using the locators for evaluator, lookup what corresponds to the prior points
-        std::unordered_map<std::string, expression::TypedValue> values;
+        std::vector<std::pair<std::string, expression::TypedValue> > values;
         for(auto index : instruction_locator.all_indices()) {
           auto const& forward = evaluate_result.forward_locator[index];
           expression::TypedValue const* candidate = forward.visit([](auto const& forward) -> expression::TypedValue const* {
@@ -122,7 +122,7 @@ namespace expression::interactive {
             auto const& parsed_position = parser_output[location_source.index];
             if(outer_block.contains(parsed_position.index())) {
               auto name = outer_block.at(parsed_position.index());
-              values.insert_or_assign(name, *candidate);
+              values.emplace_back(name, *candidate);
             }
           }
         }
@@ -466,8 +466,16 @@ namespace expression::interactive {
           }
           std::cout << "\n\n";
         }
+        //throw new variables into context
         for(auto const& entry : value->get_outer_values()) {
-          std::cout << entry.first << ": " << fancy_format(*value)(entry.second.value) << " of type " << fancy_format(*value)(entry.second.type) << "\n";
+          std::cout << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
+          names_to_values.insert_or_assign(entry.first, entry.second);
+        }
+        for(auto const& var_data : value->evaluate_result.variables) {
+          auto const& var_index = var_data.first;
+          if(auto str = value->get_explicit_name(var_index)) {
+            externals_to_names.insert(std::make_pair(var_index, std::move(*str)));
+          }
         }
         std::cout << "Final: " << fancy_format(*value)(value->evaluate_result.result.value) << " of type " << fancy_format(*value)(value->evaluate_result.result.type) << "\n";
         std::cout << "Deep: " << deep_format(*value)(value->evaluate_result.result.value) << " of type " << deep_format(*value)(value->evaluate_result.result.type) << "\n";
