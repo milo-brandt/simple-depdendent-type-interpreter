@@ -337,6 +337,10 @@ namespace expression::interactive {
     void debug_parse(std::string_view expr) {
       auto compile = full_compile(expr);
       if(auto* value = compile.get_if_value()) {
+        /*
+        This block prints a list of variables. Should be factored out to to show this information as needed
+        instead of just in a block. (Possibly with an option to print the whole blog for debugging?)
+
         std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
         for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
         for(auto const& [var, reason] : sorted_variables) {
@@ -365,7 +369,12 @@ namespace expression::interactive {
           auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
           std::cout << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
         }
-        std::cout << "\n";
+        std::cout << "\n";*/
+        auto fancy = fancy_format(*value); //get the formatters
+        auto deep = deep_format(*value);
+        /*
+        This block prints every new rule.
+
         std::vector<expression::Rule> new_rules;
         for(auto i = value->rule_begin; i < value->rule_end; ++i) {
           new_rules.push_back(expression_context.rules[i]);
@@ -373,17 +382,12 @@ namespace expression::interactive {
         std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
           return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
         });
-        auto fancy = fancy_format(*value);
-        auto deep = deep_format(*value);
-
         for(auto const& rule : new_rules) {
           std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
         }
         std::cout << "\n";
-        //print failures first
-        std::vector<solver::HungRoutineEquation> hung_equations = value->remaining_equations;
-        //std::stable_partition(hung_equations.begin(), hung_equations.end(), [](auto const& eq) { return eq.failed; });
-        for(auto const& eq : hung_equations) {
+        */
+        for(auto const& eq : value->remaining_equations) {
           if(eq.failed) {
             std::cout << termcolor::red << "False Equation: " << termcolor::reset;
           } else {
@@ -468,7 +472,7 @@ namespace expression::interactive {
         }
         //throw new variables into context
         for(auto const& entry : value->get_outer_values()) {
-          std::cout << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
+          //std::cout << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
           names_to_values.insert_or_assign(entry.first, entry.second);
         }
         for(auto const& var_data : value->evaluate_result.variables) {
