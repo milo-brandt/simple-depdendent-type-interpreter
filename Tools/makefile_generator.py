@@ -104,16 +104,22 @@ jinja_env = Environment(
     loader=FileSystemLoader('Tools')
 );
 makefile = jinja_env.get_template('makefile_template').render(
-    targets = [{
-        "program": "EmscriptenBuild/index.js",
-        "phony": {
-            "name": "debug",
-            "command": "python3 -m http.server -d Debug"
+    targets = [
+        {
+            "program": "EmscriptenBuild/index.js",
+            "objects": objects_to_compile("Source/main.cpp", "EmscriptenBuild"),
+            "compiler": "$(emcc_compiler)",
+            "compile_options": "-std=c++20 -DCOMPILE_FOR_EMSCRIPTEN -O3",
+            "link_options": "-std=c++20 --bind -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1"
         },
-        "objects": objects_to_compile("Source/main.cpp", "EmscriptenBuild"),
-        "compile_options": "-DCOMPILE_FOR_EMSCRIPTEN -O3",
-        "link_options": "--bind -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1"
-    }],
+        {
+            "program": "Debug/program",
+            "objects": objects_to_compile("Source/main.cpp", "Debug"),
+            "compiler": "$(compiler)",
+            "compile_options": "-std=c++20 -ggdb -O0",
+            "link_options": "-std=c++20 -ggdb -O0"
+        }
+    ],
     source_generators = source_generators
 );
 

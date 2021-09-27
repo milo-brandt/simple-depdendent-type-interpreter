@@ -1,15 +1,20 @@
-compiler = em++
-compiler_cmd = $(compiler) -std=c++20
+compiler = g++-10
+emcc_compiler = em++
+
 {% for target in targets %}
 {{ target.program }}:{% for object in target.objects %} {{ object.file }}{% endfor %}
-	$(compiler_cmd){% for object in target.objects %} {{ object.file }}{% endfor %} -LDependencies/lib {{ target.link_options }} -o {{ target.program }}
+	{{ target.compiler }}{% for object in target.objects %} {{ object.file }}{% endfor %} -LDependencies/lib {{ target.link_options }} -o {{ target.program }}
 
 {% for object in target.objects %}
 {{ object.file }}:{% for source_file in object.sources_needed %} {{source_file}}{% endfor %}
 	@mkdir -p $(@D)
-	$(compiler_cmd) {{ target.compile_options }} -IDependencies/include -c {{ object.source }} -o {{ object.file}}
+	{{ target.compiler }} {{ target.compile_options }} -IDependencies/include -c {{ object.source }} -o {{ object.file}}
 {% endfor %}
 {% endfor %}
+
+.PHONY: debug
+debug: Debug/program
+	gdb Debug/program -x Tools/gdb_init
 
 WebBuild: EmscriptenBuild/index.js
 	rm -r -f WebBuildTmp
@@ -21,6 +26,7 @@ WebBuild: EmscriptenBuild/index.js
 	rm -r -f WebBuild
 	mv WebBuildTmp WebBuild
 
+.PHONY: web_run
 web_run: WebBuild
 	python3 -m http.server -d WebBuild
 
