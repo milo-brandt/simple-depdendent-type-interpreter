@@ -1,5 +1,7 @@
 Build/**
 Debug/**
+EmscriptenBuild/**
+WebBuild/**
 Dependencies/**
 Web/resources/codemirror/**
 **/*_impl.hpp

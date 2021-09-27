@@ -1,0 +1,47 @@
+block {
+  # Examples using the built-in vector type. These use the following builtins:
+  # empty_vec : (T : Type) -> Vector T                 [Constructs an empty vector]
+  # push_vec : (T : Type) -> Vector T -> T -> Vector T [Extend a vector by one element]
+  # lfold_vec : (Accumulator : Type)
+             -> (T : Type)
+             -> (start : Accumulator)
+             -> (op : Accumulator -> T -> Accumulator)
+             -> (vec : Vector T)
+             -> Accumulator
+  # Defined so that lfold_vec _ _ start op [x, y, z] yields op (op (op start x) y) z
+
+  # Note that you can use the "Evaluate in Context" box to type in such built-ins
+  # and view their type.
+
+  # Define a function which concatenates vectors.
+  # e.g. concat [x, y] [z, w] = [x, y, z, w]
+  declare concat : (T : Type) -> Vector T -> Vector T -> Vector T;
+  rule concat T v1 v2 = lfold_vec _ _ v1 (push_vec _) v2;
+
+  # Take a vector of vectors and yield a vector
+  declare flatten : (T : Type) -> Vector (Vector T) -> Vector T;
+  rule flatten T v = lfold_vec _ _ (empty_vec _) (concat _) v;
+
+  declare vec_cons_type : Type -> Nat -> Type;
+  rule vec_cons_type T zero = Vector T;
+  rule vec_cons_type T (succ n) = T -> (vec_cons_type T n);
+
+  declare vec_cons_impl : (T : Type) -> (n : Nat) -> (base : Vector T) -> vec_cons_type T n;
+  rule vec_cons_impl T zero base = base;
+  rule vec_cons_impl T (succ n) base first = vec_cons_impl T n (push_vec _ base first);
+
+  declare vec_cons : (T : Type) -> (n : Nat) -> vec_cons_type T n;
+  rule vec_cons T n = vec_cons_impl T n (empty_vec _);
+
+  let vec_cons_u64 = \T.\n.vec_cons T (u_to_nat n);
+
+  let nested = vec_cons_u64 _ 2 (vec_cons_u64 _ 2 1 2) (vec_cons_u64 _ 3 3 4 5);
+
+  declare vec_from_fn_nat : (T : Type) -> (n : Nat) -> (Nat -> T) -> Vector T;
+  rule vec_from_fn_nat T zero f = empty_vec _;
+  rule vec_from_fn_nat T (succ n) f = push_vec _ (vec_from_fn_nat _ n f) (f n);
+  declare vec_from_fn : (T : Type) -> (n : U64) -> (U64 -> T) -> Vector T;
+  rule vec_from_fn T n f = vec_from_fn_nat T (u_to_nat n) \x.f (nat_to_u x);
+
+  vec_from_fn _ 100 \x.vec_from_fn _ 100 (mul x)
+}

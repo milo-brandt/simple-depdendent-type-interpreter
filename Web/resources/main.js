@@ -1,3 +1,4 @@
+/*
 var session_id = null
 fetch('/query', {
   method: 'POST',
@@ -19,3 +20,4 @@ function query(data) {
     body: JSON.stringify(data)
   }).then(response => response.json()).then(update).catch(update_error);
 }
+*/

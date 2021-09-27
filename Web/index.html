@@ -3,11 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <style>
+body {
+  background: #151515;
+  color: #e0e0e0;
+}
+
 .CodeMirror {
   font-family: Arial, monospace;
   font-size: 18px;
 }
+
+.main_column {
+  float: left;
+  width: 40%;
+  padding: 10px;
+  height: 100%; /* Should be removed. Only for demonstration */
+}
+.main_row:after {
+  content: "";
+  display: table;
+  clear: both;
+}
+.eval_output {
+  padding-bottom: 1em;
+}
+.eval_echo {
+  padding-bottom: 1em;
+  font-style: italic;
+  color: #a0a0a0
+}
+
 </style>
+<link rel="stylesheet" href="resources/theme/base16-dark.css">
 </head>
 <body>
 
@@ -15,20 +42,75 @@
 <link rel="stylesheet" href="resources/codemirror/lib/codemirror.css">
 <script src="resources/main.js"></script>
 
-<script>
-  var myCodeMirror = CodeMirror(document.body, {
-  value: "function myScript(){return 100;}\n",
-  extraKeys:
-    {
+  <script async src="index.js"></script>
+
+  <label for="example">Choose an example:</label>
+  <select name="example" id="example">
+    <option value="fibonacci">Fibonacci</option>
+    <option value="nats">Natural Numbers</option>
+  </select>
+  <input type="button" value="Load" onclick="load_chosen_example()">
+  <div class="main_row">
+  <div class="main_column" id="code_column">
+  </div>
+  <div class="main_column">
+  <div id="output" class="eval_output">Press Shift + Enter in the code area to evaluate.</div>
+  <div id="aux_outputs">
+  </div>
+  <div id="context_eval" style="display:none;">
+  Evaluate in context:
+  <input type="text" onkeydown="if(event.keyCode == 13) { run_small_script(); }" id="short_command" style="width:100%;" value="fib 100">
+  </div>
+  </div>
+  </div>
+  <script>
+  var Module = {
+    print: console.log,
+    printerr: console.err,
+    onRuntimeInitialized: function() {
+      console.log("Ready.")
+    }
+  };
+  function run_script(str, reset_environment) {
+    document.getElementById("output").innerHTML = Module.run_script(str, reset_environment);
+    document.getElementById("aux_outputs").innerHTML = "";
+    document.getElementById("context_eval").style.display = "block";
+  }
+  function run_small_script() {
+    var short = document.getElementById("short_command");
+    var echo = document.createElement("div")
+    echo.innerText = short.value;
+    echo.classList.add("eval_echo")
+    document.getElementById("aux_outputs").appendChild(echo);
+    var new_element = document.createElement("div");
+    new_element.innerHTML = Module.run_script(short.value, false);
+    new_element.classList.add("eval_output")
+    document.getElementById("aux_outputs").appendChild(new_element);
+    short.value = ""
+  }
+  var code_mirror = CodeMirror(document.getElementById("code_column"), {
+    lineNumbers: true,
+    tabSize: 2,
+    theme: "base16-dark",
+    extraKeys: {
       'Shift-Enter': (cm) => {
-        console.log(cm.getValue());
-      },
-      'Ctrl-S': (cm) => {
-        console.log("Want save.");
-        console.log(cm.getValue());
+        run_script(cm.getValue(), true);
       }
     }
   });
-</script>
+  code_mirror.setSize("100%", "100%");
+  function load_example(name) {
+    fetch('resources/examples/' + name + '.txt').then(response => response.text()).then(text => {
+      code_mirror.setValue(text);
+      document.getElementById("output").innerHTML = "Press Shift + Enter in the code area to evaluate.";
+      document.getElementById("aux_outputs").innerHTML = "";
+      document.getElementById("context_eval").style.display = "none";
+    });
+  }
+  function load_chosen_example() {
+    load_example(document.getElementById("example").value)
+  }
+  load_example("fibonacci")
+  </script>
 </body>
 </html>

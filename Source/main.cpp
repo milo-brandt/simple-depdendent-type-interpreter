@@ -13,6 +13,7 @@ void debug_print_rule(expression::Rule const& rule) {
 }
 
 expression::interactive::Environment setup_enviroment() {
+  //I suspect there are some dangling references here...
   expression::interactive::Environment environment;
   auto const& u64 = environment.u64();
   auto const& str = environment.str();
@@ -41,7 +42,7 @@ expression::interactive::Environment setup_enviroment() {
     auto lt = environment.declare_check("lt", "U64 -> U64 -> Bool").head;
     auto sub_pos = environment.declare_check("sub_pos", "(x : U64) -> (y : U64) -> Assert (lte y x) -> U64").head;
 
-    auto recurse = environment.declare_check("indexed_recurse", "(T : Type) -> (U64 -> T -> T) -> T -> U64 -> T").head;
+    auto iterate = environment.declare_check("iterate", "(T : Type) -> (T -> T) -> T -> U64 -> T").head;
 
     add_lambda_rule("sub", [](std::uint64_t x, std::uint64_t y) {
       return x - y;
@@ -97,11 +98,10 @@ expression::interactive::Environment setup_enviroment() {
     );
 
     environment.context().add_data_rule(
-      pattern(fixed(recurse), ignore, wildcard, wildcard, match(u64)) >> [&](Expression step, Expression base, std::uint64_t count) {
+      pattern(fixed(iterate), ignore, wildcard, wildcard, match(u64)) >> [&](Expression step, Expression base, std::uint64_t count) {
         for(std::uint64_t i = 0; i < count; ++i) {
           base = expression::multi_apply(
             step,
-            u64(i),
             std::move(base)
           );
         }
@@ -162,12 +162,24 @@ std::string replace_newlines_with_br(std::string input) {
     input.replace(next_new_line, 1, "<br/>");
   }
 }
-std::string run_script(std::string script) {
+
+expression::interactive::Environment& get_last_environment() {
+  static expression::interactive::Environment ret = setup_enviroment();
+  return ret;
+}
+void reset_environment() {
+  get_last_environment() = setup_enviroment();
+}
+
+std::string run_script(std::string script, bool reset) {
   std::stringstream ret;
-  auto environment = setup_enviroment();
   std::string_view source = script;
-  environment.debug_parse(source, ret);
+  if(reset) reset_environment();
+  get_last_environment().debug_parse(source, ret);
   return replace_newlines_with_br(ret.str());
+}
+int main(int argc, char** argv) {
+  get_last_environment();
 }
 
 using namespace emscripten;

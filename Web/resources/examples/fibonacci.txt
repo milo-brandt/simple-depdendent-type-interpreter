@@ -1,0 +1,22 @@
+block {
+	# Declare a type Pair S T representing the cartesian product S x T.
+	# Given s : S and t : T, the constructor pair S T s t represents (s, t)
+	axiom Pair : Type -> Type -> Type;
+	axiom pair : (S : Type) -> (T : Type) -> S -> T -> Pair S T;
+
+	# Define the two projection operators.
+	declare first : (S : Type) -> (T : Type) -> Pair S T -> S;
+	declare second : (S : Type) -> (T : Type) -> Pair S T -> T;
+	first S T (pair S T s t) = s;
+	second S T (pair S T s t) = t;
+
+	# Declare the map (a, b) -> (a + b, a) by pattern matching.
+	declare next_fib : Pair U64 U64 -> Pair U64 U64;
+	next_fib (pair U64 U64 current previous) = pair _ _ (add current previous) current;
+
+	# Use iteration to generate Fibonacci numbers (letting compiler deduce nasty types)
+	declare fib : U64 -> U64;
+	fib n = first _ _ (iterate _ next_fib (pair _ _ 0 1) n);
+
+	fib 10
+}

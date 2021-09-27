@@ -105,8 +105,12 @@ jinja_env = Environment(
 );
 makefile = jinja_env.get_template('makefile_template').render(
     targets = [{
-        "program": "Debug/index.html",
-        "objects": objects_to_compile("Source/main.cpp", "Debug"),
+        "program": "EmscriptenBuild/index.js",
+        "phony": {
+            "name": "debug",
+            "command": "python3 -m http.server -d Debug"
+        },
+        "objects": objects_to_compile("Source/main.cpp", "EmscriptenBuild"),
         "compile_options": "-DCOMPILE_FOR_EMSCRIPTEN -O3",
         "link_options": "--bind -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1"
     }],
