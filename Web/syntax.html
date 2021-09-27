@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  background: #151515;
+  color: #e0e0e0;
+}
+a:link {
+  color: cyan;
+}
+a:visited {
+  color: cyan;
+}
+</style>
+</head>
+<body>
+This project implements a very primitive <a href="https://en.wikipedia.org/wiki/Dependent_type">dependently typed functional programming language</a>. Examples of syntax are described below. The online interpreter will compute any expression, although typically it makes sense to give it a block - and it will expose names in the outermost block to the "Evaluate in Context" feature.
+<h1> Expressions</h1>
+An <em>expression</em> consists of
+<ul>
+  <li> Integer and string literals.
+    <ul>
+      <li> <code>17</code> gives the literal value 17, of type <code>U64</code>.
+      <li> <code>"Hello, world!"</code> gives a literal of type <code>String</code>.
+    </ul>
+  <li> Vector literals.
+    <ul>
+      <li> <code>[1, 2, 3]</code> gives an element of type <code>Vector U64</code>.
+      <li> <code>[]</code> gives the empty vector with type <code>Vector T</code>, where <code>T</code> will be deduced.
+    </ul>
+  <li> Holes, denoted by <code>_</code>. The compiler attempts to deduce the values of these.
+    <ul>
+      <li> <code>empty_vec _</code> - an empty vector of unknown type (to be deduced by the compiler from how this value is used).
+    </ul>
+  <li> Lambda functions.
+    <ul>
+      <li> <code>\x.add x x</code> - a function doubling its input.
+      <li> <code>\x.x</code> - the identity function. The compiler will try to deduce the argument type.
+      <li> <code>\T:Type.T -> T</code> - a function taking a type and giving the type <code>T</code> of endomorphisms of <code>T</code>.
+      <li> <code>\.51</code> - a constant function with anonymous argument, always yielding 51.
+      <li> <code>\:U64.68</code> - a constant function with anonymous argument of type <code>U64</code>, always yielding 68.
+    </ul>
+  <li> Blocks consisting of a series of statements followed by an expression. See the statement section for more details.
+    <ul>
+      <li> <code>block { let x = 17; let y = mul x x; sub y x }</code> gives 272, evaluating the expression <code>sub y x</code> after the let statements.
+    </ul>
+  <li> Applications of functions, notated by superposition.
+    <ul>
+      <li><code>f x</code> - apply <code>f</code> to <code>x</code>.
+      <li><code>f x y</code> - apply <code>f x</code> to <code>y</code>. This is the usual way to write multivariate functions (see: <a href="https://en.wikipedia.org/wiki/Currying">currying</a>).
+    </ul>
+  <li> Applications of functions notated with <code>\\</code>.
+    <ul>
+      <li><code> f \\ f \\ f \\ f x</code> - syntax sugar for <code>f (f (f (f x)))</code>.
+      <li><code> f \\ g a \\ h b c \\ i d e f</code> - syntax sugar for <code>f (g a (h b c (i d e f)))</code>.
+    </ul>
+  <li> Function types.
+    <ul>
+      <li><code>U64 -> U64</code> - the type of functions from <code>U64</code> to <code>U64</code><br>
+      <li><code>U64 -> U64 -> U64</code> - the type of functions from <code>U64</code> to <code>U64 -> U64</code>.
+    </ul>
+  <li> Dependent function types.
+    <ul>
+      <li><code>(T : Type) -> Vector T</code> - the type of functions that, given a type <code>T</code> return an element of <code>Vector T</code>
+    </ul>
+</ul>
+<h1> Statements</h1>
+A <em>statement</em> is a line, ended with semicolon, of the one of the following forms:
+<ul>
+  <li> An axiom declaration: <code>axiom [name] : [type_expression];</code>
+    <ul>
+      <li> <code>axiom Nat : Type;</code> - declare, by fiat, a new type.
+      <li> <code>axiom zero : Nat;</code> - declare a new element of <code>Nat</code>.
+      <li> <code>axiom succ : Nat -> Nat;</code> - declare a new constructor for <code>Nat</code> accepting one argument.
+      <li> The compiler assumes axioms are irreducible and only allows pattern matching against axioms.
+    </ul>
+  <li> A plain declaration: <code>declare [name] : [type_expression];</code>
+    <ul>
+      <li> <code>declare add : Nat -> Nat -> Nat;</code> - declare a new term, taking two <code>Nat</code>s to an output <code>Nat</code>.
+      <li> The compiler asumes plain declarations will be defined by pattern matching.
+    </ul>
+  <li> A rule <code>[pattern] = [replacement]</code>
+    <ul>
+      <li> <code>add zero x = x</code> - adds a new rule that replaces <code>add zero $0</code>, wherever it is found, with <code>$0</code>.
+      <li> <code>add (succ x) y = succ (add x y)</code> - adds a new rule that replaces <code>add (succ $0) $1</code> with <code>succ (add $0 $1)</code>.
+      <li> Patterns must consist of a plain declaration applied to some number of expressions (only involving application). Unrecognized identifiers will be treated as variables for the pattern to match against.
+      <li> All patterns must be possible to match against purely by inspecting the arguments to the plain declaration against axioms.<br>
+          Patterns such as <code>add x x</code> are invalid since they would require the pattern matcher to check for equality between two captures of type <code>U64</code>. Patterns like <code>add (add x y) z</code> are similarly illegal.<br>
+          The compiler does, however, allow patterns to repeat variables or match against plain declarations when this is the only way for the pattern to be well-typed - as can happen when matching dependent types. It will issue an error in all other cases.
+    </ul>
+  <li> A let expresion <code>let [name] = [value];</code> or <code>let [name] : [type] = [value];</code>.
+    <ul>
+      <li> <code>let x = add 5 12;</code> - create a new value "x" with the value 17.
+      <li> <code>let x : Vector U64 = []</code> - create a new value "x" with the specified type and value.
+    </ul>
+</ul>
+</body>
+</html>

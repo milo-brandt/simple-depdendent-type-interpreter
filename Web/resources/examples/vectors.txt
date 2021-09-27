@@ -23,7 +23,7 @@ block {
   flatten T v = lfold_vec _ _ (empty_vec _) (concat _) v;
 
   # Map a vector by a function
-  # e.g. map f [x, y] = [f x, f y]
+  # e.g. map _ _ f [x, y] = [f x, f y]
   declare map : (S : Type) -> (T : Type) -> (S -> T) -> Vector S -> Vector T;
   map S T f lhs = lfold_vec _ _ (empty_vec _) (\vec.\next.push_vec _ vec (f next)) lhs;
 
