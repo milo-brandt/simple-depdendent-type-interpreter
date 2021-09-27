@@ -17,7 +17,7 @@ expression::interactive::Environment setup_enviroment() {
   expression::interactive::Environment environment;
   auto const& u64 = environment.u64();
   auto const& str = environment.str();
-  auto vec = expression::data::Vector{environment.axiom_check("Vector", "Type -> Type").head};
+  static auto vec = expression::data::Vector{environment.axiom_check("Vector", "Type -> Type").head};
   expression::data::builder::RuleMaker rule_maker{environment.context(), u64, str}; //needs to live as long as the rules it creates... meh
 
   {
