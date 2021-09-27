@@ -45,6 +45,8 @@ namespace expression {
     std::uint64_t id; // \T:Type.\t:T.t
     std::uint64_t id_codomain;
     std::uint64_t arrow_codomain;
+    std::uint64_t push_vec = -1; //set externally, for now
+    std::uint64_t empty_vec = -1;
   };
   struct Context {
     std::vector<Rule> rules;

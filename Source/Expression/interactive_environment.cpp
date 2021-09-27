@@ -144,7 +144,8 @@ namespace expression::interactive {
           {"\\", 9},
           {"\\\\", 10},
           {".", 11},
-          {"_", 12}
+          {"_", 12},
+          {",", 13}
         }
       };
       auto ret = expression_parser::lex_string(input.source, lexer_info);

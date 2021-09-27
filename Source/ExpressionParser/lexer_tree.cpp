@@ -6,7 +6,7 @@ namespace expression_parser {
   namespace {
     namespace tokens {
       enum class Fixed {
-        open_paren, close_paren, open_brace, close_brace, eof, quote
+        open_paren, close_paren, open_brace, close_brace, open_bracket, close_bracket, eof, quote
       };
       enum class AtPointer {
         digit, letter
@@ -40,6 +40,8 @@ namespace expression_parser {
       if(str[0] == ')') return token(tokens::Fixed::close_paren, 1);
       if(str[0] == '{') return token(tokens::Fixed::open_brace, 1);
       if(str[0] == '}') return token(tokens::Fixed::close_brace, 1);
+      if(str[0] == '[') return token(tokens::Fixed::open_bracket, 1);
+      if(str[0] == ']') return token(tokens::Fixed::close_bracket, 1);
       if(str[0] == '\"') return token(tokens::Fixed::quote, 1);
       if(std::isdigit(str[0])) return token(tokens::AtPointer::digit);
       { //search for symbols
@@ -134,7 +136,17 @@ namespace expression_parser {
           {
             auto next = lex_string_with_end(str, tokens::Fixed::close_brace, info);
             if(next.holds_error()) return std::move(next.get_error());
-            terms.push_back(lex_located_output::CurlyBraceExpression{
+            terms.push_back(lex_located_output::BraceExpression{
+              std::move(next.get_value()),
+              string_between(token_str.data() - 1, str.data())
+            });
+            goto PARSE_NEXT_TOKEN;
+          }
+        case tokens::Fixed::open_bracket: //these three cases should probably be merged to reduce code duplication
+          {
+            auto next = lex_string_with_end(str, tokens::Fixed::close_bracket, info);
+            if(next.holds_error()) return std::move(next.get_error());
+            terms.push_back(lex_located_output::BracketExpression{
               std::move(next.get_value()),
               string_between(token_str.data() - 1, str.data())
             });
@@ -216,8 +228,10 @@ namespace expression_parser {
     lex_locator::archive_part::SpanTerm::ConstIterator get_iterator(lex_archive_index::Term parent, std::uint64_t index, lex_locator::archive_root::Term const& term) {
       if(auto* parens = term[parent].get_if_parenthesized_expression()) {
         return parens->body.begin() + index;
+      } else if(auto* bracket = term[parent].get_if_bracket_expression()) {
+        return bracket->body.begin() + index;
       } else {
-        return term[parent].get_curly_brace_expression().body.begin() + index;
+        return term[parent].get_brace_expression().body.begin() + index;
       }
     }
   }

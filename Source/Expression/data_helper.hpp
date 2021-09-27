@@ -56,7 +56,8 @@ namespace expression::data {
             return new_vec;
           }()
         });
-        auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
+        auto ret = tree::Expression{tree::Data{}};
+        ret.get_data().data.type_index = type_index;
         new (&ret.get_data().data.storage) Store{std::move(new_info)};
         return ret;
       }
@@ -82,7 +83,8 @@ namespace expression::data {
       ptr->type_index = type_index;
     }
     tree::Expression make_expression(tree::Expression type, std::vector<tree::Expression> data) const {
-      auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
+      auto ret = tree::Expression{tree::Data{}};
+      ret.get_data().data.type_index = type_index;
       new (&ret.get_data().data.storage) Store{std::make_shared<Info>(Info{
         .type = std::move(type),
         .vec = std::move(data)
@@ -126,7 +128,8 @@ namespace expression::data {
         debug_print(me, o);
       }
       tree::Expression substitute(Buffer const& me, std::vector<tree::Expression> const&) const override {
-        auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
+        auto ret = tree::Expression{tree::Data{}};
+        ret.get_data().data.type_index = type_index;
         new (&ret.get_data().data.storage) T{get(me)};
         return ret;
       }
@@ -153,7 +156,8 @@ namespace expression::data {
       ptr->type_index = type_index;
     }
     tree::Expression make_expression(T value) const {
-      auto ret = tree::Expression{tree::Data{.data = Data{type_index}}};
+      auto ret = tree::Expression{tree::Data{}};
+      ret.get_data().data.type_index = type_index;
       new (&ret.get_data().data.storage) T{std::move(value)};
       return ret;
     }

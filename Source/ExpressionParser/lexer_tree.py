@@ -9,7 +9,10 @@ shape = CompoundShape({
         "ParenthesizedExpression": [
             ("body", vector("Term"))
         ],
-        "CurlyBraceExpression": [
+        "BraceExpression": [
+            ("body", vector("Term"))
+        ],
+        "BracketExpression": [
             ("body", vector("Term"))
         ]
     }
@@ -29,7 +32,8 @@ output = shape.generate_instance(namespace = "expression_parser::lex_output", da
             ("value", "std::uint64_t")
         ],
         "ParenthesizedExpression": [],
-        "CurlyBraceExpression": []
+        "BraceExpression": [],
+        "BracketExpression": []
     }
 })
 locator = shape.generate_instance(namespace = "expression_parser::lex_locator", data = {
@@ -49,7 +53,10 @@ locator = shape.generate_instance(namespace = "expression_parser::lex_locator", 
         "ParenthesizedExpression": [
             ("position", "std::string_view")
         ],
-        "CurlyBraceExpression": [
+        "BraceExpression": [
+            ("position", "std::string_view")
+        ],
+        "BracketExpression": [
             ("position", "std::string_view")
         ]
     }

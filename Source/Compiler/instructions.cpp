@@ -229,6 +229,38 @@ namespace compiler::instruction {
             .embed_index = literal.embed_index,
             .source = {ExplanationKind::literal_embed, literal.index()}
           };
+        },
+        [&](resolved_archive::VectorLiteral const& vector_literal) -> located_output::Expression {
+          auto vector_type = result_of(located_output::DeclareHole{
+            .type = type({ExplanationKind::vector_type_type, vector_literal.index()}),
+            .source = {ExplanationKind::vector_type, vector_literal.index()}
+          }, {ExplanationKind::vector_type_local, vector_literal.index()});
+          located_output::Expression ret = located_output::Apply{
+            .lhs = located_output::PrimitiveExpression{Primitive::empty_vec, {ExplanationKind::vector_empty, vector_literal.index()}},
+            .rhs = vector_type,
+            .source = {ExplanationKind::vector_empty_typed, vector_literal.index()}
+          };
+          for(auto const& element : vector_literal.elements) {
+            auto element_value = result_of(located_output::Let{
+              .value = compile(element),
+              .type = vector_type,
+              .source = {ExplanationKind::vector_element, vector_literal.index()}
+            }, {ExplanationKind::vector_element_local, vector_literal.index()});
+            ret = located_output::Apply{
+              .lhs = located_output::Apply{
+                .lhs = located_output::Apply{
+                  .lhs = located_output::PrimitiveExpression{Primitive::push_vec, {ExplanationKind::vector_push, vector_literal.index()}},
+                  .rhs = vector_type,
+                  .source = {ExplanationKind::vector_push_typed, vector_literal.index()}
+                },
+                .rhs = std::move(ret),
+                .source = {ExplanationKind::vector_push_vector, vector_literal.index()}
+              },
+              .rhs = std::move(element_value),
+              .source = {ExplanationKind::vector_push_element, vector_literal.index()}
+            };
+          }
+          return ret;
         }
       });
     }

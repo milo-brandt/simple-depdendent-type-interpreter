@@ -13,13 +13,15 @@ namespace expression_parser {
       bool empty() { return !(span_begin != span_end); }
       LexerSpan(LexerIt span_begin, LexerIt span_end):span_begin(span_begin),span_end(span_end){}
       LexerSpan(lex_archive::ParenthesizedExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
-      LexerSpan(lex_archive::CurlyBraceExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
+      LexerSpan(lex_archive::BraceExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
+      LexerSpan(lex_archive::BracketExpression const& expr):span_begin(expr.body.begin()),span_end(expr.body.end()) {}
     };
     struct LocatorInfo {
       lex_archive_index::Term parent;
       LexerIt parent_begin;
       LocatorInfo(lex_archive::ParenthesizedExpression const& expr):parent(expr.index()),parent_begin(expr.body.begin()) {}
-      LocatorInfo(lex_archive::CurlyBraceExpression const& expr):parent(expr.index()),parent_begin(expr.body.begin()) {}
+      LocatorInfo(lex_archive::BraceExpression const& expr):parent(expr.index()),parent_begin(expr.body.begin()) {}
+      LocatorInfo(lex_archive::BracketExpression const& expr):parent(expr.index()),parent_begin(expr.body.begin()) {}
       LexerSpanIndex to_span(LexerSpan input) const {
         return {
           .parent = parent,
@@ -40,8 +42,42 @@ namespace expression_parser {
     using CommandResult = mdb::Result<located_output::Command, ParseError>;
     using PatternResult = mdb::Result<located_output::Pattern, ParseError>;
 
+    template<class It, class Pred>
+    It find_if(It begin, It end, Pred pred) {
+      for(;begin != end;++begin) {
+        if(pred(*begin)) return begin;
+      }
+      return end;
+    }
     ExprResult parse_expression(LocatorInfo const&, LexerSpan& span);
-    ExprResult parse_block(LexerSpanIndex position, lex_archive::CurlyBraceExpression const& span);
+    ExprResult parse_block(LexerSpanIndex position, lex_archive::BraceExpression const& braces);
+    ExprResult parse_vector_literal(LexerSpanIndex position, lex_archive::BracketExpression const& bracket) {
+      LexerSpan span = bracket;
+      LocatorInfo locator = bracket;
+      std::vector<located_output::Expression> elements;
+      while(true) {
+        auto next_comma = find_if(span.begin(), span.end(), [&](lex_archive::Term const& term) {
+          return term.holds_symbol() && term.get_symbol().symbol_index == symbols::comma;
+        });
+        LexerSpan element_span{span.begin(), next_comma};
+        if(element_span.empty()) {
+          if(next_comma == span.end()) break;
+          else {
+            ++span.begin();
+            continue;
+          }
+        }
+        auto next_element_result = parse_expression(locator, element_span);
+        if(next_element_result.holds_error()) return std::move(next_element_result.get_error());
+        elements.push_back(std::move(next_element_result.get_value()));
+        if(next_comma == span.end()) break;
+        span.span_begin = next_comma + 1;
+      }
+      return located_output::Expression{located_output::VectorLiteral{
+        .elements = std::move(elements),
+        .position = position
+      }};
+    }
     ExprResult parse_lambda(LocatorInfo const& locator, LexerSpan& span) { //precondition: span is after backslash
       //Is: an optional variable name, followed, optionally, by : <type>, then by . <body>
       auto lambda_start = span.span_begin - 1;
@@ -181,7 +217,7 @@ namespace expression_parser {
                 .position = head.index(),
                 .message = "'block' at end of expression."
               };
-            } else if(auto* brace = span.span_begin->get_if_curly_brace_expression()) {
+            } else if(auto* brace = span.span_begin->get_if_brace_expression()) {
               ++span.span_begin;
               return parse_block(locator.to_span(span.span_begin - 2, span.span_begin), *brace);
             } else {
@@ -245,11 +281,14 @@ namespace expression_parser {
             }
           }
         },
-        [&](lex_archive::CurlyBraceExpression const& braces) -> ExprResult {
+        [&](lex_archive::BraceExpression const& braces) -> ExprResult {
           return ParseError{
             .position = head.index(),
             .message = "Curly braces in expression."
           };
+        },
+        [&](lex_archive::BracketExpression const& bracket) -> ExprResult {
+          return parse_vector_literal(locator.to_span(span.span_begin - 1, span.span_begin), bracket);
         }
       });
     }
@@ -342,13 +381,6 @@ namespace expression_parser {
           .position = locator.to_span(declare_start, span.span_begin)
         }};
       }
-    }
-    template<class It, class Pred>
-    It find_if(It begin, It end, Pred pred) {
-      for(;begin != end;++begin) {
-        if(pred(*begin)) return begin;
-      }
-      return end;
     }
     CommandResult parse_let(LocatorInfo const& locator, LexerSpan& span) { //pointed *at* "let"
       auto let_start = span.begin();
@@ -519,8 +551,7 @@ namespace expression_parser {
         };
       }
     }
-    ExprResult parse_block(LexerSpanIndex position, lex_archive::CurlyBraceExpression const& braces) {
-      std::vector<LexerIt> expression_splits;
+    ExprResult parse_block(LexerSpanIndex position, lex_archive::BraceExpression const& braces) {
       LexerSpan span = braces;
       LocatorInfo locator = braces;
       if(span.empty()) {

@@ -37,7 +37,7 @@ namespace expression::data {
   public:
     std::uint64_t type_index;
     Buffer storage;
-    explicit Data(std::uint64_t type_index):type_index(type_index) {}
+    Data():type_index(0) {}
     template<class T> friend class CType;
     friend bool operator==(Data const&, Data const&);
     friend std::ostream& operator<<(std::ostream&, Data const&);

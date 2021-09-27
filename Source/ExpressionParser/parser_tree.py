@@ -20,6 +20,9 @@ shape = CompoundShape({
             ("statements", vector("Command")),
             ("value", "Expression")
         ],
+        "VectorLiteral": [
+            ("elements", vector("Expression"))
+        ],
         "Literal": []
     },
     "Pattern": {
@@ -61,6 +64,7 @@ output = shape.generate_instance(namespace = "expression_parser::output", data =
             ("arg_name", "std::optional<std::string_view>")
         ],
         "Block": [],
+        "VectorLiteral": [],
         "Literal": [
             ("value", "literal::Any")
         ]
@@ -105,6 +109,9 @@ locator = shape.generate_instance(namespace = "expression_parser::locator", data
         "Block": [
             ("position", "LexerSpanIndex")
         ],
+        "VectorLiteral": [
+            ("position", "LexerSpanIndex")
+        ],
         "Literal": [
             ("position", "LexerSpanIndex")
         ]
@@ -146,6 +153,7 @@ resolution = shape.generate_instance(namespace = "expression_parser::resolved", 
         "Hole": [],
         "Arrow": [],
         "Block": [],
+        "VectorLiteral": [],
         "Literal": [
             ("embed_index", "std::uint64_t")
         ]

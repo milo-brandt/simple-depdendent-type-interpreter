@@ -121,6 +121,13 @@ expression::interactive::Environment setup_enviroment() {
         return vec(std::move(type), std::move(data));
       }
     );
+    /*
+    These lines are very odd! Must be factored out later!
+    Programmer be warned!
+    */
+    environment.context().primitives.empty_vec = empty_vec;
+    environment.context().primitives.push_vec = push_vec;
+
     auto len_vec = environment.declare_check("len_vec", "(T : Type) -> Vector T -> U64").head;
     environment.context().add_data_rule(
       pattern(fixed(len_vec), ignore, match(vec)) >> [&](std::vector<tree::Expression> const& data) {

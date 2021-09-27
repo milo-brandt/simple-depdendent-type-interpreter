@@ -125,6 +125,8 @@ namespace compiler::evaluate {
           switch(primitive.primitive) {
             case instruction::Primitive::type: return {expression_context.get_external(expression_context.primitives.type), forward_locator::PrimitiveExpression{}};
             case instruction::Primitive::arrow: return {expression_context.get_external(expression_context.primitives.arrow), forward_locator::PrimitiveExpression{}};
+            case instruction::Primitive::push_vec: return {expression_context.get_external(expression_context.primitives.push_vec), forward_locator::PrimitiveExpression{}};
+            case instruction::Primitive::empty_vec: return {expression_context.get_external(expression_context.primitives.empty_vec), forward_locator::PrimitiveExpression{}};
           }
           std::terminate();
         },

@@ -289,6 +289,32 @@ namespace expression_parser {
           return resolved::Expression{resolved::Literal{
             .embed_index = index
           }};
+        },
+        [&](output_archive::VectorLiteral const& vector_literal) -> mdb::Result<resolved::Expression, ResolutionError> {
+          std::vector<ResolutionError> errors;
+          std::vector<resolved::Expression> elements;
+          for(auto const& element : vector_literal.elements) {
+            auto ret = resolve_impl(context, stack_depth, element);
+            if(ret.holds_success()) {
+              if(errors.empty()) {
+                elements.push_back(std::move(ret.get_value()));
+              }
+            } else {
+              errors.push_back(std::move(ret.get_error()));
+              elements.clear();
+            }
+          }
+          if(errors.empty()) {
+            return resolved::Expression{resolved::VectorLiteral{
+              .elements = std::move(elements),
+            }};
+          } else {
+            ResolutionError err = std::move(errors[0]);
+            for(std::uint64_t i = 1; i < errors.size(); ++i) {
+              err = merge_errors(std::move(err), std::move(errors[i]));
+            }
+            return std::move(err);
+          }
         }
       });
     }
