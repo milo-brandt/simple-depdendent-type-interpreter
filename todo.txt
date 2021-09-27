@@ -1,15 +1,12 @@
 *************
 High priority
 *************
+- Add automated testing
 - Add "match" statement!
-- Add backtracking to equation errors (+ note which are _errors_ and which are merely hung)
-- Add syntax for comments
 
-- Allow interactive loading of files
 - Add an IO monad
 - Add a system of traits
 - Add a module system
-- Add automated testing
 - Add possibility for hidden arguments
 
 ************
