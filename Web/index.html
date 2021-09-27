@@ -17,7 +17,7 @@ body {
   float: left;
   width: 40%;
   padding: 10px;
-  height: 100%; /* Should be removed. Only for demonstration */
+  height: 90vh;
 }
 .main_row:after {
   content: "";
@@ -48,6 +48,8 @@ body {
   <select name="example" id="example">
     <option value="fibonacci">Fibonacci</option>
     <option value="nats">Natural Numbers</option>
+    <option value="vectors">Vectors</option>
+    <option value="calculator">Parser (Calculator)</option>
   </select>
   <input type="button" value="Load" onclick="load_chosen_example()">
   <div class="main_row">

@@ -244,20 +244,20 @@ namespace compiler::instruction {
             auto element_value = result_of(located_output::Let{
               .value = compile(element),
               .type = vector_type,
-              .source = {ExplanationKind::vector_element, vector_literal.index()}
-            }, {ExplanationKind::vector_element_local, vector_literal.index()});
+              .source = {ExplanationKind::vector_element, element.index()}
+            }, {ExplanationKind::vector_element_local, element.index()});
             ret = located_output::Apply{
               .lhs = located_output::Apply{
                 .lhs = located_output::Apply{
-                  .lhs = located_output::PrimitiveExpression{Primitive::push_vec, {ExplanationKind::vector_push, vector_literal.index()}},
+                  .lhs = located_output::PrimitiveExpression{Primitive::push_vec, {ExplanationKind::vector_push, element.index()}},
                   .rhs = vector_type,
-                  .source = {ExplanationKind::vector_push_typed, vector_literal.index()}
+                  .source = {ExplanationKind::vector_push_typed, element.index()}
                 },
                 .rhs = std::move(ret),
-                .source = {ExplanationKind::vector_push_vector, vector_literal.index()}
+                .source = {ExplanationKind::vector_push_vector, element.index()}
               },
               .rhs = std::move(element_value),
-              .source = {ExplanationKind::vector_push_element, vector_literal.index()}
+              .source = {ExplanationKind::vector_push_element, element.index()}
             };
           }
           return ret;

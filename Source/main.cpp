@@ -62,6 +62,12 @@ expression::interactive::Environment setup_enviroment() {
     add_lambda_rule("mul", [](std::uint64_t x, std::uint64_t y) {
       return x * y;
     });
+    add_lambda_rule("idiv", [](std::uint64_t x, std::uint64_t y) {
+      return x / y;
+    });
+    add_lambda_rule("mod", [](std::uint64_t x, std::uint64_t y) {
+      return x % y;
+    });
     add_lambda_rule("exp", [](std::uint64_t x, std::uint64_t y) {
       std::uint64_t ret = 1;
       for(std::uint64_t ct = 0; ct < y; ++ct)

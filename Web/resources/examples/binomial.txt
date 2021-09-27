@@ -1,0 +1,18 @@
+block {
+  # Define binomial coefficients using recursion
+  declare binomial : U64 -> U64 -> U64;
+  binomial x y = block {
+  	# The language doesn't have match statements yet, but we need to match
+    # against whether x and y are zero, so define a helper function to do
+    # this matching manually.
+  	declare helper : (is_x_zero : Bool) -> (is_y_zero : Bool) -> U64;
+    helper yes yes = 1; # binomial 0 0 = 1
+    helper yes no  = 0; # binomial 0 y = 0
+    helper no yes  = 1; # binomial x 0 = 1
+    helper no no   = add (binomial (sub x 1) y) (binomial (sub x 1) (sub y 1));
+
+    helper (eq x 0) (eq y 0)
+  };
+
+  binomial 10 5
+}

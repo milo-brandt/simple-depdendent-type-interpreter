@@ -1,115 +1,154 @@
 block {
+  # This example implements a parser (using monadic operations) that evaluates
+  # expressions like "1+(4-2)^2*5" with appropriate order of operations.
+
+  # It's a bit heavier than other examples, and might take a couple seconds to
+  # evaluate - the interpreter is not heavily optimized and thus has trouble
+  # with large expressions.
+
+  # Declare the natural numbers
   axiom Nat : Type;
   axiom zero : Nat;
   axiom succ : Nat -> Nat;
 
+  # Utilities for converting between U64 (numeric literals) and Nat.
   declare u_to_nat : U64 -> Nat;
-  rule u_to_nat n = indexed_recurse Nat (\.succ) zero n;
+  u_to_nat n = iterate Nat succ zero n;
   declare nat_to_u : Nat -> U64;
-  rule nat_to_u zero = 0;
-  rule nat_to_u (succ n) = add (nat_to_u n) 1;
+  nat_to_u zero = 0;
+  nat_to_u (succ n) = add (nat_to_u n) 1;
 
-  declare vec_cons_type : Type -> Nat -> Type;
-  rule vec_cons_type T zero = Vector T;
-  rule vec_cons_type T (succ n) = T -> (vec_cons_type T n);
+  # Declare Pair S T to be the Cartesian product of S and T.
+  axiom Pair : (S : Type) -> (T : Type) -> Type;
+  axiom pair : (S : Type) -> (T : Type) -> S -> T -> Pair S T;
 
-  declare vec_cons_impl : (T : Type) -> (n : Nat) -> (base : Vector T) -> vec_cons_type T n;
-  rule vec_cons_impl T zero base = base;
-  rule vec_cons_impl T (succ n) base first = vec_cons_impl T n (push_vec _ base first);
+  # Define the canonical projection operations from Pair S T.
+  declare first : (S : Type) -> (T : Type) -> Pair S T -> S;
+  first S T (pair S T s t) = s;
+  axiom second : (S : Type) -> (T : Type) -> Pair S T -> T;
+  second S T (pair S T s t) = t;
 
-  declare vec_cons : (T : Type) -> (n : Nat) -> vec_cons_type T n;
-  rule vec_cons T n = vec_cons_impl T n (empty_vec _);
-
-  let vec_cons_u64 = \T.\n.vec_cons T (u_to_nat n);
-
+  # Define a unit type - to use as the return type of functions that don't return
+  # meaningful information.
   axiom Unit : Type;
   axiom unit : Unit;
 
-  axiom Hold : Type;        # This is a hack to force pattern matching - which ensures that overzealous simplifiers don't get stuck in a loop
+  # Define a little hack to avoid the compiler seeing lambda functions that reference
+  # themselves and getting stuck in a loop. This behavior is mathematically correct -
+  # since the program really does not prove that it halts - but building the framework
+  # to do this correctly is tedious - so we do a hack that fools the compiler instead
+  # by defining self-referential lambdas that match for "unhold" before simplifying.
+  axiom Hold : Type;
   axiom unhold : Hold;
 
+  # Define a simple "if" function
+  declare if : (T : Type) -> Bool -> T -> T -> T;
+  if T yes x y = x;
+  if T no x y = y;
+
+  # Define a type to represent the output of parsers.
   axiom ParseResult : Type -> Type;
   axiom success : (T : Type) -> T -> String -> ParseResult T;
   axiom failure : (T : Type) -> ParseResult T;
 
-  declare if : (T : Type) -> Bool -> T -> T -> T;
-  rule if T yes x y = x;
-  rule if T no x y = y;
-
+  # Define easy access for ParseResult.
   declare is_success : (T : Type) -> ParseResult T -> Bool;
-  rule is_success T (success T x rest) = yes;
-  rule is_success T (failure T) = no;
+  is_success T (success T x rest) = yes;
+  is_success T (failure T) = no;
 
+  # If result is a ParseResult T and is a success, get_success _ result will give
+  # the wrapped instance of T. Otherwise, it returns Unit.
+  # Programs relying on this to return something of type T will only type-check
+  # if the result can be seen to be a success at compile time.
   declare get_success : (T : Type) -> (result : ParseResult T) -> (if _ (is_success _ result) T Unit);
-  rule get_success T (success T x rest) = x;
-  rule get_success T (failure T) = unit;
+  get_success T (success T x rest) = x;
+  get_success T (failure T) = unit;
 
+  # Remove the first n characters of a string
   declare remove_prefix : U64 -> String -> String;
-  rule remove_prefix n str = substr str n (sub (len str) n);
+  remove_prefix n str = substr str n (sub (len str) n);
 
+  # Declare a type representing parsers. We will build a monad out of this type family.
   let Parser = \T.String -> ParseResult T;
 
-  declare held_bind_impl : (S : Type) -> (T : Type) -> ParseResult S -> (Hold -> S -> Parser T) -> ParseResult T;
-  rule held_bind_impl S T (success S value rest) then = then unhold value rest;
-  rule held_bind_impl S T (failure S) then = failure T;
+  # Declare the monadic bind operation, integrating the "Hold" hack mentioned above to
+  # hide any self-references from the compiler.
 
+  # held_bind _ _ base (then) should be thought of as a parser which first parses "base", then
+  # calls "then unhold <value_from_base>" - yielding another parser - and executes that second
+  # parser in sequence.
   declare held_bind : (S : Type) -> (T : Type) -> Parser S -> (Hold -> S -> Parser T) -> Parser T;
-  rule held_bind S T parser then = \str.held_bind_impl S T (parser str) then;
+  declare held_bind_impl : (S : Type) -> (T : Type) -> ParseResult S -> (Hold -> S -> Parser T) -> ParseResult T;
+  held_bind_impl S T (success S value rest) then = then unhold value rest;
+  held_bind_impl S T (failure S) then = failure T;
 
+  held_bind S T parser then = \str.held_bind_impl S T (parser str) then;
+
+  # Declare the monadic unit - just gives a parser consuming no characters and returning
+  # a fixed value.
   declare pure : (T : Type) -> T -> Parser T;
-  rule pure T x str = success T x str;
+  pure T x str = success T x str;
 
+  # A parser which always fails.
   declare pure_fail : (T : Type) -> Parser T;
-  rule pure_fail T str = failure T;
+  pure_fail T str = failure T;
 
+  # A parser which tries to consume a fixed string from the head of a string. If it succeeds,
+  # it consumes that part of the string and returns unit. Otherwise, it fails.
   declare recognize : String -> Parser Unit;
-  rule recognize symbol string =
+  recognize symbol string =
     if _ (starts_with symbol string)
       (success _ unit (remove_prefix (len symbol) string))
       (failure _);
 
-  declare or_default_impl : (T : Type) -> T -> String -> ParseResult T -> ParseResult T;
-  rule or_default_impl T x str (success T value rest) = (success T value rest);
-  rule or_default_impl T x str (failure T) = success T x str;
-
+  # Decorates a Parser to, instead of forwarding a failure, replace the failure with
+  # a fixed output value (and to consume nothing).
+  # e.g. "or_default _ 17 parse_int" would try to call parse_int, but if
+  # that parser failed, it would just return 17 and consume nothing.
   declare or_default : (T : Type) -> T -> Parser T -> Parser T;
-  rule or_default T x f = \str.or_default_impl T x str (f str);
+  declare or_default_impl : (T : Type) -> T -> String -> ParseResult T -> ParseResult T;
+  or_default_impl T x str (success T value rest) = (success T value rest);
+  or_default_impl T x str (failure T) = success T x str;
+  or_default T x f = \str.or_default_impl T x str (f str);
 
-  declare or_impl : (T : Type) -> String -> ParseResult T -> Parser T -> ParseResult T;
-  rule or_impl T string (success T value rest) alternate = success T value rest;
-  rule or_impl T string (failure T) alternate = alternate string;
-
+  # Combines two parsers so that, if the first fails, the second is tried.
+  # e.g. "or _ parse_int parse_str" would call parse_int and, if that fails,
+  # it would call parse_str instead.
   declare or : (T : Type) -> Parser T -> Parser T -> Parser T;
-  rule or T parser alternate = \str.or_impl T str (parser str) alternate;
+  declare or_impl : (T : Type) -> String -> ParseResult T -> Parser T -> ParseResult T;
+  or_impl T string (success T value rest) alternate = success T value rest;
+  or_impl T string (failure T) alternate = alternate string;
+  or T parser alternate = \str.or_impl T str (parser str) alternate;
 
+  # Declares a parser which repeats another as long as it succeeds,
+  # then returns the vector of results extracted. Note that this will
+  # cause an infinite loop if the passed parser consumes nothing, but
+  # succeeds.
   declare kleene_star : (T : Type) -> Parser T -> Parser (Vector T);
-  rule kleene_star T parser = block {
+  kleene_star T parser = block {
     declare held_recursor : Vector T -> Hold -> Parser (Vector T);
-    rule held_recursor base unhold =
+    held_recursor base unhold =
       or_default _ base \\
       held_bind _ _ parser (\hold.\next.held_recursor (push_vec _ base next) hold);
 
     held_recursor (empty_vec _) unhold
   };
 
+  # The actual monadic bind operation, without the Hold hack.
   declare bind : (S : Type) -> (T : Type) -> Parser S -> (S -> Parser T) -> Parser T;
-  rule bind S T f g = held_bind S T f (\.g);
+  bind S T f g = held_bind S T f (\.g);
 
+  # The functor operation
   declare map : (S : Type) -> (T : Type) -> Parser S -> (S -> T) -> Parser T;
-  rule map S T f g = bind S T f \x.pure T (g x);
+  map S T f g = bind S T f \x.pure T (g x);
 
-  axiom Pair : (S : Type) -> (T : Type) -> Type;
-  axiom pair : (S : Type) -> (T : Type) -> S -> T -> Pair S T;
-
-  declare first : (S : Type) -> (T : Type) -> Pair S T -> S;
-  rule first S T (pair S T s t) = s;
-  axiom second : (S : Type) -> (T : Type) -> Pair S T -> T;
-  rule second S T (pair S T s t) = t;
-
+  # Given a vector of pairs (prefix, value), creates a parser which sequentially
+  # checks if the string begins with any of the given values and, if so, removes
+  # that prefix and returns the associated value.
   declare parse_lookup : (T : Type) -> Vector (Pair String T) -> Parser T;
-  rule parse_lookup T table = block {
+  parse_lookup T table = block {
     declare recognize_pair : Pair String T -> Parser T;
-    rule recognize_pair (pair String T symbol value) =
+    recognize_pair (pair String T symbol value) =
       map _ _ (recognize symbol) \.value;
     lfold_vec _ _
       (pure_fail _)
@@ -117,38 +156,59 @@ block {
       table
   };
 
+  # A parser that recognizes any single digit and returns the associated U64
   declare parse_digit : Parser U64;
-  rule parse_digit = parse_lookup U64 (vec_cons_u64 _ 10
-    (pair _ _ "0" 0)
-    (pair _ _ "1" 1)
-    (pair _ _ "2" 2)
-    (pair _ _ "3" 3)
-    (pair _ _ "4" 4)
-    (pair _ _ "5" 5)
-    (pair _ _ "6" 6)
-    (pair _ _ "7" 7)
-    (pair _ _ "8" 8)
-    (pair _ _ "9" 9)
-  );
+  parse_digit = parse_lookup U64 [
+    pair _ _ "0" 0,
+    pair _ _ "1" 1,
+    pair _ _ "2" 2,
+    pair _ _ "3" 3,
+    pair _ _ "4" 4,
+    pair _ _ "5" 5,
+    pair _ _ "6" 6,
+    pair _ _ "7" 7,
+    pair _ _ "8" 8,
+    pair _ _ "9" 9
+  ];
 
+  # A parser that extracts integer literals in the naive way. (Obviously is
+  # susceptible to integer overflow)
+  let parse_integer : Parser U64 =
+    bind _ _ parse_digit \first_digit.
+    map _ _ (kleene_star _ parse_digit) \remaining_digits.
+    lfold_vec _ _ first_digit (\x.\y.add (mul 10 x) y) remaining_digits;
+
+  # In this section, we declare utilities for creating a calculator.
   let Binop = U64 -> U64 -> U64;
 
+  # Given a term parser and a vector of pairs of (prefix, binop), creates a new parser
+  # that parses left-associative expressions consisting of those terms and binops.
+  # e.g. parse_left_associative parse_digit [(pair _ _ "+" add), (pair _ _ "-" sub)]
+  # would recognize expressions like 0+5-3+7 and evaluate them from left to right.
+
+  # The idea behind this function is that, to get precedence levels, you start with
+  # a parser for terms (integer literals & parenthesized expressions), then build a
+  # parser that can multiply and divide those terms using this function, then feed
+  # that parser *again* to this function to add in addition and subtraction at a
+  # lower precedence level.
   declare parse_left_associative : Parser U64 -> Vector (Pair String Binop) -> Parser U64;
-  rule parse_left_associative parse_term operations = block {
+  parse_left_associative parse_term operations = block {
     let parse_extend = bind _ _ (parse_lookup _ operations) \op.
       map _ _ parse_term \rhs.pair _ _ op rhs;
 
     declare apply_op : U64 -> Pair Binop U64 -> U64;
-    rule apply_op lhs (pair Binop U64 op rhs) = op lhs rhs;
+    apply_op lhs (pair Binop U64 op rhs) = op lhs rhs;
 
     bind _ _ parse_term \head.
     map _ _ (kleene_star _ parse_extend) \ops.
     lfold_vec _ _ head apply_op ops
   };
+
+  # Similar to above, except applies operations in a right associative manner.
   declare parse_right_associative : Parser U64 -> Vector (Pair String Binop) -> Parser U64;
-  rule parse_right_associative parse_term operations = block {
+  parse_right_associative parse_term operations = block {
     declare parse_held : Hold -> Parser U64;
-    rule parse_held unhold =
+    parse_held unhold =
       held_bind _ _ parse_term \hold.\lhs.
       or_default _ lhs \\
       bind _ _ (parse_lookup _ operations) \op.
@@ -156,19 +216,25 @@ block {
     parse_held unhold
   };
 
+  # Declare a type representing a single precedence level of operations.
   axiom PrecedenceLevel : Type;
   axiom left_assoc : Vector (Pair String Binop) -> PrecedenceLevel;
   axiom right_assoc : Vector (Pair String Binop) -> PrecedenceLevel;
 
+  # Call the appropriate function to extend a parser by one lower precedence level.
   declare extend_by_level : Parser U64 -> PrecedenceLevel -> Parser U64;
-  rule extend_by_level parse_term (left_assoc operations) = parse_left_associative parse_term operations;
-  rule extend_by_level parse_term (right_assoc operations) = parse_right_associative parse_term operations;
+  extend_by_level parse_term (left_assoc operations) = parse_left_associative parse_term operations;
+  extend_by_level parse_term (right_assoc operations) = parse_right_associative parse_term operations;
 
+  # Given a vector of precedence levels, extend a term parser by all of them in sequence.
   declare extend_by_level_vec : Parser U64 -> Vector PrecedenceLevel -> Parser U64;
-  rule extend_by_level_vec parse_term levels = lfold_vec _ _ parse_term extend_by_level levels;
+  extend_by_level_vec parse_term levels = lfold_vec _ _ parse_term extend_by_level levels;
 
+  # Given a literal term parser (doesn't handle parenthesis) and a list of precedence levels,
+  # create a parser that parses expressions with parenthesis and operations, with appropriate
+  # order of operations.
   declare parenthesized_expr_with_terms : Parser U64 -> Vector PrecedenceLevel -> Parser U64;
-  rule parenthesized_expr_with_terms parse_term levels = block {
+  parenthesized_expr_with_terms parse_term levels = block {
     declare parse_held : Hold -> Parser U64;
     let parse_parenthesized_expr : Parser U64 =
       held_bind _ _ (recognize "(") \hold.\.
@@ -176,27 +242,26 @@ block {
       map _ _ (recognize ")") \.ret;
     let true_term = or _ parse_term parse_parenthesized_expr;
     let parse_full = extend_by_level_vec true_term levels;
-    rule parse_held unhold = parse_full;
+    parse_held unhold = parse_full;
     parse_full
   };
 
-  let parse_integer : Parser U64 =
-    bind _ _ parse_digit \first_digit.
-    map _ _ (kleene_star _ parse_digit) \remaining_digits.
-    lfold_vec _ _ first_digit (\x.\y.add (mul 10 x) y) remaining_digits;
-
-  let parse_expr = parenthesized_expr_with_terms parse_integer (vec_cons_u64 _ 3
-    (right_assoc \\ vec_cons_u64 _ 1
-      (pair _ _ "^" exp)
-    )
-    (left_assoc \\ vec_cons_u64 _ 1
-      (pair _ _ "*" mul)
-    )
-    (left_assoc \\ vec_cons_u64 _ 2
-      (pair _ _ "+" add)
-      (pair _ _ "-" sub)
-    )
-  );
+  # Using the above definitions, build a parser that recognizes and computes whole
+  # expressions!
+  let parse_expr = parenthesized_expr_with_terms parse_integer [
+    right_assoc [
+      pair _ _ "^" exp
+    ],
+    left_assoc [
+      pair _ _ "*" mul,
+      pair _ _ "/" idiv,
+      pair _ _ "%" mod
+    ],
+    left_assoc [
+      pair _ _ "+" add,
+      pair _ _ "-" sub
+    ]
+  ];
 
   parse_expr "(1+5*(2+3))^(8-5-1)^3"
 }
