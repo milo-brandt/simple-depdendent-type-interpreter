@@ -356,7 +356,7 @@ namespace expression::data {
           });
           data_pattern::Pattern pat = data_pattern::Fixed{head};
           ((pat = data_pattern::Apply{std::move(pat), get_type_pattern<Args>()}) , ...);
-          auto replace = [this, f = std::move(f)](std::vector<tree::Expression> input) -> tree::Expression {
+          auto replace = [*this, f = std::move(f)](std::vector<tree::Expression> input) -> tree::Expression {
             return [&]<std::size_t... index>(std::index_sequence<index...>) {
               return embed(
                 f(extract<Args>(input[index])...)
