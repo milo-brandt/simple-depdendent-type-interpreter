@@ -9,4 +9,5 @@ Web/resources/codemirror/**
 **/*_impl.inl
 **/*_impl.proto.hpp
 **/*.pyc
+Runtime/**
 Makefile
