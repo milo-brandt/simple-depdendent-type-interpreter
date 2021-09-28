@@ -1,5 +1,6 @@
 #include "solve_routine.hpp"
 #include "../Utility/indirect.hpp"
+#include "../Compiler/async_routine_impl.hpp"
 
 namespace expression::solver {
   namespace {
@@ -99,6 +100,10 @@ namespace expression::solver {
       std::uint64_t rule_index;
       bool final_stage = false;
     };
+    struct SolveRoutineHook {
+      std::uint64_t equation_index;
+      mdb::function<void(mdb::Unit)> continuation;
+    };
   }
   struct Routine::Impl {
     compiler::evaluate::EvaluateResult& input;
@@ -109,6 +114,18 @@ namespace expression::solver {
     std::vector<CastInfo> casts;
     std::vector<RuleInfo> rules;
     std::vector<mdb::Indirect<RuleInstance> > rule_routines;
+    std::vector<SolveRoutineHook> waiting_equations;
+    void request(compiler::request::Solve solve, mdb::function<void(mdb::Unit)> continuation) {
+      auto index = solvers[0].add_equation(std::move(solve.stack), std::move(solve.lhs), std::move(solve.rhs));
+      waiting_equations.push_back({
+        .equation_index = index,
+        .continuation = std::move(continuation)
+      });
+    }
+    void request(compiler::request::DefineVariable define, mdb::function<void(mdb::Unit)> continuation) {
+      solver_context.define_variable(define.head, define.depth, define.replacement);
+      continuation(mdb::unit);
+    }
     Impl(compiler::evaluate::EvaluateResult& input, expression::Context& expression_context, StandardSolverContext in_solver_context)
       :input(input),
        expression_context(expression_context),
@@ -123,12 +140,20 @@ namespace expression::solver {
           solver_context.indeterminates.insert(var);
       }
       for(auto& cast : input.casts) {
-        auto index = solvers[0].add_equation(cast.stack, cast.source_type, cast.target_type);
+        /*auto index = solvers[0].add_equation(cast.stack, cast.source_type, cast.target_type);
         casts.push_back({
           .solver_index = 0,
           .type_check_equation = index,
           .cast = &cast
-        });
+        });*/
+        execute(*this, mdb::async::bind<mdb::Unit>(
+          compiler::request::Solve{cast.stack, cast.source_type, cast.target_type},
+          [cast](auto&& ret, mdb::Unit) {
+            ret(
+              compiler::request::DefineVariable{cast.variable, cast.stack.depth(), cast.source}
+            );
+          }
+        ));
       }
       for(auto& rule : input.rules) {
         auto index = solvers[0].add_equation(rule.stack, rule.pattern_type, rule.replacement_type);
@@ -267,56 +292,27 @@ namespace expression::solver {
       }
       return made_progress;
     }
+    bool examine_waiting() {
+      auto eq_erase = std::remove_if(waiting_equations.begin(), waiting_equations.end(), [&](auto& wait_info) {
+        if(solvers[0].is_equation_satisfied(wait_info.equation_index)) {
+          wait_info.continuation(mdb::unit);
+          return true;
+        } else {
+          return false;
+        }
+      });
+      if(eq_erase != waiting_equations.end()) {
+        waiting_equations.erase(eq_erase, waiting_equations.end());
+        return true;
+      } else {
+        return false;
+      }
+    }
     bool step() {
-      return examine_solvers() | examine_casts() | examine_rules() | examine_rule_instances();
+      return examine_solvers() | examine_casts() | examine_rules() | examine_rule_instances() | examine_waiting();
     }
     void run() {
       while(step());
-    }
-    std::vector<HungRoutineEquation> get_hung_equations() {
-      std::vector<HungRoutineEquation> ret;
-      std::uint64_t solve_index = 0;
-      for(auto& solver : solvers) {
-        auto eqs = solver.get_hung_equations();
-        if(solve_index == 0) {
-          std::transform(eqs.begin(), eqs.end(), std::back_inserter(ret), [&](HungEquation& eq) {
-            if(eq.source_index < input.casts.size()) {
-              return HungRoutineEquation{
-                .lhs = std::move(eq.lhs),
-                .rhs = std::move(eq.rhs),
-                .depth = eq.depth,
-                .source_kind = SourceKind::cast_equation,
-                .source_index = eq.source_index,
-                .failed = eq.failed
-              };
-            } else {
-              return HungRoutineEquation{
-                .lhs = std::move(eq.lhs),
-                .rhs = std::move(eq.rhs),
-                .depth = eq.depth,
-                .source_kind = SourceKind::rule_equation,
-                .source_index = eq.source_index - input.casts.size(),
-                .failed = eq.failed
-              };
-            }
-          });
-        } else {
-          auto const& info = solver_info[solve_index];
-          std::transform(eqs.begin(), eqs.end(), std::back_inserter(ret), [&](HungEquation& eq) {
-            return HungRoutineEquation{
-              .lhs = std::move(eq.lhs),
-              .rhs = std::move(eq.rhs),
-              .depth = eq.depth,
-              .source_kind = info.final_stage ? SourceKind::rule_skeleton_verify : SourceKind::rule_skeleton,
-              .source_index = info.rule_index,
-              .failed = eq.failed
-            };
-          });
-          //???
-        }
-        ++solve_index;
-      }
-      return ret;
     }
   };
   Routine::Routine(compiler::evaluate::EvaluateResult& input, expression::Context& expression_context, StandardSolverContext solver_context):impl(std::make_unique<Impl>(input, expression_context, std::move(solver_context))) {}
@@ -324,5 +320,4 @@ namespace expression::solver {
   Routine& Routine::operator=(Routine&&) = default;
   Routine::~Routine() = default;
   void Routine::run() { return impl->run(); }
-  std::vector<HungRoutineEquation> Routine::get_hung_equations() { return impl->get_hung_equations(); }
 }

@@ -29,7 +29,6 @@ namespace expression::solver {
     Routine& operator=(Routine&&);
     ~Routine();
     void run();
-    std::vector<HungRoutineEquation> get_hung_equations();
   };
 };
 

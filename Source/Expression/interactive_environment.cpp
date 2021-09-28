@@ -52,9 +52,9 @@ namespace expression::interactive {
       compiler::instruction::locator::archive_root::Program instruction_locator;
       std::uint64_t rule_begin;
       std::uint64_t rule_end;
-      std::vector<solver::HungRoutineEquation> remaining_equations;
+      //std::vector<solver::HungRoutineEquation> remaining_equations;
 
-      bool is_solved() const { return remaining_equations.empty(); }
+      bool is_solved() const { return true;}// remaining_equations.empty(); }
       std::optional<std::string_view> get_explicit_name(std::uint64_t ext_index) const {
         namespace explanation = compiler::evaluate::variable_explanation;
         if(!evaluate_result.variables.contains(ext_index)) return std::nullopt;
@@ -245,7 +245,7 @@ namespace expression::interactive {
       expression::solver::Routine solve_routine{eval_result, expression_context, solver_context};
       solve_routine.run();
       auto rule_end = expression_context.rules.size();
-      auto hung_equations = solve_routine.get_hung_equations();
+      //auto hung_equations = solve_routine.get_hung_equations();
 
       return EvaluateInfo{
         std::move(input),
@@ -253,8 +253,8 @@ namespace expression::interactive {
         std::move(instruction_output),
         std::move(instruction_locator),
         rule_start,
-        rule_end,
-        std::move(hung_equations)
+        rule_end//,
+        //std::move(hung_equations)
       };
     }
     mdb::Result<EvaluateInfo, std::string> full_compile(std::string_view str) {
@@ -304,9 +304,9 @@ namespace expression::interactive {
           std::cerr << "While compiling: " << expr << "\n";
           std::cerr << "Solving failed.\n";
           auto fancy = fancy_format(*value);
-          for(auto const& eq : value->remaining_equations) {
-            std::cout << fancy(eq.lhs, eq.depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs, eq.depth) << "\n";
-          }
+          //for(auto const& eq : value->remaining_equations) {
+          //  std::cout << fancy(eq.lhs, eq.depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.rhs, eq.depth) << "\n";
+          //}
           std::terminate();
         }
         if(ret_type != tree::Expression{tree::External{expression_context.primitives.type}}) {
@@ -388,7 +388,7 @@ namespace expression::interactive {
         }
         output << "\n";
         */
-        for(auto const& eq : value->remaining_equations) {
+        /*for(auto const& eq : value->remaining_equations) {
           if(eq.failed) {
             output << red_string("False Equation: ");
           } else {
@@ -470,7 +470,7 @@ namespace expression::interactive {
             output << "Unknown source.";
           }
           output << "\n\n";
-        }
+        }*/
         //throw new variables into context
         for(auto const& entry : value->get_outer_values()) {
           //output << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";

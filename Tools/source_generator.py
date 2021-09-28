@@ -201,6 +201,7 @@ def parse_template_output(output, filebase):
 
 tree_template = jinja_env.get_template('tree.hpp.template')
 type_erasure_template = jinja_env.get_template('type_erasure.hpp.template')
+async_generic_template = jinja_env.get_template('async_generic.hpp.template')
 
 # Utilities for writing trees
 class TypeInfo:
@@ -434,6 +435,18 @@ class TypeErasedKind:
             "type_erase_info": self,
             "file_info": file_info
         })
+# Async generic utilities
+class AsyncGeneric:
+    def __init__(self, namespace, interpreter_name, routine_name, primitives):
+        self.namespace = namespace
+        self.interpreter_name = interpreter_name
+        self.routine_name = routine_name
+        self.primitives = primitives
+    def write_string(self, file_info):
+        return async_generic_template.render({
+            "async_info": self,
+            "file_info": file_info
+        })
 
 # File writing utilities
 class FileWriter:
@@ -479,7 +492,8 @@ class FileContext:
             "Multitree": Multitree,
             "TreeOutput": TreeOutput,
             "TypeErasedKind": TypeErasedKind,
-            "MemberFunction": MemberFunction
+            "MemberFunction": MemberFunction,
+            "AsyncGeneric": AsyncGeneric
         }
 
 def process_file(path_to_file):
