@@ -4,6 +4,8 @@
 #include "expression_tree.hpp"
 #include "solver_context.hpp"
 #include "stack.hpp"
+#include <memory>
+#include <unordered_set>
 
 /*
 Solving algorithm: repeatedly loop over all equations (as long as progress is being made), and apply the following steps.
@@ -70,6 +72,33 @@ handled.
 */
 
 namespace expression::solver {
+  struct IndeterminateContext {
+    std::size_t index = 0;
+  };
+  struct Equation {
+    expression::Stack stack;
+    tree::Expression lhs;
+    tree::Expression rhs;
+  };
+  namespace request {
+    struct CreateContext {
+      using RoutineType = IndeterminateContext;
+      static constexpr bool is_primitive = true;
+      std::unordered_set<std::uint64_t> indeterminates;
+    };
+    struct RegisterIndeterminate {
+      using RoutineType = mdb::Unit;
+      static constexpr bool is_primitive = true;
+      IndeterminateContext indeterminate_context;
+      std::uint64_t new_variable;
+    };
+    struct Solve {
+      using RoutineType = mdb::Unit;
+      static constexpr bool is_primitive = true;
+      IndeterminateContext indeterminate_context;
+      Equation equation;
+    };
+  }
   class Solver {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -78,10 +107,9 @@ namespace expression::solver {
     Solver(Solver&&);
     Solver& operator=(Solver&&);
     ~Solver();
-    void register_variable(std::uint64_t);
-    std::uint64_t add_equation(expression::Stack, tree::Expression lhs, tree::Expression rhs);
-    bool is_equation_satisfied(std::uint64_t);
-    bool is_fully_satisfied();
+    void request(request::CreateContext, mdb::function<void(IndeterminateContext)>);
+    void request(request::RegisterIndeterminate, mdb::function<void(mdb::Unit)>);
+    void request(request::Solve, mdb::function<void(mdb::Unit)>);
     bool try_to_make_progress(); //returns true if progress was made.
   };
 }

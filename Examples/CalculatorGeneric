@@ -4,7 +4,7 @@ block {
   axiom succ : Nat -> Nat;
 
   declare u_to_nat : U64 -> Nat;
-  rule u_to_nat n = indexed_recurse Nat (\.succ) zero n;
+  rule u_to_nat n = iterate Nat succ zero n;
   declare nat_to_u : Nat -> U64;
   rule nat_to_u zero = 0;
   rule nat_to_u (succ n) = add (nat_to_u n) 1;

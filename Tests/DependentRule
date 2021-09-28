@@ -1,0 +1,9 @@
+block {
+  axiom Wrap : Type -> Type;
+  axiom wrap : (T : Type) -> T -> Wrap T;
+
+  declare unwrap : (T : Type) -> Wrap T -> T;
+  unwrap T (wrap T x) = x;
+
+  unwrap U64 (wrap U64 17)
+}

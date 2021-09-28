@@ -11,6 +11,9 @@ Monadic utilities for building "asynchronous" mechanisms.
 Essentially, requires the user to implement various Primitives with a static member is_primitive,
 then to implement an Interpreter class with the method
   .request(Primitive primitive, Callback callback)
+
+Note that this would all, ideally, be done with C++20 coroutines instead, but
+compiler support for those isn't yet sufficient.
 */
 namespace mdb::async {
   template<class T>
@@ -76,7 +79,7 @@ namespace mdb::async {
     }, std::forward<Ts>(values)...);
   }
   template<class T>
-  auto pure(T&& value) {
+  auto pure(T value) {
     return Pure<T>{
       .value = std::forward<T>(value)
     };
@@ -85,9 +88,33 @@ namespace mdb::async {
   auto map(Base&& base, Map&& map) {
     using BaseType = RoutineTypeOf<std::decay_t<Base> >;
     using RetType = decltype(map(std::declval<BaseType>()));
-    return bind<RetType>(std::forward<Base>(base), [map = std::forward<Map>(map)](auto&& ret, BaseType value) {
+    return bind<RetType>(std::forward<Base>(base), [map = std::forward<Map>(map)](auto&& ret, BaseType value) mutable {
       ret(pure(map(value)));
     });
+  }
+  template<class Adaptor, class Body>
+  struct Adapt {
+    using RoutineType = RoutineTypeOf<Body>;
+    Adaptor adaptor; //has .transform method for any requests
+    Body body;
+  };
+  template<class Adaptor, class Body>
+  auto adapt(Adaptor adaptor, Body body) {
+    return Adapt<Adaptor, Body>{
+      .adaptor = std::move(adaptor),
+      .body = std::move(body)
+    };
+  }
+  template<class RetType, class F>
+  struct Complex {
+    using RoutineType = RetType;
+    F controller;
+  };
+  template<class RetType, class F>
+  auto complex(F controller) {
+    return Complex<RetType, F>{
+      .controller = std::move(controller)
+    };
   }
 
   template<class Interpreter, class Primitive, class Then> requires is_primitive<Primitive>
@@ -164,7 +191,6 @@ namespace mdb::async {
         }
       }
     };
-
   }
   template<class Interpreter, class RetType, class BindThen, class... BindBase, class Then>
   void execute_then(Interpreter interpreter, ParallelBind<RetType, BindThen, BindBase...> program, Then then) {
@@ -195,6 +221,34 @@ namespace mdb::async {
   template<class Interpreter, class T, class Then>
   void execute_then(Interpreter&&, Pure<T> pure, Then then) {
     std::move(then)(std::move(pure.value));
+  }
+  namespace detail {
+    template<class Interpreter, class Adaptor>
+    struct AdaptedInterpreter {
+      Interpreter base;
+      Adaptor adaptor;
+      template<class Request, class Then>
+      void request(Request&& request, Then&& then) {
+        execute_then(
+          base,
+          adaptor.transform(std::forward<Request>(request)),
+          std::forward<Then>(then)
+        );
+      }
+    };
+  }
+  template<class Interpreter, class Adaptor, class Body, class Then>
+  void execute_then(Interpreter interpreter, Adapt<Adaptor, Body> program, Then then) {
+    execute_then(detail::AdaptedInterpreter<Interpreter, Adaptor>{
+      .base = std::move(interpreter),
+      .adaptor = std::move(program.adaptor)
+    }, std::move(program.body), std::move(then));
+  }
+  template<class Interpreter, class RetType, class F, class Then>
+  void execute_then(Interpreter interpreter, Complex<RetType, F> complex, Then then) {
+    std::move(complex.controller)([interpreter]<class Routine, class InnerThen>(Routine&& routine, InnerThen&& inner_then) {
+      execute_then(interpreter, std::forward<Routine>(routine), std::forward<InnerThen>(inner_then));
+    }, std::move(then));
   }
   template<class Interpreter, class Program>
   void execute(Interpreter interpreter, Program&& program) {

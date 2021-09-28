@@ -1,6 +1,7 @@
 #include "solve_routine.hpp"
 #include "../Utility/indirect.hpp"
-#include "../Compiler/async_routine_impl.hpp"
+#include "../Utility/async.hpp"
+#include "../Utility/vector_utility.hpp"
 
 namespace expression::solver {
   namespace {
@@ -100,219 +101,210 @@ namespace expression::solver {
       std::uint64_t rule_index;
       bool final_stage = false;
     };
-    struct SolveRoutineHook {
-      std::uint64_t equation_index;
-      mdb::function<void(mdb::Unit)> continuation;
+    struct PatternConstrainer {
+      tree::Expression pattern;
+      mdb::function<void(compiler::pattern::ConstrainedPattern)> then;
+    };
+  }
+  namespace request {
+    struct ConstrainPattern {
+      using RoutineType = compiler::pattern::ConstrainedPattern;
+      static constexpr bool is_primitive = true;
+      tree::Expression pattern;
     };
   }
   struct Routine::Impl {
     compiler::evaluate::EvaluateResult& input;
     expression::Context& expression_context;
     StandardSolverContext solver_context;
-    std::vector<Solver> solvers;
-    std::vector<SolverInfo> solver_info;
-    std::vector<CastInfo> casts;
-    std::vector<RuleInfo> rules;
-    std::vector<mdb::Indirect<RuleInstance> > rule_routines;
-    std::vector<SolveRoutineHook> waiting_equations;
-    void request(compiler::request::Solve solve, mdb::function<void(mdb::Unit)> continuation) {
-      auto index = solvers[0].add_equation(std::move(solve.stack), std::move(solve.lhs), std::move(solve.rhs));
-      waiting_equations.push_back({
-        .equation_index = index,
-        .continuation = std::move(continuation)
+    Solver solver;
+    std::vector<PatternConstrainer> waiting_constrained_patterns;
+    template<class T, class Then>
+    void request(T request, Then then) {
+      solver.request(std::move(request), std::move(then));
+    }
+    template<class Then>
+    void request(request::ConstrainPattern pattern, Then then) {
+      waiting_constrained_patterns.push_back(PatternConstrainer{
+        std::move(pattern.pattern),
+        std::move(then)
       });
     }
-    void request(compiler::request::DefineVariable define, mdb::function<void(mdb::Unit)> continuation) {
-      solver_context.define_variable(define.head, define.depth, define.replacement);
-      continuation(mdb::unit);
+    auto rule_routine(compiler::evaluate::Rule rule) {
+      struct RuleInfo {
+        compiler::pattern::ConstrainedPattern pattern;
+        compiler::evaluate::PatternEvaluateResult evaluated;
+      };
+      return mdb::async::bind<mdb::Unit>(
+        request::Solve{.equation = Equation{rule.stack, rule.pattern_type, rule.replacement_type}},
+        [rule, this](auto&& ret, mdb::Unit) {
+          auto pat = expression_context.reduce(rule.pattern);
+          auto rep = expression_context.reduce(rule.replacement);
+          if(auto new_rule = convert_to_rule(pat, rep, expression_context, solver_context.indeterminates)) {
+            expression_context.add_rule(std::move(*new_rule));
+            return ret(mdb::async::pure(mdb::unit));
+          } else {
+            return ret(mdb::async::bind<mdb::Unit>(
+              request::ConstrainPattern{.pattern = rule.pattern},
+              [this, rule](auto&& ret, compiler::pattern::ConstrainedPattern constrained_pat) {
+                auto archived = archive(constrained_pat.pattern);
+                auto evaluated = compiler::evaluate::evaluate_pattern(archived.root(), expression_context);
+                std::unordered_set<std::uint64_t> solver_indeterminates;
+                for(auto const& [var, reason] : evaluated.variables) {
+                  solver_context.indeterminates.insert(var);
+                  if(!std::holds_alternative<compiler::evaluate::pattern_variable_explanation::ApplyCast>(reason)) {
+                    solver_indeterminates.insert(var);
+                  }
+                }
+                return ret(mdb::async::bind<mdb::Unit>(
+                  request::CreateContext{.indeterminates = std::move(solver_indeterminates)},
+                  [this, rule_info = RuleInfo{.pattern = std::move(constrained_pat), .evaluated = std::move(evaluated)}](auto&& ret, IndeterminateContext context) {
+                    ret(mdb::async::complex<RuleInfo>([&]<class Then>(auto&& spawn, Then then) {
+                      struct SharedState {
+                        Then then;
+                        std::uint64_t count_left;
+                        RuleInfo info;
+                        void finish() { std::move(then)(std::move(info)); }
+                        SharedState(Then then, std::uint64_t count_left, RuleInfo info):then(std::move(then)),count_left(count_left),info(std::move(info)) {
+                          if(count_left == 0) finish();
+                        }
+                        auto decrement() {
+                          if(--count_left == 0)
+                            finish();
+                        }
+                      };
+                      auto size = rule_info.evaluated.casts.size();
+                      auto shared = std::make_shared<SharedState>(std::move(then), size, std::move(rule_info));
+                      auto& rule = shared->info;
+                      auto decrementor = [shared](auto&&...) { shared->decrement(); };
+                      for(auto const& cast : rule.evaluated.casts) {
+                        spawn(mdb::async::bind<mdb::Unit>(
+                          request::Solve{.indeterminate_context = context, .equation = Equation{cast.stack, cast.source_type, cast.target_type}},
+                          [cast, this](auto&& ret, mdb::Unit) {
+                            solver_context.define_variable(cast.variable, cast.stack.depth(), cast.source);
+                            ret(mdb::async::pure(mdb::unit));
+                          }
+                        ), decrementor);
+                      }
+                    }));
+                  },
+                  [this](auto&& ret, RuleInfo rule_info) {
+                    ret(mdb::async::map(
+                      request::CreateContext{}, //make a context with no indeterminates
+                      [rule_info = std::move(rule_info)](auto context) mutable { return std::make_pair(context, std::move(rule_info)); }
+                    ));
+                  },
+                  [this](auto&& ret, std::pair<IndeterminateContext, RuleInfo> info) {
+                    auto& context = info.first;
+                    auto& rule_info = info.second;
+                    ret(mdb::async::complex<RuleInfo>([&]<class Then>(auto&& spawn, Then then) {
+                      struct SharedState {
+                        Then then;
+                        std::uint64_t count_left;
+                        RuleInfo info;
+                        void finish() { std::move(then)(std::move(info)); }
+                        SharedState(Then then, std::uint64_t count_left, RuleInfo info):then(std::move(then)),count_left(count_left),info(std::move(info)) {
+                          if(count_left == 0) finish();
+                        }
+                        auto decrement() { if(--count_left == 0) finish(); }
+                      };
+                      auto size = rule_info.pattern.constraints.size();
+                      auto shared = std::make_shared<SharedState>(std::move(then), size, std::move(rule_info));
+                      auto& rule = shared->info;
+                      std::vector<expression::tree::Expression> capture_vec;
+                      auto decrementor = [shared](auto&&...) { shared->decrement(); };
+                      for(auto cast_var : rule.evaluated.capture_point_variables) capture_vec.push_back(expression::tree::External{cast_var});
+                      for(auto constraint : rule.pattern.constraints) {
+                        auto base_value = capture_vec[constraint.capture_point];
+                        auto new_value = expression::substitute_into_replacement(capture_vec, constraint.equivalent_expression);
+                        spawn(
+                          request::Solve{.indeterminate_context = context, .equation = Equation{Stack::empty(expression_context), std::move(base_value), std::move(new_value)}},
+                          decrementor
+                        );
+                      }
+                    }));
+                  },
+                  [this, rule](auto&& ret, RuleInfo rule_info) {
+                    struct PatternBuilder {
+                      static pattern::Pattern from_outline(compiler::pattern::Pattern const& pat) {
+                        return pat.visit(mdb::overloaded{
+                          [&](compiler::pattern::CapturePoint const&) -> pattern::Pattern {
+                            return pattern::Wildcard{};
+                          },
+                          [&](compiler::pattern::Segment const& segment) {
+                            pattern::Pattern ret = pattern::Fixed{segment.head};
+                            for(auto const& arg : segment.args) {
+                              ret = pattern::Apply{std::move(ret), from_outline(arg)};
+                            }
+                            return ret;
+                          }
+                        });
+                      }
+                    };
+                    auto pat = PatternBuilder::from_outline(rule_info.pattern.pattern);
+                    auto replaced_rule = expression::remap_args(
+                      rule_info.pattern.args_to_captures,
+                      rule.replacement
+                    );
+                    if(!replaced_rule) std::terminate(); //the heck?
+                    expression_context.add_rule({
+                      .pattern = std::move(pat),
+                      .replacement = std::move(*replaced_rule)
+                    });
+                    ret(mdb::async::pure(mdb::unit));
+                  }
+                ));
+              }
+            ));
+          }
+        }
+      );
     }
     Impl(compiler::evaluate::EvaluateResult& input, expression::Context& expression_context, StandardSolverContext in_solver_context)
       :input(input),
        expression_context(expression_context),
-       solver_context(std::move(in_solver_context))
+       solver_context(std::move(in_solver_context)),
+       solver(mdb::ref(solver_context))
      {
-      solvers.emplace_back(mdb::ref(solver_context));
-      solver_info.push_back({.rule_index = (std::uint64_t)-1}); //not associated to a rule
       for(auto [var, reason] : input.variables) {
         if(is_variable(reason))
-          solvers[0].register_variable(var);
+          mdb::async::execute(mdb::ref(*this), request::RegisterIndeterminate{.new_variable = var});
         if(is_indeterminate(reason))
           solver_context.indeterminates.insert(var);
       }
       for(auto& cast : input.casts) {
-        /*auto index = solvers[0].add_equation(cast.stack, cast.source_type, cast.target_type);
-        casts.push_back({
-          .solver_index = 0,
-          .type_check_equation = index,
-          .cast = &cast
-        });*/
-        execute(mdb::ref(*this), mdb::async::bind<mdb::Unit>(
-          compiler::request::Solve{cast.stack, cast.source_type, cast.target_type},
-          [cast](auto&& ret, mdb::Unit) {
-            ret(
-              compiler::request::DefineVariable{cast.variable, cast.stack.depth(), cast.source}
-            );
+        mdb::async::execute(mdb::ref(*this), mdb::async::bind<mdb::Unit>(
+          request::Solve{.equation = Equation{cast.stack, cast.source_type, cast.target_type}},
+          [cast, this](auto&& ret, mdb::Unit) {
+            solver_context.define_variable(cast.variable, cast.stack.depth(), cast.source);
+            ret(mdb::async::pure(mdb::unit));
           }
         ));
       }
       for(auto& rule : input.rules) {
-        auto index = solvers[0].add_equation(rule.stack, rule.pattern_type, rule.replacement_type);
-        rules.push_back({
-          .solver_index = 0,
-          .type_check_equation = index,
-          .rule = &rule
-        });
+        mdb::async::execute(mdb::ref(*this), rule_routine(rule));
       }
     }
     bool examine_solvers() {
-      bool made_progress = false;
-      for(auto& solver : solvers) {
-        made_progress |= solver.try_to_make_progress();
-      }
-      return made_progress;
+      return solver.try_to_make_progress();
     }
-    bool examine_casts() {
-      auto cast_erase = std::remove_if(casts.begin(), casts.end(), [&](auto cast_info) {
-        if(solvers[cast_info.solver_index].is_equation_satisfied(cast_info.type_check_equation)) {
-          auto const& cast = *cast_info.cast;
-          solver_context.define_variable(cast.variable, cast.stack.depth(), cast.source);
+    bool examine_constrained_patterns() {
+      return mdb::erase_from_active_queue(waiting_constrained_patterns, [&](auto& waiting) {
+        waiting.pattern = expression_context.reduce(std::move(waiting.pattern));
+        if(auto pat = compiler::pattern::from_expression(waiting.pattern, expression_context, solver_context.indeterminates)) {
+          waiting.then(std::move(*pat));
           return true;
         } else {
           return false;
         }
       });
-      if(cast_erase != casts.end()) {
-        casts.erase(cast_erase, casts.end());
-        return true;
-      } else {
-        return false;
-      }
-    }
-    bool examine_rules() {
-      auto rule_erase = std::remove_if(rules.begin(), rules.end(), [&](auto rule_info) {
-        if(solvers[rule_info.solver_index].is_equation_satisfied(rule_info.type_check_equation)) {
-          auto& rule = *rule_info.rule;
-          rule.pattern = expression_context.reduce(std::move(rule.pattern));
-          rule.replacement = expression_context.reduce(std::move(rule.replacement));
-          if(auto new_rule = convert_to_rule(rule.pattern, rule.replacement, expression_context, solver_context.indeterminates)) {
-            expression_context.add_rule(std::move(*new_rule));
-            return true;
-          } else if(auto constrained_pat = compiler::pattern::from_expression(rule.pattern, expression_context, solver_context.indeterminates)) {
-            auto archived = archive(constrained_pat->pattern);
-            auto evaluated = compiler::evaluate::evaluate_pattern(archived.root(), expression_context);
-            auto solve_index = solvers.size();
-            solvers.emplace_back(mdb::ref(solver_context));
-            solver_info.push_back({.rule_index = (std::uint64_t)(&rule - input.rules.data())});
-            auto& solver = solvers.back();
-            rule_routines.emplace_back(mdb::in_place, RuleInstance{
-              .solver_index = solve_index,
-              .rule = &rule,
-              .pattern = std::move(*constrained_pat),
-              .evaluated = std::move(evaluated)
-            });
-            auto& rule = *rule_routines.back();
-            for(auto& cast : rule.evaluated.casts) {
-              auto index = solver.add_equation(cast.stack, cast.source_type, cast.target_type);
-              casts.push_back({
-                .solver_index = solve_index,
-                .type_check_equation = index,
-                .cast = &cast
-              });
-            }
-            for(auto const& [var, reason] : rule.evaluated.variables) {
-              solver_context.indeterminates.insert(var);
-              if(!std::holds_alternative<compiler::evaluate::pattern_variable_explanation::ApplyCast>(reason)) {
-                solver.register_variable(var);
-              }
-            }
-            return true;
-          }
-        }
-        return false;
-      });
-      if(rule_erase != rules.end()) {
-        rules.erase(rule_erase, rules.end());
-        return true;
-      } else {
-        return false;
-      }
-    }
-    bool examine_rule_instances() {
-      bool made_progress = false;
-      for(auto& instance : rule_routines) {
-        if(instance->done) continue;
-        if(!instance->check_solver) {
-          if(solvers[instance->solver_index].is_fully_satisfied()) {
-            auto solve_index = solvers.size();
-            solvers.emplace_back(mdb::ref(solver_context));
-            solver_info.push_back({.rule_index = solver_info[instance->solver_index].rule_index, .final_stage = true});
-            auto& solver = solvers.back();
-            std::vector<expression::tree::Expression> capture_vec;
-            for(auto cast_var : instance->evaluated.capture_point_variables) capture_vec.push_back(expression::tree::External{cast_var});
-            for(auto constraint : instance->pattern.constraints) {
-              auto base_value = capture_vec[constraint.capture_point];
-              auto new_value = expression::substitute_into_replacement(capture_vec, constraint.equivalent_expression);
-              solver.add_equation(Stack::empty(expression_context), std::move(base_value), std::move(new_value));
-            }
-            instance->check_solver = solve_index;
-            made_progress = true;
-          }
-        } else {
-          if(solvers[*instance->check_solver].is_fully_satisfied()) {
-            struct PatternBuilder {
-              static pattern::Pattern from_outline(compiler::pattern::Pattern const& pat) {
-                return pat.visit(mdb::overloaded{
-                  [&](compiler::pattern::CapturePoint const&) -> pattern::Pattern {
-                    return pattern::Wildcard{};
-                  },
-                  [&](compiler::pattern::Segment const& segment) {
-                    pattern::Pattern ret = pattern::Fixed{segment.head};
-                    for(auto const& arg : segment.args) {
-                      ret = pattern::Apply{std::move(ret), from_outline(arg)};
-                    }
-                    return ret;
-                  }
-                });
-              }
-            };
-            auto pat = PatternBuilder::from_outline(instance->pattern.pattern);
-            auto replaced_rule = expression::remap_args(
-              instance->pattern.args_to_captures,
-              instance->rule->replacement
-            );
-            if(!replaced_rule) std::terminate(); //the heck?
-            expression_context.add_rule({
-              .pattern = std::move(pat),
-              .replacement = std::move(*replaced_rule)
-            });
-            instance->done = true;
-            made_progress = true;
-          }
-        }
-      }
-      return made_progress;
-    }
-    bool examine_waiting() {
-      auto eq_erase = std::remove_if(waiting_equations.begin(), waiting_equations.end(), [&](auto& wait_info) {
-        if(solvers[0].is_equation_satisfied(wait_info.equation_index)) {
-          wait_info.continuation(mdb::unit);
-          return true;
-        } else {
-          return false;
-        }
-      });
-      if(eq_erase != waiting_equations.end()) {
-        waiting_equations.erase(eq_erase, waiting_equations.end());
-        return true;
-      } else {
-        return false;
-      }
     }
     bool step() {
-      return examine_solvers() | examine_casts() | examine_rules() | examine_rule_instances() | examine_waiting();
+      return examine_solvers() | examine_constrained_patterns();
     }
     void run() {
       while(step());
+      std::cout << "Done.\n";
     }
   };
   Routine::Routine(compiler::evaluate::EvaluateResult& input, expression::Context& expression_context, StandardSolverContext solver_context):impl(std::make_unique<Impl>(input, expression_context, std::move(solver_context))) {}
