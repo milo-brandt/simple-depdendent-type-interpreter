@@ -2,6 +2,7 @@
 #include <atomic>
 #include <memory>
 #include <variant>
+#include "tags.hpp"
 #include "function.hpp"
 
 /*
@@ -90,12 +91,16 @@ namespace mdb::async {
   }
 
   template<class Interpreter, class Primitive, class Then> requires is_primitive<Primitive>
-  void execute_then(Interpreter& interpreter, Primitive program, Then then) {
+  void execute_then(Interpreter interpreter, Primitive program, Then then) {
     interpreter.request(std::move(program), std::move(then));
   }
+  template<class Interpreter, class Primitive, class Then> requires is_primitive<Primitive>
+  void execute_then(mdb::Ref<Interpreter> interpreter, Primitive program, Then then) {
+    return interpreter.ptr->request(std::move(program), std::move(then));
+  }
   template<class Interpreter, class RetType, class BindBase, class BindThen, class Then>
-  void execute_then(Interpreter& interpreter, Bind<RetType, BindBase, BindThen> program, Then then) {
-    execute_then(interpreter, std::move(program.base), [then = std::move(then), bind_then = std::move(program.then), &interpreter]<class BaseRet>(BaseRet&& value) mutable {
+  void execute_then(Interpreter interpreter, Bind<RetType, BindBase, BindThen> program, Then then) {
+    execute_then(interpreter, std::move(program.base), [interpreter, then = std::move(then), bind_then = std::move(program.then)]<class BaseRet>(BaseRet&& value) mutable {
       bool called = false;
       auto ret = [&]<class Next>(Next&& next) requires std::is_same_v<RoutineTypeOf<Next>, RetType> {
         if(called) std::terminate(); //must only call ret once!
@@ -118,11 +123,11 @@ namespace mdb::async {
       }, std::move(tuple));
     }
     template<class Interpreter, class Then, class... Ts>
-    auto continuation_function(Interpreter& interpreter, Then then, std::tuple<Ts...> remaining) {
+    auto continuation_function(Interpreter interpreter, Then then, std::tuple<Ts...> remaining) {
       if constexpr(sizeof...(Ts) == 0) {
         return std::move(then);
       } else {
-        return [&interpreter, then = std::move(then), remaining = std::move(remaining)]<class BaseRet>(BaseRet&& value) mutable {
+        return [interpreter, then = std::move(then), remaining = std::move(remaining)]<class BaseRet>(BaseRet&& value) mutable {
           bool called = false;
           auto tuple_head = std::move(detail::get_tuple_head(remaining));
           auto ret = [&]<class Next>(Next&& next) {
@@ -137,7 +142,7 @@ namespace mdb::async {
     }
   }
   template<class Interpreter, class RetType, class BindBase, class... BindThen, class Then>
-  void execute_then(Interpreter& interpreter, Multibind<RetType, BindBase, BindThen...> program, Then then) {
+  void execute_then(Interpreter interpreter, Multibind<RetType, BindBase, BindThen...> program, Then then) {
     execute_then(interpreter, std::move(program.base), detail::continuation_function(interpreter, std::move(then), std::move(program.then)));
   }
   namespace detail {
@@ -162,9 +167,9 @@ namespace mdb::async {
 
   }
   template<class Interpreter, class RetType, class BindThen, class... BindBase, class Then>
-  void execute_then(Interpreter& interpreter, ParallelBind<RetType, BindThen, BindBase...> program, Then then) {
+  void execute_then(Interpreter interpreter, ParallelBind<RetType, BindThen, BindBase...> program, Then then) {
     [&]<std::size_t... index>(std::index_sequence<index...>) {
-      auto finish = [&interpreter, then = std::move(then), bind_then = std::move(program.then)](RoutineTypeOf<BindBase>&&... values) mutable {
+      auto finish = [interpreter, then = std::move(then), bind_then = std::move(program.then)](RoutineTypeOf<BindBase>&&... values) mutable {
         bool called = false;
         auto ret = [&]<class Next>(Next&& next) requires std::is_same_v<RoutineTypeOf<Next>, RetType> {
           if(called) std::terminate(); //must only call ret once!
@@ -188,11 +193,11 @@ namespace mdb::async {
   }
 
   template<class Interpreter, class T, class Then>
-  void execute_then(Interpreter&, Pure<T> pure, Then then) {
+  void execute_then(Interpreter&&, Pure<T> pure, Then then) {
     std::move(then)(std::move(pure.value));
   }
   template<class Interpreter, class Program>
-  void execute(Interpreter& interpreter, Program&& program) {
-    execute_then(interpreter, std::forward<Program>(program), [](auto&&...){});
+  void execute(Interpreter interpreter, Program&& program) {
+    execute_then(std::move(interpreter), std::forward<Program>(program), [](auto&&...){});
   }
 }

@@ -146,7 +146,7 @@ namespace expression::solver {
           .type_check_equation = index,
           .cast = &cast
         });*/
-        execute(*this, mdb::async::bind<mdb::Unit>(
+        execute(mdb::ref(*this), mdb::async::bind<mdb::Unit>(
           compiler::request::Solve{cast.stack, cast.source_type, cast.target_type},
           [cast](auto&& ret, mdb::Unit) {
             ret(
