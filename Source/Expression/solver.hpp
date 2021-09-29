@@ -72,6 +72,11 @@ handled.
 */
 
 namespace expression::solver {
+  enum class EquationResult {
+    solved,
+    undetermined,
+    failed
+  };
   struct IndeterminateContext {
     std::size_t index = 0;
   };
@@ -93,7 +98,7 @@ namespace expression::solver {
       std::uint64_t new_variable;
     };
     struct Solve {
-      using RoutineType = mdb::Unit;
+      using RoutineType = EquationResult;
       static constexpr bool is_primitive = true;
       IndeterminateContext indeterminate_context;
       Equation equation;
@@ -109,8 +114,9 @@ namespace expression::solver {
     ~Solver();
     void request(request::CreateContext, mdb::function<void(IndeterminateContext)>);
     void request(request::RegisterIndeterminate, mdb::function<void(mdb::Unit)>);
-    void request(request::Solve, mdb::function<void(mdb::Unit)>);
+    void request(request::Solve, mdb::function<void(EquationResult)>);
     bool try_to_make_progress(); //returns true if progress was made.
+    void close(); //releases all routines connected to this one.
   };
 }
 

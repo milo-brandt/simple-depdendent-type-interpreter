@@ -1,257 +1,157 @@
 #include <optional>
-#include <atomic>
-#include <memory>
 #include <variant>
-#include "tags.hpp"
+#include <memory>
+#include <type_traits>
 #include "function.hpp"
 
 /*
-Monadic utilities for building "asynchronous" mechanisms.
+  Utilities for synchronous promises/futures - mainly, futures allow a callback
+  to be set (and replaced) to listen for a value.
 
-Essentially, requires the user to implement various Primitives with a static member is_primitive,
-then to implement an Interpreter class with the method
-  .request(Primitive primitive, Callback callback)
-
-Note that this would all, ideally, be done with C++20 coroutines instead, but
-compiler support for those isn't yet sufficient.
+  Promises *must* eventually give a value.
 */
-namespace mdb::async {
-  template<class T>
-  concept is_primitive = requires{ T::is_primitive; };
-  template<class T>
-  using RoutineTypeOf = typename T::RoutineType;
-  namespace detail {
-    template<class Callback, class Arg, class... Args>
-    decltype(auto) rotate_args(Callback&& callback, Arg&& arg, Args&&... args) { //call with last argument first
-      if constexpr(sizeof...(Args) > 0) {
-        return rotate_args([&]<class R1, class... R>(R1&& first, R&&... inner) {
-          return std::forward<Callback>(callback)(std::forward<R1>(first), std::forward<Arg>(arg), std::forward<R>(inner)...);
-        }, std::forward<Args>(args)...);
-      } else {
-        return callback(std::forward<Arg>(arg));
-      }
-    }
-  }
-  template<class RetType, class Base, class Then>
-  struct Bind {
-    using RoutineType = RetType;
-    Base base;
-    Then then;
-  };
-  template<class RetType, class Base, class... Then>
-  struct Multibind {
-    using RoutineType = RetType;
-    Base base;
-    std::tuple<Then...> then;
-  };
-  template<class RetType, class Then, class... Base>
-  struct ParallelBind {
-    using RoutineType = RetType;
-    std::tuple<Base...> base;
-    Then then;
-  };
-  template<class T>
-  struct Pure {
-    using RoutineType = T;
-    T value;
-  };
-  template<class RetType, class Base, class Then>
-  auto bind(Base base, Then then) {
-    return Bind<RetType, Base, Then>{
-      .base = std::move(base),
-      .then = std::move(then)
-    };
-  }
-  template<class RetType, class Base, class Then1, class Then2, class... Then>
-  auto bind(Base base, Then1 then1, Then2 then2, Then... then) {
-    return Multibind<RetType, Base, Then1, Then2, Then...>{
-      .base = std::move(base),
-      .then = {std::move(then1), std::move(then2), std::move(then)...}
-    };
-  }
-  template<class RetType, class... Ts>
-  auto parallel_bind(Ts&&... values) {
-    return detail::rotate_args([&]<class Then, class... Base>(Then then, Base... base) {
-      return ParallelBind<RetType, Then, Base...>{
-        .base = {std::move(base)...},
-        .then = std::move(then)
-      };
-    }, std::forward<Ts>(values)...);
-  }
-  template<class T>
-  auto pure(T value) {
-    return Pure<T>{
-      .value = std::forward<T>(value)
-    };
-  }
-  template<class Base, class Map>
-  auto map(Base&& base, Map&& map) {
-    using BaseType = RoutineTypeOf<std::decay_t<Base> >;
-    using RetType = decltype(map(std::declval<BaseType>()));
-    return bind<RetType>(std::forward<Base>(base), [map = std::forward<Map>(map)](auto&& ret, BaseType value) mutable {
-      ret(pure(map(value)));
-    });
-  }
-  template<class Adaptor, class Body>
-  struct Adapt {
-    using RoutineType = RoutineTypeOf<Body>;
-    Adaptor adaptor; //has .transform method for any requests
-    Body body;
-  };
-  template<class Adaptor, class Body>
-  auto adapt(Adaptor adaptor, Body body) {
-    return Adapt<Adaptor, Body>{
-      .adaptor = std::move(adaptor),
-      .body = std::move(body)
-    };
-  }
-  template<class RetType, class F>
-  struct Complex {
-    using RoutineType = RetType;
-    F controller;
-  };
-  template<class RetType, class F>
-  auto complex(F controller) {
-    return Complex<RetType, F>{
-      .controller = std::move(controller)
-    };
-  }
 
-  template<class Interpreter, class Primitive, class Then> requires is_primitive<Primitive>
-  void execute_then(Interpreter interpreter, Primitive program, Then then) {
-    interpreter.request(std::move(program), std::move(then));
-  }
-  template<class Interpreter, class Primitive, class Then> requires is_primitive<Primitive>
-  void execute_then(mdb::Ref<Interpreter> interpreter, Primitive program, Then then) {
-    return interpreter.ptr->request(std::move(program), std::move(then));
-  }
-  template<class Interpreter, class RetType, class BindBase, class BindThen, class Then>
-  void execute_then(Interpreter interpreter, Bind<RetType, BindBase, BindThen> program, Then then) {
-    execute_then(interpreter, std::move(program.base), [interpreter, then = std::move(then), bind_then = std::move(program.then)]<class BaseRet>(BaseRet&& value) mutable {
-      bool called = false;
-      auto ret = [&]<class Next>(Next&& next) requires std::is_same_v<RoutineTypeOf<Next>, RetType> {
-        if(called) std::terminate(); //must only call ret once!
-        called = true;
-        execute_then(interpreter, std::forward<Next>(next), std::move(then));
-      };
-      std::move(bind_then)(ret, std::forward<BaseRet>(value));
-      if(!called) std::terminate(); //must call ret!
-    });
-  }
+namespace mdb {
   namespace detail {
-    template<class T, class... Ts>
-    auto& get_tuple_head(std::tuple<T, Ts...>& tuple) {
-      return std::get<0>(tuple);
-    }
-    template<class T, class... Ts>
-    std::tuple<Ts...> get_tuple_tail(std::tuple<T, Ts...>&& tuple) {
-      return std::apply([](auto&&, Ts&&... ts) {
-        return std::tuple<Ts...>{std::forward<Ts>(ts)...};
-      }, std::move(tuple));
-    }
-    template<class Interpreter, class Then, class... Ts>
-    auto continuation_function(Interpreter interpreter, Then then, std::tuple<Ts...> remaining) {
-      if constexpr(sizeof...(Ts) == 0) {
-        return std::move(then);
-      } else {
-        return [interpreter, then = std::move(then), remaining = std::move(remaining)]<class BaseRet>(BaseRet&& value) mutable {
-          bool called = false;
-          auto tuple_head = std::move(detail::get_tuple_head(remaining));
-          auto ret = [&]<class Next>(Next&& next) {
-            if(called) std::terminate(); //must only call ret once!
-            called = true;
-            execute_then(interpreter, std::forward<Next>(next), continuation_function(interpreter, std::move(then), get_tuple_tail(std::move(remaining))));
-          };
-          std::move(tuple_head)(ret, std::forward<BaseRet>(value));
-          if(!called) std::terminate(); //must call ret!
-        };
-      }
-    }
-  }
-  template<class Interpreter, class RetType, class BindBase, class... BindThen, class Then>
-  void execute_then(Interpreter interpreter, Multibind<RetType, BindBase, BindThen...> program, Then then) {
-    execute_then(interpreter, std::move(program.base), detail::continuation_function(interpreter, std::move(then), std::move(program.then)));
-  }
-  namespace detail {
-    template<class Then, class... BindBase>
-    struct ParallelSharedState {
-      std::atomic<std::uint64_t> parts_needed = sizeof...(BindBase);
-      std::tuple<std::optional<RoutineTypeOf<BindBase> >...> parts;
-      Then then;
-      ParallelSharedState(Then then):then(std::move(then)) {}
-      template<std::size_t index, class T>
-      void set(T&& value) {
-        auto& pos = std::get<index>(parts);
-        if(pos) std::terminate(); //can't set twice!
-        pos = std::forward<T>(value);
-        if(--parts_needed == 0) {
-          std::apply([&](std::optional<RoutineTypeOf<BindBase> >&&... args) {
-            std::move(then)(std::move(*args)...);
-          }, std::move(parts));
+    struct PromiseEmpty{};
+    struct PromiseDone{};
+    template<class T>
+    struct PromiseSharedState {
+      using State = std::variant<PromiseEmpty, T, mdb::function<void(T)>, PromiseDone>;
+      State state;
+      void set_value(T&& value) {
+        if(state.index() == 0) {
+          state = State{std::in_place_index<1>, std::move(value)};
+        } else if(state.index() == 2) {
+          std::move(std::get<2>(state))(std::move(value));
+          state = State{std::in_place_index<3>};
+        } else {
+          std::terminate(); //promise set twice!
         }
       }
+      void set_listener(mdb::function<void(T)>&& func) {
+        if(state.index() == 0 || state.index() == 2) { //allow changing listener
+          state = State{std::in_place_index<2>, std::move(func)};
+        } else if(state.index() == 1) {
+          std::move(func)(std::move(std::get<1>(state)));
+          state = State{std::in_place_index<3>};
+        } else {
+          //nothing to do if promise already finished
+        }
+      }
+      void remove_listener() {
+        if(state.index() == 2) {
+          state = {std::in_place_index<0>};
+        } else if(state.index() == 3) {
+          //nothing to do
+        } else{
+          std::terminate(); //cannot remove non-set listener
+        }
+      }
+      void remove_promise() {
+        if(state.index() == 0 || state.index() == 2) {
+          std::terminate(); //broken promise
+        }
+      }
+      bool is_ready() {
+        return state.index() == 1;
+      }
+      T take() {
+        T ret = std::move(std::get<1>(state));
+        state = {std::in_place_index<3>};
+        return ret;
+      }
+    };
+  };
+  template<class T>
+  struct PromiseFuturePair;
+  template<class T>
+  PromiseFuturePair<T> create_promise_future_pair();
+  template<class T>
+  class Promise { //synchronous promise type
+    std::shared_ptr<detail::PromiseSharedState<T> > shared_state;
+    Promise(std::shared_ptr<detail::PromiseSharedState<T> > const& shared_state):shared_state(std::move(shared_state)) {}
+    friend PromiseFuturePair<T> create_promise_future_pair<T>();
+  public:
+    Promise(Promise&&) = default;
+    Promise(Promise const&) = delete;
+    Promise& operator=(Promise&&) = default;
+    Promise& operator=(Promise const&) = delete;
+    ~Promise() { if(shared_state) shared_state->remove_promise(); }
+    void set_value(T value) { shared_state->set_value(std::move(value)); }
+  };
+  template<class T>
+  class Future {
+    std::shared_ptr<detail::PromiseSharedState<T> > shared_state;
+    Future(std::shared_ptr<detail::PromiseSharedState<T> >&& shared_state):shared_state(std::move(shared_state)) {}
+    friend PromiseFuturePair<T> create_promise_future_pair<T>();
+  public:
+    Future(Future&&) = default;
+    Future(Future const&) = delete;
+    Future& operator=(Future&&) = default;
+    Future& operator=(Future const&) = delete;
+    ~Future() = default;
+    void listen(mdb::function<void(T)> func) && { //irrevocable listener
+      shared_state->set_listener(std::move(func));
+      shared_state = nullptr;
+    }
+    void set_listener(mdb::function<void(T)> func) { shared_state->set_listener(std::move(func)); }
+    bool is_ready() const { return shared_state->is_ready(); }
+    T take() && { return shared_state->take(); }
+  };
+  template<class T>
+  struct PromiseFuturePair {
+    Promise<T> promise;
+    Future<T> future;
+  };
+  template<class T>
+  PromiseFuturePair<T> create_promise_future_pair() {
+    auto shared_state = std::make_shared<detail::PromiseSharedState<T> >();
+    Promise<T> promise{shared_state};
+    Future<T> future{std::move(shared_state)};
+    return {
+      .promise = std::move(promise),
+      .future = std::move(future)
     };
   }
-  template<class Interpreter, class RetType, class BindThen, class... BindBase, class Then>
-  void execute_then(Interpreter interpreter, ParallelBind<RetType, BindThen, BindBase...> program, Then then) {
-    [&]<std::size_t... index>(std::index_sequence<index...>) {
-      auto finish = [interpreter, then = std::move(then), bind_then = std::move(program.then)](RoutineTypeOf<BindBase>&&... values) mutable {
-        bool called = false;
-        auto ret = [&]<class Next>(Next&& next) requires std::is_same_v<RoutineTypeOf<Next>, RetType> {
-          if(called) std::terminate(); //must only call ret once!
-          called = true;
-          execute_then(interpreter, std::forward<Next>(next), std::move(then));
-        };
-        std::move(bind_then)(ret, std::move(values)...);
-        if(!called) std::terminate(); //must call ret!
+  template<class T, class F, class R = std::invoke_result_t<F, T> >
+  Future<R> map(Future<T> future, F map) {
+    auto [new_promise, new_future] = create_promise_future_pair<R>();
+    future.set_listener([new_promise = std::move(new_promise), map = std::move(map)](T value) mutable {
+      new_promise.set_value(std::move(map)(std::move(value)));
+    });
+    return std::move(new_future);
+  }
+  template<class... T>
+  Future<std::tuple<T...> > collect(Future<T>... futures) {
+    auto [promise, future] = create_promise_future_pair<std::tuple<T...> >();
+    if constexpr(sizeof...(T) == 0) {
+      promise.set_value(std::make_tuple());
+    } else {
+      struct SharedState {
+        std::uint64_t count_left;
+        Promise<std::tuple<T...> > promise;
+        std::tuple<std::optional<T>...> values;
+        SharedState(Promise<std::tuple<T...> > promise):count_left(sizeof...(T)), promise(std::move(promise)) {}
+        void finish() {
+          std::apply([&](std::optional<T>&... values) {
+            promise.set_value(std::make_tuple(std::move(*values)...));
+          }, values);
+        }
+        void decrement() {
+          if(--count_left == 0) {
+            finish();
+          }
+        }
       };
-      if constexpr(sizeof...(BindBase) == 0) {
-        finish();
-      } else {
-        auto shared_state = std::make_shared<detail::ParallelSharedState<decltype(finish), BindBase...> >(std::move(finish));
-        ([&] {
-          execute_then(interpreter, std::get<index>(program.base), [shared_state](RoutineTypeOf<BindBase> value) {
-            shared_state->template set<index>(std::move(value));
-          });
-        }() , ...);
-      }
-    }(std::make_index_sequence<sizeof...(BindBase)>{});
-  }
-
-  template<class Interpreter, class T, class Then>
-  void execute_then(Interpreter&&, Pure<T> pure, Then then) {
-    std::move(then)(std::move(pure.value));
-  }
-  namespace detail {
-    template<class Interpreter, class Adaptor>
-    struct AdaptedInterpreter {
-      Interpreter base;
-      Adaptor adaptor;
-      template<class Request, class Then>
-      void request(Request&& request, Then&& then) {
-        execute_then(
-          base,
-          adaptor.transform(std::forward<Request>(request)),
-          std::forward<Then>(then)
-        );
-      }
-    };
-  }
-  template<class Interpreter, class Adaptor, class Body, class Then>
-  void execute_then(Interpreter interpreter, Adapt<Adaptor, Body> program, Then then) {
-    execute_then(detail::AdaptedInterpreter<Interpreter, Adaptor>{
-      .base = std::move(interpreter),
-      .adaptor = std::move(program.adaptor)
-    }, std::move(program.body), std::move(then));
-  }
-  template<class Interpreter, class RetType, class F, class Then>
-  void execute_then(Interpreter interpreter, Complex<RetType, F> complex, Then then) {
-    std::move(complex.controller)([interpreter]<class Routine, class InnerThen>(Routine&& routine, InnerThen&& inner_then) {
-      execute_then(interpreter, std::forward<Routine>(routine), std::forward<InnerThen>(inner_then));
-    }, std::move(then));
-  }
-  template<class Interpreter, class Program>
-  void execute(Interpreter interpreter, Program&& program) {
-    execute_then(std::move(interpreter), std::forward<Program>(program), [](auto&&...){});
+      auto shared = std::make_shared<SharedState>(std::move(promise));
+      std::apply([&](std::optional<T>&... values) {
+        (futures.set_listener([shared, &value = values](T v) mutable {
+          value = std::move(v);
+          shared->decrement();
+        }) , ...);
+      }, shared->values);
+    }
+    return std::move(future);
   }
 }

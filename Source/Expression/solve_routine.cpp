@@ -137,7 +137,11 @@ namespace expression::solver {
       };
       return mdb::async::bind<mdb::Unit>(
         request::Solve{.equation = Equation{rule.stack, rule.pattern_type, rule.replacement_type}},
-        [rule, this](auto&& ret, mdb::Unit) {
+        [rule, this](auto&& ret, EquationResult result) {
+          if(result != EquationResult::solved) {
+            std::cout << "Bad equation rule!\n";
+            return ret(mdb::async::pure(mdb::unit));
+          }
           auto pat = expression_context.reduce(rule.pattern);
           auto rep = expression_context.reduce(rule.replacement);
           if(auto new_rule = convert_to_rule(pat, rep, expression_context, solver_context.indeterminates)) {
@@ -176,13 +180,19 @@ namespace expression::solver {
                       auto size = rule_info.evaluated.casts.size();
                       auto shared = std::make_shared<SharedState>(std::move(then), size, std::move(rule_info));
                       auto& rule = shared->info;
-                      auto decrementor = [shared](auto&&...) { shared->decrement(); };
+                      auto decrementor = [shared](EquationResult result) {
+                        if(result == EquationResult::solved) {
+                          shared->decrement();
+                        } else {
+                          std::cout << "Bad equation.\n";
+                        }
+                      };
                       for(auto const& cast : rule.evaluated.casts) {
                         spawn(mdb::async::bind<mdb::Unit>(
                           request::Solve{.indeterminate_context = context, .equation = Equation{cast.stack, cast.source_type, cast.target_type}},
-                          [cast, this](auto&& ret, mdb::Unit) {
+                          [cast, this](auto&& ret, EquationResult result) {
                             solver_context.define_variable(cast.variable, cast.stack.depth(), cast.source);
-                            ret(mdb::async::pure(mdb::unit));
+                            ret(mdb::async::pure(result));
                           }
                         ), decrementor);
                       }

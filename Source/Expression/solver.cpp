@@ -162,7 +162,7 @@ namespace expression::solver {
     Context context;
     std::vector<std::unordered_set<std::uint64_t> > indeterminate_contexts;
     std::vector<EquationInfo> equations;
-    std::vector<std::pair<std::uint64_t, mdb::function<void(mdb::Unit)> > > waiting_routines;
+    std::vector<std::pair<std::uint64_t, mdb::function<void(EquationResult)> > > waiting_routines;
     AttemptResult try_to_extract_rule(std::uint64_t index, EquationInfo const& info, Simplification const& lhs, Simplification const& rhs) {
       if(auto extracted_rule = get_rule_from_equation(lhs.expression, rhs.expression, indeterminate_contexts[info.indeterminate_context], context)) {
         context.define_variable(extracted_rule->head, extracted_rule->arg_count, std::move(extracted_rule->replacement));
@@ -356,7 +356,7 @@ namespace expression::solver {
       }
       made_progress |= mdb::erase_from_active_queue(waiting_routines, [&](auto& waiting) {
         if(is_equation_satisfied(waiting.first)) {
-          waiting.second(mdb::unit);
+          waiting.second(EquationResult::solved);
           return true;
         } else {
           return false;
@@ -375,7 +375,7 @@ namespace expression::solver {
       indeterminate_contexts[register_indeterminate.indeterminate_context.index].insert(register_indeterminate.new_variable);
       then(mdb::unit);
     }
-    void request(request::Solve solve, mdb::function<void(mdb::Unit)> then) {
+    void request(request::Solve solve, mdb::function<void(EquationResult)> then) {
       auto eq_index = equations.size();
       equations.push_back({
         .equation = std::move(solve.equation),
@@ -389,6 +389,12 @@ namespace expression::solver {
       }
       return true;
     }
+    void close() {
+      mdb::erase_from_active_queue(waiting_routines, [&](auto& waiting) {
+        waiting.second(EquationResult::failed);
+        return true;
+      });
+    }
   };
   Solver::Solver(Context context):impl(new Impl{.context = std::move(context)}) {
     impl->indeterminate_contexts.emplace_back();
@@ -399,12 +405,16 @@ namespace expression::solver {
   void Solver::request(request::RegisterIndeterminate register_indeterminate, mdb::function<void(mdb::Unit)> then) {
     return impl->request(std::move(register_indeterminate), std::move(then));
   }
-  void Solver::request(request::Solve solve, mdb::function<void(mdb::Unit)> then) {
+  void Solver::request(request::Solve solve, mdb::function<void(EquationResult)> then) {
     return impl->request(std::move(solve), std::move(then));
   }
   bool Solver::try_to_make_progress() {
     return impl->try_to_make_progress();
   }
+  void Solver::close() {
+    return impl->close();
+  }
+
   Solver::Solver(Solver&&) = default;
   Solver& Solver::operator=(Solver&&) = default;
   Solver::~Solver() = default;
