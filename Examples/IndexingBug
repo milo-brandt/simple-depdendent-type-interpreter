@@ -3,6 +3,6 @@ block {
     let Y = Type;
     Y
   };
-  let Z = _;
+  let Z = 1;
   Z
 }

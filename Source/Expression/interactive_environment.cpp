@@ -409,6 +409,24 @@ namespace expression::interactive {
       }
     }
     ParseResult parse(std::string_view expr);
+    bool deep_compare(tree::Expression lhs, tree::Expression rhs) {
+      solver::StandardSolverContext context{expression_context};
+      solver::Solver solver{context};
+      auto result = solver.solve({
+        .equation = {
+          .stack = Stack::empty(expression_context),
+          .lhs = std::move(lhs),
+          .rhs = std::move(rhs)
+        }
+      });
+      solver.try_to_make_progress();
+      solver.close();
+      return !std::move(result).take();
+    }
+    bool deep_compare(TypedValue lhs, TypedValue rhs) {
+      return deep_compare(std::move(lhs.value), std::move(rhs.value))
+          && deep_compare(std::move(lhs.type), std::move(rhs.type));
+    }
   };
 
   Environment::Environment():impl(std::make_unique<Impl>()) {}
@@ -440,6 +458,8 @@ namespace expression::interactive {
   Context& Environment::context() { return impl->expression_context; }
   expression::data::SmallScalar<std::uint64_t> const& Environment::u64() const { return impl->u64; }
   expression::data::SmallScalar<imported_type::StringHolder> const& Environment::str() const { return impl->str; }
+  bool Environment::deep_compare(tree::Expression lhs, tree::Expression rhs) const { return impl->deep_compare(std::move(lhs), std::move(rhs)); }
+  bool Environment::deep_compare(TypedValue lhs, TypedValue rhs) const { return impl->deep_compare(std::move(lhs), std::move(rhs)); }
 
   struct ParseResult::Impl {
     Environment::Impl* environment;

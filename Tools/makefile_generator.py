@@ -4,7 +4,6 @@ from jinja2 import Environment, FileSystemLoader
 from functools import lru_cache
 import re
 import source_generator
-import test_generator
 
 def remove_c_comments(text): # from https://stackoverflow.com/questions/241327/remove-c-and-c-comments-using-python
     def replacer(match):
@@ -67,6 +66,13 @@ def get_nested_associates_of(filename):
                 ret.add(include)
     return ret
 
+def get_nested_associates_of_multi(filenames):
+    return {
+        associate
+        for filename in filenames
+        for associate in get_nested_associates_of(filename)
+    }
+
 def objects_from_associates(associates, object_folder):
     associate_cpp_roots = [
         os.path.relpath(os.path.splitext(file)[0], "Source")
@@ -80,13 +86,6 @@ def objects_from_associates(associates, object_folder):
 
 def objects_to_compile(filename, object_folder):
     return objects_from_associates(get_nested_associates_of(filename), object_folder)
-
-def objects_to_compile_multi(filenames, object_folder):
-    return objects_from_associates({
-        associate
-        for filename in filenames
-        for associate in get_nested_associates_of(filename)
-    }, object_folder)
 
 def generate_python_info():
     def is_source_generator(name):
@@ -107,22 +106,7 @@ def generate_python_info():
         })
     return output_data
 
-def generate_test_info():
-    def is_source_generator(name):
-        try:
-            with open(name) as file:
-                line = file.readline()[:-1]
-                return line.startswith("# TEST")
-        except:
-            return False
-    python_files = [file for folder in os.walk("Source/Tests") for file in glob(os.path.join(folder[0],"*"))]
-    test_cases = [file for file in python_files if is_source_generator(file)]
-    test_generator.write_test_cases(test_cases, "Source/Tests/full_cases_impl.cpp")
-    return test_cases
-
-
 source_generators = generate_python_info()
-test_cases = generate_test_info()
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)) + "/..")
 jinja_env = Environment(
@@ -130,6 +114,8 @@ jinja_env = Environment(
 );
 
 test_cpp = [file for folder in os.walk("Source/Tests") for file in glob(os.path.join(folder[0],"*.cpp"))]
+test_associates = get_nested_associates_of_multi(test_cpp)
+test_associates.add("Source/Tests/full_cases_impl.cpp") # Manually add generated file in case it doesn't exist
 
 makefile = jinja_env.get_template('makefile_template').render(
     targets = [
@@ -149,14 +135,13 @@ makefile = jinja_env.get_template('makefile_template').render(
         },
         {
             "program": "DebugTest/program",
-            "objects": objects_to_compile_multi(test_cpp, "DebugTest"),
+            "objects": objects_from_associates(test_associates, "DebugTest"),
             "compiler": "$(compiler)",
             "compile_options": "-std=c++20 -ggdb -O0",
             "link_options": "-std=c++20 -ggdb -O0"
         }
     ],
-    source_generators = source_generators,
-    test_cases = test_cases
+    source_generators = source_generators
 );
 
 open("Makefile","w").write(makefile);

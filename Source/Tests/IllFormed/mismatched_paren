@@ -1,0 +1,9 @@
+# TEST BEGIN
+# TEST NAME Expressions with mismatched parentheses are rejected.
+# TEST FULL_SET compile_result
+
+(1}
+
+# TEST DEFINITION
+
+REQUIRE(!compile_result.has_result()); //syntax error

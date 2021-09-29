@@ -1,0 +1,9 @@
+# TEST BEGIN
+# TEST NAME Expressions with unresolved identifiers are rejected.
+# TEST FULL_SET compile_result
+
+this_id_is_not_real
+
+# TEST DEFINITION
+
+REQUIRE(!compile_result.has_result()); //syntax error

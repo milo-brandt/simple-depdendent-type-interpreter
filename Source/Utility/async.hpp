@@ -45,7 +45,7 @@ namespace mdb {
       }
       void remove_listener() {
         if(state.index() == 2) {
-          state = {std::in_place_index<0>};
+          state = State{std::in_place_index<0>};
         } else if(state.index() == 3) {
           //nothing to do
         } else{
@@ -62,7 +62,7 @@ namespace mdb {
       }
       T take() {
         T ret = std::move(std::get<1>(state));
-        state = {std::in_place_index<3>};
+        state = State{std::in_place_index<3>};
         return ret;
       }
     };

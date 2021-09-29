@@ -25,6 +25,8 @@ TEST_CASE("{{ test.name }}") {
     FAIL("Failed while compiling variable {{definition.var}}");
   }
   expression::TypedValue {{definition.var}} = {{definition.var}}_full.get_reduced_result();
+  {%- elif definition.kind == "FULL_SET" %}
+  auto {{definition.var}} = environment.parse(R"#--#({{ definition.source }})#--#");
   {%- else %}
   static_assert(false, "The source code generator did something wrong.")
   {%- endif %}

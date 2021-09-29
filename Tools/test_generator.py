@@ -10,7 +10,9 @@ class TestCase:
         self.definitions = []
         self.body = None
     def run_command(self, head, body):
-        if head.startswith("NAME"):
+        if head.startswith("BEGIN"):
+            pass
+        elif head.startswith("NAME"):
             if self.name != None:
                 raise RuntimeError("Multiple names for test!")
             self.name = head[5:]
@@ -18,6 +20,12 @@ class TestCase:
             self.definitions.append({
                 "kind": "SET",
                 "var": head[4:],
+                "source": body
+            })
+        elif head.startswith("FULL_SET"):
+            self.definitions.append({
+                "kind": "FULL_SET",
+                "var": head[9:],
                 "source": body
             })
         elif head.startswith("DEFINITION"):

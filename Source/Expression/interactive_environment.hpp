@@ -50,6 +50,8 @@ namespace expression::interactive {
     expression::data::SmallScalar<std::uint64_t> const& u64() const;
     expression::data::SmallScalar<imported_type::StringHolder> const& str() const;
 
+    bool deep_compare(tree::Expression, tree::Expression) const;
+    bool deep_compare(TypedValue, TypedValue) const;
   };
 }
 
