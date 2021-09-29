@@ -12,7 +12,9 @@
 {{ test.preamble.body }}
 {%- endcall %}
 {%- endif %}
-TEST_CASE("{{ test.name }}") {
+TEST_CASE("{{ test.name }}"{% if test.tags -%}
+, "{% for tag in test.tags %}[{{tag}}]{% endfor %}"
+{%- endif %}) {
   INFO("Test case from file: {{ test.filename }}");
   auto environment = setup_enviroment();
   {%- for definition in test.definitions %}

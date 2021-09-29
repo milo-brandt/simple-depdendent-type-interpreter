@@ -9,6 +9,11 @@ class TestCase:
         self.preamble = None
         self.definitions = []
         self.body = None
+        self.tags = None
+    def add_tag(self, name):
+        if self.tags == None:
+            self.tags = []
+        self.tags.append(name)
     def run_command(self, head, body):
         if head.startswith("BEGIN"):
             pass
@@ -16,6 +21,11 @@ class TestCase:
             if self.name != None:
                 raise RuntimeError("Multiple names for test!")
             self.name = head[5:]
+        elif head.startswith("TAG"):
+            self.add_tag(head[4:])
+        elif head.startswith("HEAVY"):
+            self.add_tag(".") #hide
+            self.add_tag("heavy")
         elif head.startswith("SET"):
             self.definitions.append({
                 "kind": "SET",
@@ -60,10 +70,11 @@ jinja_env = Environment(
 test_template = jinja_env.get_template('test_generator.hpp.template')
 
 def write_test_cases(input_list, output):
+    content = test_template.render({
+        "tests": [test_case_from_file(file) for file in input_list]
+    })
     with open(output, "w") as file:
-        file.write(test_template.render({
-            "tests": [test_case_from_file(file) for file in input_list]
-        }))
+        file.write(content)
 
 if __name__ == "__main__":
     if len(sys.argv) <= 2:
