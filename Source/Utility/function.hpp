@@ -20,7 +20,7 @@ namespace mdb {
       T value;
       template<class... ConstructArgs>
       ImplSpecific(ConstructArgs&&... args):value{std::forward<ConstructArgs>(args)...}{}
-      Ret operator()(Args&&... args) { return value(std::forward<Args>(args)...); }
+      Ret operator()(Args&&... args) { return (Ret)value(std::forward<Args>(args)...); }
     };
     template<class T>
     static constexpr bool can_call = std::is_invocable_r_v<Ret, T, Args...>;

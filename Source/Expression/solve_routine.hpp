@@ -24,6 +24,13 @@ namespace expression::solver {
     std::uint64_t source_index;
     bool failed;
   };
+  struct UnconstrainablePattern {
+    std::uint64_t rule_index;
+  };
+  struct ErrorInfo {
+    std::vector<HungRoutineEquationInfo> failed_equations;
+    std::vector<UnconstrainablePattern> unconstrainable_patterns;
+  };
   class Routine {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -33,7 +40,7 @@ namespace expression::solver {
     Routine& operator=(Routine&&);
     ~Routine();
     void run();
-    std::vector<HungRoutineEquationInfo> get_hung_equations();
+    ErrorInfo get_errors();
   };
 };
 

@@ -37,9 +37,9 @@ namespace expression::interactive {
       compiler::instruction::locator::archive_root::Program instruction_locator;
       std::uint64_t rule_begin;
       std::uint64_t rule_end;
-      std::vector<solver::HungRoutineEquationInfo> remaining_equations;
+      solver::ErrorInfo error_info;
 
-      bool is_solved() const { return remaining_equations.empty(); }
+      bool is_solved() const { return error_info.failed_equations.empty() && error_info.unconstrainable_patterns.empty(); }
       std::optional<std::string_view> get_explicit_name(std::uint64_t ext_index) const {
         namespace explanation = compiler::evaluate::variable_explanation;
         if(!evaluate_result.variables.contains(ext_index)) return std::nullopt;
@@ -247,7 +247,7 @@ namespace expression::interactive {
       expression::solver::Routine solve_routine{eval_result, expression_context, solver_context};
       solve_routine.run();
       auto rule_end = expression_context.rules.size();
-      auto hung_equations = solve_routine.get_hung_equations();
+      auto hung_equations = solve_routine.get_errors();
 
       return EvaluateInfo{
         std::move(input),
@@ -373,6 +373,123 @@ namespace expression::interactive {
           output << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
         }
         output << "\n";
+        for(auto const& unconstrainable : value->error_info.unconstrainable_patterns) {
+          auto const& reason = value->evaluate_result.rule_explanations[unconstrainable.rule_index];
+          auto const& pos = value->instruction_locator[reason.index];
+          auto const& locator_index = pos.source.index;
+          auto const& locator_pos = value->parser_locator[locator_index];
+          output << "Proposed rule could not have its pattern represented in a suitable form: "; break;
+          if(locator_pos.holds_rule()) {
+            auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
+            auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
+            output << format_info_pair(
+              expression_parser::position_of(lhs_pos, value->lexer_locator),
+              expression_parser::position_of(rhs_pos, value->lexer_locator),
+              value->source
+            );
+          } else {
+            //this shouldn't happen - rules *can* come from non-rule locators, but those shouldn't ever fail.
+            auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
+            output << format_info(
+              expression_parser::position_of(pos, value->lexer_locator),
+              value->source
+            );
+          }
+        }
+        for(auto const& eq : value->error_info.failed_equations) {
+          if(eq.failed) {
+            output << red_string("False Equation: ");
+          } else {
+            output << yellow_string("Undetermined Equation: ");
+          }
+          auto depth = eq.info.primary.stack.depth();
+          auto fancy = fancy_format(*value);
+          output << fancy(eq.info.primary.lhs, depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.info.primary.rhs, depth) << "\n";
+          for(auto const& secondary_fail : eq.info.secondary_fail) {
+            auto depth = secondary_fail.stack.depth();
+            output << grey_string("Failure in sub-equation: ") << fancy(secondary_fail.lhs, depth) << " =!= " << fancy(secondary_fail.rhs, depth) << "\n";
+          }
+          for(auto const& secondary_stuck : eq.info.secondary_stuck) {
+            auto depth = secondary_stuck.stack.depth();
+            output << grey_string("Stuck in sub-equation: ") << fancy(secondary_stuck.lhs, depth) << " =!= " << fancy(secondary_stuck.rhs, depth) << "\n";
+          }
+
+          if(eq.source_kind == solver::SourceKind::cast_equation) {
+            auto const& cast = value->evaluate_result.casts[eq.source_index];
+            auto cast_var = cast.variable;
+            if(value->evaluate_result.variables.contains(cast_var)) {
+              auto const& reason = value->evaluate_result.variables.at(cast_var);
+              bool is_apply_cast = false;
+              auto reason_string = std::visit(mdb::overloaded{
+                [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { is_apply_cast = true; return "While matching RHS to domain type in application: "; },
+                [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { is_apply_cast = true; return "While matching LHS to function type in application: "; },
+                [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "While matching the type of a type family: "; },
+                [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "While matching the type of a hole: "; },
+                [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "While matching the declaration type against Type: "; },
+                [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "While matching the axiom type against Type: "; },
+                [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "While matching the let type against Type: "; },
+                [&](compiler::evaluate::variable_explanation::LetCast const&) { return "While matching the declared type of the let with the expression type: "; },
+                [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "While matching the for all type against Type: "; },
+                [&](auto const&) { return "For unknown reasons: "; }
+              }, reason);
+              auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
+                return reason.index;
+              }, reason);
+              auto const& pos = value->instruction_locator[index];
+              auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
+              auto const& locator_pos = value->parser_locator[locator_index];
+              if(is_apply_cast && locator_pos.holds_apply()) {
+                auto const& apply = locator_pos.get_apply();
+                auto const& lhs_pos = apply.lhs.visit([&](auto const& o) { return o.position; });
+                auto const& rhs_pos = apply.rhs.visit([&](auto const& o) { return o.position; });
+                output << reason_string << format_info_pair(
+                  expression_parser::position_of(lhs_pos, value->lexer_locator),
+                  expression_parser::position_of(rhs_pos, value->lexer_locator),
+                  value->source
+                );
+              } else {
+                auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+                output << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
+              }
+            } else {
+              output << "From cast #" << eq.source_index << ". Could not be located.";
+            }
+          } else if(eq.source_index != -1) {
+            auto const& reason = value->evaluate_result.rule_explanations[eq.source_index];
+            auto const& pos = value->instruction_locator[reason.index];
+            auto const& locator_index = pos.source.index;
+            auto const& locator_pos = value->parser_locator[locator_index];
+            switch(eq.source_kind) {
+              case solver::SourceKind::rule_equation:
+                output << "While checking the LHS and RHS of rule have same type: "; break;
+              case solver::SourceKind::rule_skeleton:
+                output << "While deducing relations among the capture-point skeleton of: "; break;
+              case solver::SourceKind::rule_skeleton_verify:
+                output << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
+              default:
+                output << "While doing unknown task with rule: "; break;
+            }
+            if(locator_pos.holds_rule()) {
+              auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
+              auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
+              output << format_info_pair(
+                expression_parser::position_of(lhs_pos, value->lexer_locator),
+                expression_parser::position_of(rhs_pos, value->lexer_locator),
+                value->source
+              );
+            } else {
+              //this shouldn't be reachable
+              auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
+              output << format_info(
+                expression_parser::position_of(pos, value->lexer_locator),
+                value->source
+              );
+            }
+          } else {
+            output << "Unknown source.";
+          }
+          output << "\n\n";
+        }
         auto fancy = fancy_format(*value); //get the formatters
         auto deep = deep_format(*value);
         /*
@@ -486,7 +603,30 @@ namespace expression::interactive {
         output << *error_str;
         return;
       }
-      for(auto const& eq : info().remaining_equations) {
+      for(auto const& unconstrainable : info().error_info.unconstrainable_patterns) {
+        auto const& reason = info().evaluate_result.rule_explanations[unconstrainable.rule_index];
+        auto const& pos = info().instruction_locator[reason.index];
+        auto const& locator_index = pos.source.index;
+        auto const& locator_pos = info().parser_locator[locator_index];
+        output << "Proposed rule could not have its pattern represented in a suitable form: "; break;
+        if(locator_pos.holds_rule()) {
+          auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
+          auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
+          output << format_info_pair(
+            expression_parser::position_of(lhs_pos, info().lexer_locator),
+            expression_parser::position_of(rhs_pos, info().lexer_locator),
+            info().source
+          );
+        } else {
+          //this shouldn't happen - rules *can* come from non-rule locators, but those shouldn't ever fail.
+          auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
+          output << format_info(
+            expression_parser::position_of(pos, info().lexer_locator),
+            info().source
+          );
+        }
+      }
+      for(auto const& eq : info().error_info.failed_equations) {
         if(eq.failed) {
           output << red_string("False Equation: ");
         } else {
