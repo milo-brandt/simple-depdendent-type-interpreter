@@ -237,6 +237,7 @@ int main(int argc, char** argv) {
         std::cout << "Failed to read file \"" << line.substr(5) << "\"\n";
         continue;
       } else {
+        environment = setup_enviroment(); //clean environment
         std::string total;
         std::getline(f, total, '\0'); //just read the whole file - assuming no null characters in it :P
         std::cout << "Contents of file:\n" << total << "\n";

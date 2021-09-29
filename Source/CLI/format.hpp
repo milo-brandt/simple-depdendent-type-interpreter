@@ -151,6 +151,14 @@ inline auto yellow_string(T&& inner) { //should only be used in single expressio
     }
   };
 }
+template<class T>
+inline auto grey_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << "<span style=\"color:grey;\">" << std::forward<T>(inner) << "</span>";
+    }
+  };
+}
 #else
 inline auto format_error(std::string_view substring, std::string_view full) {
   return Print {
@@ -197,6 +205,14 @@ inline auto yellow_string(T&& inner) { //should only be used in single expressio
   return Print {
     [=](std::ostream& o) {
       o << termcolor::colorize << termcolor::yellow << std::forward<T>(inner) << termcolor::reset;
+    }
+  };
+}
+template<class T>
+inline auto grey_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << termcolor::colorize << termcolor::bright_grey << std::forward<T>(inner) << termcolor::reset;
     }
   };
 }

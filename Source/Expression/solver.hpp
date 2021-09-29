@@ -6,6 +6,7 @@
 #include "stack.hpp"
 #include <memory>
 #include <unordered_set>
+#include "../Utility/async.hpp"
 
 /*
 Solving algorithm: repeatedly loop over all equations (as long as progress is being made), and apply the following steps.
@@ -72,11 +73,6 @@ handled.
 */
 
 namespace expression::solver {
-  enum class EquationResult {
-    solved,
-    undetermined,
-    failed
-  };
   struct IndeterminateContext {
     std::size_t index = 0;
   };
@@ -85,25 +81,28 @@ namespace expression::solver {
     tree::Expression lhs;
     tree::Expression rhs;
   };
+  struct SolveError {
+    std::uint64_t equation_id;
+    bool failed;
+  };
   namespace request {
     struct CreateContext {
-      using RoutineType = IndeterminateContext;
-      static constexpr bool is_primitive = true;
       std::unordered_set<std::uint64_t> indeterminates;
     };
     struct RegisterIndeterminate {
-      using RoutineType = mdb::Unit;
-      static constexpr bool is_primitive = true;
       IndeterminateContext indeterminate_context;
       std::uint64_t new_variable;
     };
     struct Solve {
-      using RoutineType = EquationResult;
-      static constexpr bool is_primitive = true;
       IndeterminateContext indeterminate_context;
       Equation equation;
     };
   }
+  struct SolveErrorInfo {
+    Equation primary;
+    std::vector<Equation> secondary_fail;
+    std::vector<Equation> secondary_stuck;
+  };
   class Solver {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -112,11 +111,12 @@ namespace expression::solver {
     Solver(Solver&&);
     Solver& operator=(Solver&&);
     ~Solver();
-    void request(request::CreateContext, mdb::function<void(IndeterminateContext)>);
-    void request(request::RegisterIndeterminate, mdb::function<void(mdb::Unit)>);
-    void request(request::Solve, mdb::function<void(EquationResult)>);
+    IndeterminateContext create_context(request::CreateContext);
+    void register_indeterminate(request::RegisterIndeterminate);
+    mdb::Future<std::optional<SolveError> > solve(request::Solve);
     bool try_to_make_progress(); //returns true if progress was made.
     void close(); //releases all routines connected to this one.
+    SolveErrorInfo get_error_info(std::uint64_t equation_id);
   };
 }
 

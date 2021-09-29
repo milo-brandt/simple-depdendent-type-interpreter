@@ -13,9 +13,13 @@ namespace expression::solver {
     rule_skeleton_verify //an equation arising from checking requested relations among capture-points
   };
   struct HungRoutineEquation {
-    tree::Expression lhs;
-    tree::Expression rhs;
-    std::uint64_t depth;
+    std::uint64_t equation_base_index;
+    SourceKind source_kind;
+    std::uint64_t source_index;
+    bool failed;
+  };
+  struct HungRoutineEquationInfo {
+    SolveErrorInfo info;
     SourceKind source_kind;
     std::uint64_t source_index;
     bool failed;
@@ -29,6 +33,7 @@ namespace expression::solver {
     Routine& operator=(Routine&&);
     ~Routine();
     void run();
+    std::vector<HungRoutineEquationInfo> get_hung_equations();
   };
 };
 

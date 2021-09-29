@@ -1,7 +1,11 @@
+#ifndef MDB_ASYNC_HPP
+#define MDB_ASYNC_HPP
+
 #include <optional>
 #include <variant>
 #include <memory>
 #include <type_traits>
+#include <vector>
 #include "function.hpp"
 
 /*
@@ -13,10 +17,10 @@
 
 namespace mdb {
   namespace detail {
-    struct PromiseEmpty{};
-    struct PromiseDone{};
     template<class T>
     struct PromiseSharedState {
+      struct PromiseEmpty{};
+      struct PromiseDone{};
       using State = std::variant<PromiseEmpty, T, mdb::function<void(T)>, PromiseDone>;
       State state;
       void set_value(T&& value) {
@@ -98,6 +102,8 @@ namespace mdb {
     void set_listener(mdb::function<void(T)> func) { shared_state->set_listener(std::move(func)); }
     bool is_ready() const { return shared_state->is_ready(); }
     T take() && { return shared_state->take(); }
+    template<class F, class R = std::invoke_result_t<F, T> >
+    Future<R> then(F map);
   };
   template<class T>
   struct PromiseFuturePair {
@@ -114,10 +120,11 @@ namespace mdb {
       .future = std::move(future)
     };
   }
-  template<class T, class F, class R = std::invoke_result_t<F, T> >
-  Future<R> map(Future<T> future, F map) {
+  template<class T>
+  template<class F, class R>
+  Future<R> Future<T>::then(F map) {
     auto [new_promise, new_future] = create_promise_future_pair<R>();
-    future.set_listener([new_promise = std::move(new_promise), map = std::move(map)](T value) mutable {
+    std::move(*this).listen([new_promise = std::move(new_promise), map = std::move(map)](T value) mutable {
       new_promise.set_value(std::move(map)(std::move(value)));
     });
     return std::move(new_future);
@@ -146,7 +153,7 @@ namespace mdb {
       };
       auto shared = std::make_shared<SharedState>(std::move(promise));
       std::apply([&](std::optional<T>&... values) {
-        (futures.set_listener([shared, &value = values](T v) mutable {
+        (std::move(futures).listen([shared, &value = values](T v) mutable {
           value = std::move(v);
           shared->decrement();
         }) , ...);
@@ -154,4 +161,41 @@ namespace mdb {
     }
     return std::move(future);
   }
+  template<class T>
+  Future<std::vector<T> > collect(std::vector<Future<T> > futures) {
+    auto [promise, future] = create_promise_future_pair<std::vector<T> >();
+    if(futures.empty()) {
+      promise.set_value(std::vector<T>{});
+    } else {
+      struct SharedState {
+        std::uint64_t count_left;
+        Promise<std::vector<T> > promise;
+        std::vector<std::optional<T> > values;
+        SharedState(std::uint64_t count, Promise<std::vector<T> > promise):count_left(count), promise(std::move(promise)), values(count, std::optional<T>{}) {}
+        void finish() {
+          std::vector<T> vec;
+          vec.reserve(values.size());
+          for(auto& value : values) {
+            vec.push_back(std::move(*value));
+          }
+          promise.set_value(std::move(vec));
+        }
+        void decrement() {
+          if(--count_left == 0) {
+            finish();
+          }
+        }
+      };
+      auto shared = std::make_shared<SharedState>(futures.size(), std::move(promise));
+      for(std::size_t i = 0; i < futures.size(); ++i) {
+        std::move(futures[i]).listen([shared, i](T v) {
+          shared->values[i] = std::move(v);
+          shared->decrement();
+        });
+      }
+    }
+    return std::move(future);
+  }
 }
+
+#endif
