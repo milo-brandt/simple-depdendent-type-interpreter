@@ -15,22 +15,7 @@
 #include <map>
 
 namespace expression::interactive {
-  struct Environment::Impl {
-    expression::Context expression_context;
-    expression::data::SmallScalar<std::uint64_t> u64;
-    expression::data::SmallScalar<imported_type::StringHolder> str;
-    std::unordered_map<std::string, TypedValue> names_to_values;
-    std::unordered_map<std::uint64_t, std::string> externals_to_names;
-    void name_external(std::string name, std::uint64_t ext) {
-      externals_to_names.insert(std::make_pair(ext, name));
-      names_to_values.insert(std::make_pair(name, expression_context.get_external(ext)));
-    }
-    Impl():u64(expression_context), str(expression_context) {
-      name_external("Type", expression_context.primitives.type);
-      name_external("arrow", expression_context.primitives.arrow);
-      name_external("U64", u64.get_type_axiom());
-      name_external("String", str.get_type_axiom());
-    }
+  namespace {
     struct BaseInfo {
       std::string_view source;
     };
@@ -129,6 +114,23 @@ namespace expression::interactive {
         return values;
       }
     };
+  }
+  struct Environment::Impl {
+    expression::Context expression_context;
+    expression::data::SmallScalar<std::uint64_t> u64;
+    expression::data::SmallScalar<imported_type::StringHolder> str;
+    std::unordered_map<std::string, TypedValue> names_to_values;
+    std::unordered_map<std::uint64_t, std::string> externals_to_names;
+    void name_external(std::string name, std::uint64_t ext) {
+      externals_to_names.insert(std::make_pair(ext, name));
+      names_to_values.insert(std::make_pair(name, expression_context.get_external(ext)));
+    }
+    Impl():u64(expression_context), str(expression_context) {
+      name_external("Type", expression_context.primitives.type);
+      name_external("arrow", expression_context.primitives.arrow);
+      name_external("U64", u64.get_type_axiom());
+      name_external("String", str.get_type_axiom());
+    }
     mdb::Result<LexInfo, std::string> lex_code(BaseInfo input) {
       expression_parser::LexerInfo lexer_info {
         .symbol_map = {
@@ -388,99 +390,7 @@ namespace expression::interactive {
         }
         output << "\n";
         */
-        for(auto const& eq : value->remaining_equations) {
-          if(eq.failed) {
-            output << red_string("False Equation: ");
-          } else {
-            output << yellow_string("Undetermined Equation: ");
-          }
-          auto depth = eq.info.primary.stack.depth();
-          output << fancy(eq.info.primary.lhs, depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.info.primary.rhs, depth) << "\n";
-          for(auto const& secondary_fail : eq.info.secondary_fail) {
-            auto depth = secondary_fail.stack.depth();
-            output << grey_string("Failure in sub-equation: ") << fancy(secondary_fail.lhs, depth) << " =!= " << fancy(secondary_fail.rhs, depth) << "\n";
-          }
-          for(auto const& secondary_stuck : eq.info.secondary_stuck) {
-            auto depth = secondary_stuck.stack.depth();
-            output << grey_string("Stuck in sub-equation: ") << fancy(secondary_stuck.lhs, depth) << " =!= " << fancy(secondary_stuck.rhs, depth) << "\n";
-          }
 
-          if(eq.source_kind == solver::SourceKind::cast_equation) {
-            auto const& cast = value->evaluate_result.casts[eq.source_index];
-            auto cast_var = cast.variable;
-            if(value->evaluate_result.variables.contains(cast_var)) {
-              auto const& reason = value->evaluate_result.variables.at(cast_var);
-              bool is_apply_cast = false;
-              auto reason_string = std::visit(mdb::overloaded{
-                [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { is_apply_cast = true; return "While matching RHS to domain type in application: "; },
-                [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { is_apply_cast = true; return "While matching LHS to function type in application: "; },
-                [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "While matching the type of a type family: "; },
-                [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "While matching the type of a hole: "; },
-                [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "While matching the declaration type against Type: "; },
-                [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "While matching the axiom type against Type: "; },
-                [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "While matching the let type against Type: "; },
-                [&](compiler::evaluate::variable_explanation::LetCast const&) { return "While matching the declared type of the let with the expression type: "; },
-                [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "While matching the for all type against Type: "; },
-                [&](auto const&) { return "For unknown reasons: "; }
-              }, reason);
-              auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
-                return reason.index;
-              }, reason);
-              auto const& pos = value->instruction_locator[index];
-              auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
-              auto const& locator_pos = value->parser_locator[locator_index];
-              if(is_apply_cast && locator_pos.holds_apply()) {
-                auto const& apply = locator_pos.get_apply();
-                auto const& lhs_pos = apply.lhs.visit([&](auto const& o) { return o.position; });
-                auto const& rhs_pos = apply.rhs.visit([&](auto const& o) { return o.position; });
-                output << reason_string << format_info_pair(
-                  expression_parser::position_of(lhs_pos, value->lexer_locator),
-                  expression_parser::position_of(rhs_pos, value->lexer_locator),
-                  value->source
-                );
-              } else {
-                auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-                output << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
-              }
-            } else {
-              output << "From cast #" << eq.source_index << ". Could not be located.";
-            }
-          } else if(eq.source_index != -1) {
-            auto const& reason = value->evaluate_result.rule_explanations[eq.source_index];
-            auto const& pos = value->instruction_locator[reason.index];
-            auto const& locator_index = pos.source.index;
-            auto const& locator_pos = value->parser_locator[locator_index];
-            switch(eq.source_kind) {
-              case solver::SourceKind::rule_equation:
-                output << "While checking the LHS and RHS of rule have same type: "; break;
-              case solver::SourceKind::rule_skeleton:
-                output << "While deducing relations among the capture-point skeleton of: "; break;
-              case solver::SourceKind::rule_skeleton_verify:
-                output << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
-              default:
-                output << "While doing unknown task with rule: "; break;
-            }
-            if(locator_pos.holds_rule()) {
-              auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
-              auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
-              output << format_info_pair(
-                expression_parser::position_of(lhs_pos, value->lexer_locator),
-                expression_parser::position_of(rhs_pos, value->lexer_locator),
-                value->source
-              );
-            } else {
-              //this shouldn't be reachable
-              auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
-              output << format_info(
-                expression_parser::position_of(pos, value->lexer_locator),
-                value->source
-              );
-            }
-          } else {
-            output << "Unknown source.";
-          }
-          output << "\n\n";
-        }
         //throw new variables into context
         for(auto const& entry : value->get_outer_values()) {
           //output << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
@@ -498,6 +408,7 @@ namespace expression::interactive {
         output << compile.get_error() << "\n";
       }
     }
+    ParseResult parse(std::string_view expr);
   };
 
   Environment::Environment():impl(std::make_unique<Impl>()) {}
@@ -520,10 +431,162 @@ namespace expression::interactive {
   void Environment::debug_parse(std::string_view str, std::ostream& output) {
     return impl->debug_parse(str, output);
   }
+  ParseResult Environment::parse(std::string_view str) {
+    return impl->parse(str);
+  }
   void Environment::name_external(std::string name, std::uint64_t external) {
     return impl->name_external(std::move(name), external);
   }
   Context& Environment::context() { return impl->expression_context; }
   expression::data::SmallScalar<std::uint64_t> const& Environment::u64() const { return impl->u64; }
   expression::data::SmallScalar<imported_type::StringHolder> const& Environment::str() const { return impl->str; }
+
+  struct ParseResult::Impl {
+    Environment::Impl* environment;
+    std::variant<std::string, EvaluateInfo> data;
+    bool has_result() const {
+      return data.index() == 1;
+    }
+    EvaluateInfo& info() { return std::get<1>(data); }
+    EvaluateInfo const& info() const { return std::get<1>(data); }
+    bool is_fully_solved() const {
+      return has_result() && info().is_solved();
+    }
+    TypedValue const& get_result() const {
+      return info().evaluate_result.result;
+    }
+    TypedValue get_reduced_result() const {
+      return {
+        .value = environment->expression_context.reduce(get_result().value),
+        .type = environment->expression_context.reduce(get_result().type)
+      };
+    }
+    void print_errors_to(std::ostream& output) const {
+      if(auto* error_str = std::get_if<0>(&data)) {
+        output << *error_str;
+        return;
+      }
+      for(auto const& eq : info().remaining_equations) {
+        if(eq.failed) {
+          output << red_string("False Equation: ");
+        } else {
+          output << yellow_string("Undetermined Equation: ");
+        }
+        auto depth = eq.info.primary.stack.depth();
+        auto fancy = environment->fancy_format(info());
+        output << fancy(eq.info.primary.lhs, depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.info.primary.rhs, depth) << "\n";
+        for(auto const& secondary_fail : eq.info.secondary_fail) {
+          auto depth = secondary_fail.stack.depth();
+          output << grey_string("Failure in sub-equation: ") << fancy(secondary_fail.lhs, depth) << " =!= " << fancy(secondary_fail.rhs, depth) << "\n";
+        }
+        for(auto const& secondary_stuck : eq.info.secondary_stuck) {
+          auto depth = secondary_stuck.stack.depth();
+          output << grey_string("Stuck in sub-equation: ") << fancy(secondary_stuck.lhs, depth) << " =!= " << fancy(secondary_stuck.rhs, depth) << "\n";
+        }
+
+        if(eq.source_kind == solver::SourceKind::cast_equation) {
+          auto const& cast = info().evaluate_result.casts[eq.source_index];
+          auto cast_var = cast.variable;
+          if(info().evaluate_result.variables.contains(cast_var)) {
+            auto const& reason = info().evaluate_result.variables.at(cast_var);
+            bool is_apply_cast = false;
+            auto reason_string = std::visit(mdb::overloaded{
+              [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { is_apply_cast = true; return "While matching RHS to domain type in application: "; },
+              [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { is_apply_cast = true; return "While matching LHS to function type in application: "; },
+              [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "While matching the type of a type family: "; },
+              [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "While matching the type of a hole: "; },
+              [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "While matching the declaration type against Type: "; },
+              [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "While matching the axiom type against Type: "; },
+              [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "While matching the let type against Type: "; },
+              [&](compiler::evaluate::variable_explanation::LetCast const&) { return "While matching the declared type of the let with the expression type: "; },
+              [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "While matching the for all type against Type: "; },
+              [&](auto const&) { return "For unknown reasons: "; }
+            }, reason);
+            auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
+              return reason.index;
+            }, reason);
+            auto const& pos = info().instruction_locator[index];
+            auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
+            auto const& locator_pos = info().parser_locator[locator_index];
+            if(is_apply_cast && locator_pos.holds_apply()) {
+              auto const& apply = locator_pos.get_apply();
+              auto const& lhs_pos = apply.lhs.visit([&](auto const& o) { return o.position; });
+              auto const& rhs_pos = apply.rhs.visit([&](auto const& o) { return o.position; });
+              output << reason_string << format_info_pair(
+                expression_parser::position_of(lhs_pos, info().lexer_locator),
+                expression_parser::position_of(rhs_pos, info().lexer_locator),
+                info().source
+              );
+            } else {
+              auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+              output << reason_string << format_info(expression_parser::position_of(str_pos, info().lexer_locator), info().source);
+            }
+          } else {
+            output << "From cast #" << eq.source_index << ". Could not be located.";
+          }
+        } else if(eq.source_index != -1) {
+          auto const& reason = info().evaluate_result.rule_explanations[eq.source_index];
+          auto const& pos = info().instruction_locator[reason.index];
+          auto const& locator_index = pos.source.index;
+          auto const& locator_pos = info().parser_locator[locator_index];
+          switch(eq.source_kind) {
+            case solver::SourceKind::rule_equation:
+              output << "While checking the LHS and RHS of rule have same type: "; break;
+            case solver::SourceKind::rule_skeleton:
+              output << "While deducing relations among the capture-point skeleton of: "; break;
+            case solver::SourceKind::rule_skeleton_verify:
+              output << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
+            default:
+              output << "While doing unknown task with rule: "; break;
+          }
+          if(locator_pos.holds_rule()) {
+            auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
+            auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
+            output << format_info_pair(
+              expression_parser::position_of(lhs_pos, info().lexer_locator),
+              expression_parser::position_of(rhs_pos, info().lexer_locator),
+              info().source
+            );
+          } else {
+            //this shouldn't be reachable
+            auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
+            output << format_info(
+              expression_parser::position_of(pos, info().lexer_locator),
+              info().source
+            );
+          }
+        } else {
+          output << "Unknown source.";
+        }
+        output << "\n\n";
+      }
+    }
+    void print_value(std::ostream& output, tree::Expression value) {
+      auto fancy = environment->fancy_format(info());
+      output << fancy(value);
+    }
+  };
+  ParseResult Environment::Impl::parse(std::string_view expr) {
+    auto compile = full_compile(expr);
+    if(auto* value = compile.get_if_value()) {
+      return ParseResult{std::unique_ptr<ParseResult::Impl>{new ParseResult::Impl{
+        .environment = this,
+        .data = std::move(*value)
+      }}};
+    } else {
+      return ParseResult{std::unique_ptr<ParseResult::Impl>{new ParseResult::Impl{
+        .environment = this,
+        .data = std::move(compile.get_error())
+      }}};
+    }
+  }
+  ParseResult::ParseResult(std::unique_ptr<Impl> impl):impl(std::move(impl)) {}
+  ParseResult::ParseResult(ParseResult&&) = default;
+  ParseResult& ParseResult::operator=(ParseResult&&) = default;
+  ParseResult::~ParseResult() = default;
+  bool ParseResult::has_result() const { return impl->has_result(); }
+  bool ParseResult::is_fully_solved() const { return impl->is_fully_solved(); }
+  TypedValue const& ParseResult::get_result() const { return impl->get_result(); }
+  TypedValue ParseResult::get_reduced_result() const { return impl->get_reduced_result(); }
+  void ParseResult::print_errors_to(std::ostream& output) const{ return impl->print_errors_to(output); }
 }

@@ -1,4 +1,4 @@
-#include "../ExpressionParser/expression_parser.hpp"
+#include "../ExpressionParser/expression_generator.hpp"
 #include <catch.hpp>
 
 using namespace expression_parser;
@@ -6,7 +6,7 @@ using namespace expression_parser;
 TEST_CASE("The expression parser matches various expressions.") {
   struct Test {
     std::string_view str;
-    output::Tree expected_tree;
+    output::Expression expected_tree;
   };
   Test test_cases[] = {
     {
@@ -90,19 +90,43 @@ TEST_CASE("The expression parser matches various expressions.") {
   };
   auto format_stream = mdb::overloaded{
     [](auto& o, std::optional<std::string_view> const& v) { if(v) o << "\"" << *v << "\""; else o << "none"; },
-    [](auto& o, std::string_view const& v) { o << "\"" << v << "\""; }
+    [](auto& o, std::string_view const& v) { o << "\"" << v << "\""; },
+    [](auto& o, auto&&) { o << "???"; }
+  };
+  expression_parser::LexerInfo lexer_info {
+    .symbol_map = {
+      {"block", 0},
+      {"declare", 1},
+      {"axiom", 2},
+      {"rule", 3},
+      {"let", 4},
+      {"->", 5},
+      {":", 6},
+      {";", 7},
+      {"=", 8},
+      {"\\", 9},
+      {"\\\\", 10},
+      {".", 11},
+      {"_", 12},
+      {",", 13}
+    }
   };
   for(auto const& test : test_cases) {
     INFO("String: \"" << test.str << "\"");
-    INFO("Expected tree: " << (output::FormatTree{test.expected_tree, format_stream}));
+    INFO("Expected tree: " << format(test.expected_tree, format_stream));
 
-    auto ret = expression_parser::parser::expression(test.str);
-    if(auto* error = expression_parser::parser::get_if_error(&ret)) {
-      FAIL("Failed to parse: " << error->error << "\nAt char: " << (error->position.begin() - test.str.begin()));
+    auto lex = expression_parser::lex_string(test.str, lexer_info);
+    if(auto* err = lex.get_if_error()) {
+      FAIL("Lex Error: " << err->message << "\nAt: " << err->position);
+    }
+    auto lex_out = archive(lex.get_value().output);
+    auto ret = expression_parser::parse_lexed(lex_out.root());
+    if(auto* error = ret.get_if_error()) {
+      FAIL("Failed to parse: " << error->message); //TODO: trace back through lexer
     } else {
-      auto& success = get_success(ret);
-      INFO("Received tree: " << (output::FormatTree{success.value.output, format_stream}));
-      REQUIRE(success.value.output == test.expected_tree);
+      auto& success = ret.get_value();
+      INFO("Received tree: " << format(success.output, format_stream));
+      REQUIRE(success.output == test.expected_tree);
     }
   }
 }

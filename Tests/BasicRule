@@ -1,5 +1,0 @@
-block {
-  declare f : Type -> Type;
-  f x = x;
-  f Type
-}

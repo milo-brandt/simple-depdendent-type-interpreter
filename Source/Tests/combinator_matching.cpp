@@ -41,7 +41,7 @@ TEST_CASE("Matches are correctly identified."){
 }
 
 TEST_CASE("Matches can be found in larger expressions.") {
-  auto term = Apply{
+  Expression term = Apply{
     Apply{
       External{0},
       External{1}
@@ -60,8 +60,8 @@ TEST_CASE("Matches can be found in larger expressions.") {
   auto matches = find_all_matches(term, pattern_1);
 
   REQUIRE(matches.size() == 2);
-  REQUIRE(matches[0].steps == path_of(&Apply::lhs).steps);
-  REQUIRE(matches[1].steps == path_of(&Apply::rhs).steps);
+  REQUIRE(matches[0] == &term.get_apply().lhs);
+  REQUIRE(matches[1] == &term.get_apply().rhs);
 
   auto pattern_2 = pattern::Apply{
     pattern::Wildcard{},
@@ -71,9 +71,9 @@ TEST_CASE("Matches can be found in larger expressions.") {
   matches = find_all_matches(term, pattern_2);
 
   REQUIRE(matches.size() == 3);
-  REQUIRE(matches[0].steps == path_of().steps);
-  REQUIRE(matches[1].steps == path_of(&Apply::lhs).steps);
-  REQUIRE(matches[2].steps == path_of(&Apply::rhs).steps);
+  REQUIRE(matches[0] == &term);
+  REQUIRE(matches[1] == &term.get_apply().lhs);
+  REQUIRE(matches[2] == &term.get_apply().rhs);
 
   auto pattern_3 = pattern::Apply{
     pattern::Wildcard{},
@@ -83,7 +83,7 @@ TEST_CASE("Matches can be found in larger expressions.") {
   matches = find_all_matches(term, pattern_3);
 
   REQUIRE(matches.size() == 1);
-  REQUIRE(matches[0].steps == path_of(&Apply::rhs).steps);
+  REQUIRE(matches[0] == &term.get_apply().rhs);
 
   auto pattern_4 = pattern::Apply{
     pattern::Wildcard{},
@@ -145,7 +145,7 @@ TEST_CASE("Substitution into replacements works properly.") {
     }
   };
 
-  std::vector<Tree> captures = {
+  std::vector<Expression> captures = {
     Apply{
       External{10},
       External{11}
@@ -175,7 +175,7 @@ TEST_CASE("Substitution into replacements works properly.") {
 
 TEST_CASE("Pattern matching and substituting into deep replacements works properly.") {
 
-  Tree term = Apply{
+  Expression term = Apply{
     Apply{
       Apply{
         External{10},
@@ -202,7 +202,7 @@ TEST_CASE("Pattern matching and substituting into deep replacements works proper
     pattern::Wildcard{}
   };
 
-  replace_with_substitution_at(term, path_of(&Apply::lhs), pattern, replacement);
+  replace_with_substitution_at(&term.get_apply().lhs, pattern, replacement);
 
   REQUIRE(term == Apply{
     Apply{

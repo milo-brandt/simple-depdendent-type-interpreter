@@ -1,3 +1,6 @@
+# TEST NAME A simple dependent pattern is accepted and computes.
+# TEST SET expr
+
 block {
   axiom Wrap : Type -> Type;
   axiom wrap : (T : Type) -> T -> Wrap T;
@@ -7,3 +10,11 @@ block {
 
   unwrap U64 (wrap U64 17)
 }
+
+# TEST SET simple
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == simple);

@@ -1,5 +1,6 @@
 Build/**
 Debug/**
+DebugTest/**
 EmscriptenBuild/**
 WebBuild/**
 Dependencies/**

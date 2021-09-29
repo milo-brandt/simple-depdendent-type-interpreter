@@ -312,7 +312,6 @@ namespace expression::solver {
     }
     void run() {
       while(step());
-      std::cout << "Done.\n";
       solver.close();
       close();
     }

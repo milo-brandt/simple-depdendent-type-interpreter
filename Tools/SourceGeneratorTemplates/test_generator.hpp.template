@@ -1,0 +1,38 @@
+/*
+  This file contains automatically generated tests.
+*/
+
+#include <catch.hpp>
+#include <sstream>
+#include "test_utility.hpp"
+
+{%- macro test_case(test) %}
+{%- if test.preamble %}
+{%- call in_namespace(test.preamble.namespace) %}
+{{ test.preamble.body }}
+{%- endcall %}
+{%- endif %}
+TEST_CASE("{{ test.name }}") {
+  INFO("Test case from file: {{ test.filename }}");
+  auto environment = setup_enviroment();
+  {%- for definition in test.definitions %}
+  {%- if definition.kind == "SET" %}
+  auto {{definition.var}}_full = environment.parse(R"#--#({{ definition.source }})#--#");
+  if(!{{definition.var}}_full.is_fully_solved()) {
+    std::stringstream error_message;
+    {{definition.var}}_full.print_errors_to(error_message);
+    INFO(error_message.str())
+    FAIL("Failed while compiling variable {{definition.var}}");
+  }
+  expression::TypedValue {{definition.var}} = {{definition.var}}_full.get_reduced_result();
+  {%- else %}
+  static_assert(false, "The source code generator did something wrong.")
+  {%- endif %}
+  {%- endfor %}
+  {{ test.body }}
+}
+{%- endmacro %}
+
+{%- for test in tests %}
+{{ test_case(test) }}
+{%- endfor %}

@@ -196,7 +196,6 @@ def parse_template_output(output, filebase):
             command_index = int(output[command_pos:command_end])
             commands_used[command_index].act(context)
             context.position = command_end + 3
-    print(context.output_pieces)
     return { extension:piece.take_content(filebase, extension, context) for (extension, piece) in context.output_pieces.items()}
 
 tree_template = jinja_env.get_template('tree.hpp.template')
@@ -504,10 +503,17 @@ def process_file(path_to_file):
         for (filename, writer) in context.outputs.items():
             outputs = parse_template_output("\n".join(writer.outputs), filename)
             for (extension, content) in outputs.items():
-                with open(filename + "." + extension, "w") as file:
-                    print("Writing: " + filename + "." + extension)
+                true_filename = filename + "." + extension
+                if os.path.exists(true_filename):
+                    with open(true_filename) as file:
+                        body = file.read()
+                        if content == body:
+                            print(true_filename + " is up to date. No changes made.")
+                            continue
+                with open(true_filename, "w") as file:
+                    print("Writing: " + true_filename)
                     file.write(content)
-                    files_written.append(filename + "." + extension)
+                    files_written.append(true_filename)
     return files_written
 
 

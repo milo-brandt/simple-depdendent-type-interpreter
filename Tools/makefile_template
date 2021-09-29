@@ -16,6 +16,13 @@ emcc_compiler = em++
 debug: Debug/program
 	gdb Debug/program -x Tools/gdb_init
 
+.PHONY: debug_test
+debug_test: DebugTest/program
+	gdb DebugTest/program -x Tools/gdb_init
+
+Source/Tests/full_cases_impl.cpp:{% for file in test_cases %} {{file}}{% endfor %}
+	python3 Tools/test_generator.py Source/Tests/full_cases_impl.cpp{% for file in test_cases %} {{file}}{% endfor %}
+
 WebBuild: EmscriptenBuild/index.js $(shell find Web -type f | sed 's/ /\\ /g')
 	rm -r -f WebBuildTmp
 	mkdir WebBuildTmp
