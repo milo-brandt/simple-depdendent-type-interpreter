@@ -13,7 +13,6 @@ void debug_print_rule(expression::Rule const& rule) {
 }
 
 expression::interactive::Environment setup_enviroment() {
-  //I suspect there are some dangling references here...
   expression::interactive::Environment environment;
   auto const& u64 = environment.u64();
   auto const& str = environment.str();

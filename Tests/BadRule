@@ -1,0 +1,6 @@
+# Shouldn't be accepted (but must not crash!)
+block {
+  declare f : U64 -> Type;
+  f U64 = 5;
+  f
+}

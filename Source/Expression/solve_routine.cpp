@@ -137,10 +137,6 @@ namespace expression::solver {
       return std::nullopt;
     }
     auto rule_routine(std::uint64_t index, compiler::evaluate::Rule rule) {
-      struct RuleInfo {
-        compiler::pattern::ConstrainedPattern pattern;
-        compiler::evaluate::PatternEvaluateResult evaluated;
-      };
       solver.solve({
         .equation = Equation{rule.stack, rule.pattern_type, rule.replacement_type}}
       ).listen([this, rule = std::move(rule), index](std::optional<SolveError> error) {
@@ -308,10 +304,17 @@ namespace expression::solver {
     bool step() {
       return examine_solvers() | examine_constrained_patterns();
     }
+    void close() {
+      mdb::erase_from_active_queue(waiting_constrained_patterns, [&](auto& waiting) {
+        waiting.promise.set_value(std::nullopt);
+        return true;
+      });
+    }
     void run() {
       while(step());
       std::cout << "Done.\n";
       solver.close();
+      close();
     }
   };
   Routine::Routine(compiler::evaluate::EvaluateResult& input, expression::Context& expression_context, StandardSolverContext solver_context):impl(std::make_unique<Impl>(input, expression_context, std::move(solver_context))) {}
