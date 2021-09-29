@@ -29,11 +29,23 @@ TEST_CASE("{{ test.name }}"{% if test.tags -%}
   expression::TypedValue {{definition.var}} = {{definition.var}}_full.get_reduced_result();
   {%- elif definition.kind == "FULL_SET" %}
   auto {{definition.var}} = environment.parse(R"#--#({{ definition.source }})#--#");
+  {%- elif definition.kind == "MUST_COMPILE" %}
+  {
+    auto must_compile_result = environment.parse(R"#--#({{ definition.source }})#--#");
+    if(!must_compile_result.is_fully_solved()) {
+      std::stringstream error_message;
+      must_compile_result.print_errors_to(error_message);
+      INFO(error_message.str())
+      FAIL("Failed while compiling.");
+    }
+  }
   {%- else %}
   static_assert(false, "The source code generator did something wrong.")
   {%- endif %}
   {%- endfor %}
+  {%- if test.body %}
   {{ test.body }}
+  {%- endif %}
 }
 {%- endmacro %}
 

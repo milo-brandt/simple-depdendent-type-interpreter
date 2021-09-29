@@ -378,7 +378,7 @@ namespace expression::interactive {
           auto const& pos = value->instruction_locator[reason.index];
           auto const& locator_index = pos.source.index;
           auto const& locator_pos = value->parser_locator[locator_index];
-          output << "Proposed rule could not have its pattern represented in a suitable form: "; break;
+          output << "Proposed rule could not have its pattern represented in a suitable form: ";
           if(locator_pos.holds_rule()) {
             auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
             auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
@@ -395,6 +395,7 @@ namespace expression::interactive {
               value->source
             );
           }
+          output << "\n";
         }
         for(auto const& eq : value->error_info.failed_equations) {
           if(eq.failed) {
@@ -608,7 +609,7 @@ namespace expression::interactive {
         auto const& pos = info().instruction_locator[reason.index];
         auto const& locator_index = pos.source.index;
         auto const& locator_pos = info().parser_locator[locator_index];
-        output << "Proposed rule could not have its pattern represented in a suitable form: "; break;
+        output << "Proposed rule could not have its pattern represented in a suitable form: ";
         if(locator_pos.holds_rule()) {
           auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
           auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
@@ -625,6 +626,7 @@ namespace expression::interactive {
             info().source
           );
         }
+        output << "\n";
       }
       for(auto const& eq : info().error_info.failed_equations) {
         if(eq.failed) {

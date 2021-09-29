@@ -38,6 +38,11 @@ class TestCase:
                 "var": head[9:],
                 "source": body
             })
+        elif head.startswith("MUST_COMPILE"):
+            self.definitions.append({
+                "kind": "MUST_COMPILE",
+                "source": body
+            })
         elif head.startswith("DEFINITION"):
             if self.body != None:
                 raise RuntimeError("Multiple definition bodies for test!")

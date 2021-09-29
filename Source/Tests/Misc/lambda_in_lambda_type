@@ -1,0 +1,8 @@
+# TEST BEGIN
+# TEST NAME Lambdas can have lambdas as part of their explicit type specification.
+# TEST MUST_COMPILE
+
+block {
+  axiom Weird : (Type -> Type) -> Type;
+  \x:Weird \y.Type.7
+}
