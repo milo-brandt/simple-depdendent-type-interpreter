@@ -302,7 +302,7 @@ namespace expression::solver {
       }
     }
     bool examine_equation(std::uint64_t index) {
-      auto& info = equations[index];
+      auto info = std::move(equations[index]); //move the equation *out* of the stack - so it can't move
       if(info.handled || info.failed) std::terminate(); //precondition
       auto lhs = context.simplify(std::move(info.equation.lhs));
       auto rhs = context.simplify(std::move(info.equation.rhs));
@@ -318,6 +318,7 @@ namespace expression::solver {
         &Impl::try_to_judge_equal)
       );
       auto& info_final = equations[index]; //Vector might move!!!
+      info_final = std::move(info); //move it back
       info_final.equation.lhs = std::move(lhs.expression);
       info_final.equation.rhs = std::move(rhs.expression);
       if(ret == AttemptResult::handled) {
