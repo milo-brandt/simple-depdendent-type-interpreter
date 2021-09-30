@@ -16,6 +16,17 @@ namespace compiler::evaluate {
     expression::tree::Expression source;
     expression::tree::Expression target_type;
   };
+  struct FunctionCast {
+    expression::Stack stack;
+    std::uint64_t function_variable;
+    std::uint64_t argument_variable;
+    expression::tree::Expression function_value;
+    expression::tree::Expression function_type;
+    expression::tree::Expression expected_function_type;
+    expression::tree::Expression argument_value;
+    expression::tree::Expression argument_type;
+    expression::tree::Expression expected_argument_type;
+  };
   struct Rule {
     expression::Stack stack;
     expression::tree::Expression pattern_type;
@@ -29,6 +40,10 @@ namespace compiler::evaluate {
   namespace variable_explanation {
     namespace archive_index = instruction::archive_index;
     struct ApplyRHSCast {
+      std::uint64_t depth;
+      archive_index::Apply index;
+    };
+    struct ApplyDomain {
       std::uint64_t depth;
       archive_index::Apply index;
     };
@@ -85,10 +100,10 @@ namespace compiler::evaluate {
       std::uint64_t base_variable;
       archive_index::PolymorphicKind index;
     };
-    using Any = std::variant<ApplyRHSCast, ApplyCodomain, ApplyLHSCast, ExplicitHole, Declaration, Axiom, TypeFamilyCast, HoleTypeCast, DeclareTypeCast, AxiomTypeCast, LetCast, LetTypeCast, ForAllTypeCast, VarType>;
+    using Any = std::variant<ApplyRHSCast, ApplyDomain, ApplyCodomain, ApplyLHSCast, ExplicitHole, Declaration, Axiom, TypeFamilyCast, HoleTypeCast, DeclareTypeCast, AxiomTypeCast, LetCast, LetTypeCast, ForAllTypeCast, VarType>;
     inline bool is_axiom(Any const& any) { return std::holds_alternative<Axiom>(any); }
     inline bool is_declaration(Any const& any) { return std::holds_alternative<Declaration>(any); }
-    inline bool is_variable(Any const& any) { return std::holds_alternative<ApplyCodomain>(any) || std::holds_alternative<ExplicitHole>(any); }
+    inline bool is_variable(Any const& any) { return std::holds_alternative<ApplyDomain>(any) || std::holds_alternative<ApplyCodomain>(any) || std::holds_alternative<ExplicitHole>(any); }
     inline bool is_indeterminate(Any const& any) { return !is_axiom(any) && !is_declaration(any); }
   };
   namespace pattern_variable_explanation {
@@ -108,6 +123,7 @@ namespace compiler::evaluate {
   struct EvaluateResult {
     std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
     std::vector<Cast> casts;
+    std::vector<FunctionCast> function_casts;
     std::vector<Rule> rules;
     std::vector<RuleExplanation> rule_explanations;
     expression::TypedValue result;

@@ -467,9 +467,20 @@ namespace expression::interactive {
           output << grey_string("Stuck in sub-equation: ") << fancy(secondary_stuck.lhs, depth) << " =!= " << fancy(secondary_stuck.rhs, depth) << "\n";
         }
 
-        if(eq.source_kind == solver::SourceKind::cast_equation) {
-          auto const& cast = info().evaluate_result.casts[eq.source_index];
-          auto cast_var = cast.variable;
+        if(eq.source_kind == solver::SourceKind::cast_equation || eq.source_kind == solver::SourceKind::cast_function_lhs || eq.source_kind == solver::SourceKind::cast_function_rhs) {
+          auto cast_var = [&] {
+            if(eq.source_kind == solver::SourceKind::cast_equation) {
+              auto const& cast = info().evaluate_result.casts[eq.source_index];
+              return cast.variable;
+            } else {
+              auto const& func_cast = info().evaluate_result.function_casts[eq.source_index];
+              if(eq.source_kind == solver::SourceKind::cast_function_lhs) {
+                return func_cast.function_variable;
+              } else {
+                return func_cast.argument_variable;
+              }
+            }
+          }();
           if(info().evaluate_result.variables.contains(cast_var)) {
             auto const& reason = info().evaluate_result.variables.at(cast_var);
             bool is_apply_cast = false;
@@ -590,6 +601,7 @@ namespace expression::interactive {
         output << std::visit(mdb::overloaded{
           [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
           [&](compiler::evaluate::variable_explanation::ApplyCodomain const&) { return "ApplyCodomain: "; },
+          [&](compiler::evaluate::variable_explanation::ApplyDomain const&) { return "ApplyDomain: "; },
           [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "ApplyLHSCast: "; },
           [&](compiler::evaluate::variable_explanation::ExplicitHole const&) { return "ExplicitHole: "; },
           [&](compiler::evaluate::variable_explanation::Declaration const&) { return "Declaration: "; },

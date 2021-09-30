@@ -23,7 +23,7 @@ debug_test: DebugTest/program
 
 .PHONY: test
 test: Test/program
-	gdb Test/program -x Tools/gdb_init
+	Test/program
 
 .PHONY: run
 run: Build/program

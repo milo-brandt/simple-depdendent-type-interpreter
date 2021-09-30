@@ -10,6 +10,7 @@ namespace compiler::evaluate {
     mdb::function<expression::TypedValue(std::uint64_t)> embed;
     std::unordered_map<std::uint64_t, variable_explanation::Any> variables;
     std::vector<Cast> casts;
+    std::vector<FunctionCast> function_casts;
     std::vector<Rule> rules;
     std::vector<RuleExplanation> rule_explanations;
     std::vector<expression::TypedValue> locals;
@@ -83,25 +84,44 @@ namespace compiler::evaluate {
                 }
               }
             }
+            auto domain = make_variable(
+              expression::tree::External{expression_context.primitives.type},
+              variable_explanation::ApplyCodomain{local_context.depth(), apply.index()},
+              local_context
+            );
             auto codomain = make_variable(
               expression::tree::Apply{
                 expression::tree::External{expression_context.primitives.type_family},
-                rhs.first.type
+                domain
               },
               variable_explanation::ApplyCodomain{local_context.depth(), apply.index()},
               local_context
             );
-            auto casted = cast_typed(
-              std::move(lhs.first),
-              arrow_type(rhs.first.type, codomain),
-              variable_explanation::ApplyLHSCast{local_context.depth(), apply.index()},
-              local_context
+            auto expected_function_type = expression::multi_apply(
+              expression::tree::External{expression_context.primitives.arrow},
+              domain,
+              codomain
             );
+            auto func = make_variable(expected_function_type, variable_explanation::ApplyLHSCast{local_context.depth(), apply.index()}, local_context);
+            auto arg = make_variable(domain, variable_explanation::ApplyRHSCast{local_context.depth(), apply.index()}, local_context);
+            auto func_var = expression::unfold_ref(func).head->get_external().external_index;
+            auto arg_var = expression::unfold_ref(arg).head->get_external().external_index;
+            function_casts.push_back({
+              .stack = local_context,
+              .function_variable = func_var,
+              .argument_variable = arg_var,
+              .function_value = std::move(lhs.first.value),
+              .function_type = std::move(lhs_type),
+              .expected_function_type = std::move(expected_function_type),
+              .argument_value = std::move(rhs.first.value),
+              .argument_type = std::move(rhs.first.type),
+              .expected_argument_type = domain
+            });
             return std::make_tuple(
-              std::move(casted.value),
-              std::move(casted.type),
+              std::move(func),
+              std::move(domain),
               std::move(codomain),
-              std::move(rhs.first.value)
+              std::move(arg)
             );
           } ();
           return {
@@ -283,6 +303,7 @@ namespace compiler::evaluate {
     return {
       .variables = std::move(detail.variables),
       .casts = std::move(detail.casts),
+      .function_casts = std::move(detail.function_casts),
       .rules = std::move(detail.rules),
       .rule_explanations = std::move(detail.rule_explanations),
       .result = std::move(result.first),

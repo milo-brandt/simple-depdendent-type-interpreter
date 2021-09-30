@@ -8,6 +8,8 @@
 namespace expression::solver {
   enum class SourceKind {
     cast_equation, //an equation arising from a cast
+    cast_function_lhs,
+    cast_function_rhs,
     rule_equation, //an equation arising from checking type(LHS) = type(RHS) in rule
     rule_skeleton, //an equation arising from deriving relations among capture-point rule
     rule_skeleton_verify //an equation arising from checking requested relations among capture-points

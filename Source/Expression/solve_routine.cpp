@@ -31,24 +31,6 @@ namespace expression::solver {
       };
       return NewRange{std::forward<T>(range)};
     }
-    struct CastInfo {
-      std::uint64_t solver_index;
-      std::uint64_t type_check_equation;
-      compiler::evaluate::Cast* cast;
-    };
-    struct RuleInfo {
-      std::uint64_t solver_index;
-      std::uint64_t type_check_equation;
-      compiler::evaluate::Rule* rule;
-    };
-    struct RuleInstance {
-      std::uint64_t solver_index;
-      compiler::evaluate::Rule* rule;
-      compiler::pattern::ConstrainedPattern pattern;
-      compiler::evaluate::PatternEvaluateResult evaluated;
-      std::optional<std::uint64_t> check_solver;
-      bool done = false;
-    };
     std::optional<expression::Rule> convert_to_rule(expression::tree::Expression const& pattern, expression::tree::Expression const& replacement, expression::Context const& context, std::unordered_set<std::uint64_t> const& indeterminates) {
       struct Detail {
         expression::Context const& context;
@@ -269,13 +251,32 @@ namespace expression::solver {
       for(auto& cast : input.casts) {
         solver.solve(
           request::Solve{.equation = Equation{cast.stack, cast.source_type, cast.target_type}}
-        ).then([cast, this](std::optional<SolveError> error) {
-          if(!error) {
+        ).then(report_if_failure(SourceKind::cast_equation, cast_index)).listen([cast, this](bool okay) {
+          if(okay) {
             solver_context.define_variable(cast.variable, cast.stack.depth(), cast.source);
           }
-          return error;
-        }).listen(report_if_failure(SourceKind::cast_equation, cast_index));
+        });
         ++cast_index;
+      }
+      std::uint64_t func_cast_index = 0;
+      for(auto& func_cast : input.function_casts) {
+        /*
+        First: Make sure LHS really is a function (i.e. matches arrow _ _).
+        Then: Match RHS to the domain of that function.
+        */
+        solver.solve(
+          request::Solve{.equation = Equation{func_cast.stack, func_cast.function_type, func_cast.expected_function_type}}
+        ).then(report_if_failure(SourceKind::cast_function_lhs, func_cast_index)).listen([func_cast, this, func_cast_index](bool okay) {
+          if(!okay) return;
+          solver_context.define_variable(func_cast.function_variable, func_cast.stack.depth(), func_cast.function_value);
+          solver.solve(
+            request::Solve{.equation = Equation{func_cast.stack, func_cast.argument_type, func_cast.expected_argument_type}}
+          ).then(report_if_failure(SourceKind::cast_function_rhs, func_cast_index)).listen([func_cast, this](bool okay) {
+            if(!okay) return;
+            solver_context.define_variable(func_cast.argument_variable, func_cast.stack.depth(), func_cast.argument_value);
+          });
+        });
+        ++func_cast_index;
       }
       std::uint64_t rule_index = 0;
       for(auto& rule : input.rules) {
