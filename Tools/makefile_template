@@ -21,6 +21,29 @@ debug: Debug/program
 debug_test: DebugTest/program
 	gdb DebugTest/program -x Tools/gdb_init
 
+.PHONY: test
+test: Test/program
+	gdb Test/program -x Tools/gdb_init
+
+.PHONY: run
+run: Build/program
+	Build/program
+
+.PHONY: clean
+clean:
+	rm -r -f Debug
+	rm -r -f DebugTest
+	rm -r -f Test
+	rm -r -f Build
+	rm -r -f WebBuild
+	rm -r -f EmscriptenBuild
+	rm -f Source/Tests/full_cases_impl.cpp
+{%- for source_generator in source_generators %}
+{%- for output in source_generator.outputs %}
+	rm -f {{ output }}
+{%- endfor %}
+{%- endfor %}
+
 Source/Tests/full_cases_impl.cpp: $(test_files)
 	python3 Tools/test_generator.py Source/Tests/full_cases_impl.cpp $(test_files)
 

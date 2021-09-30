@@ -21,6 +21,8 @@ def remove_c_comments(text): # from https://stackoverflow.com/questions/241327/r
 @lru_cache
 def get_direct_includes_of(filename):
     if not os.path.isfile(filename):
+        if filename == "Source/Tests/full_cases_impl.cpp":
+            return ["Source/Tests/test_utility.hpp"]
         raise RuntimeError("No file at " + filename)
     with open(filename) as file:
         source = file.read()
@@ -134,11 +136,25 @@ makefile = jinja_env.get_template('makefile_template').render(
             "link_options": "-std=c++20 -ggdb -O0"
         },
         {
+            "program": "Build/program",
+            "objects": objects_to_compile("Source/main.cpp", "Build"),
+            "compiler": "$(compiler)",
+            "compile_options": "-std=c++20 -O3",
+            "link_options": "-std=c++20 -O3"
+        },
+        {
             "program": "DebugTest/program",
             "objects": objects_from_associates(test_associates, "DebugTest"),
             "compiler": "$(compiler)",
             "compile_options": "-std=c++20 -ggdb -O0",
             "link_options": "-std=c++20 -ggdb -O0"
+        },
+        {
+            "program": "Test/program",
+            "objects": objects_from_associates(test_associates, "Test"),
+            "compiler": "$(compiler)",
+            "compile_options": "-std=c++20 -O3",
+            "link_options": "-std=c++20 -O3"
         }
     ],
     source_generators = source_generators

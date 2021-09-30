@@ -509,6 +509,7 @@ def process_file(path_to_file):
                         body = file.read()
                         if content == body:
                             print(true_filename + " is up to date. No changes made.")
+                            files_written.append(true_filename)
                             continue
                 with open(true_filename, "w") as file:
                     print("Writing: " + true_filename)
