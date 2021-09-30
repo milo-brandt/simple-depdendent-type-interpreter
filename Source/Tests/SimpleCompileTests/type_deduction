@@ -1,0 +1,21 @@
+# TEST BEGIN
+# TEST NAME An expression requiring type deduction is resolved and computes.
+# TEST SET expr
+
+block {
+  axiom Wrap : Type -> Type;
+  axiom wrap : (T : Type) -> T -> Wrap T;
+
+  declare unwrap : (T : Type) -> Wrap T -> T;
+  unwrap T (wrap T x) = x;
+
+  unwrap _ (wrap _ 17)
+}
+
+# TEST SET simple
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == simple);
