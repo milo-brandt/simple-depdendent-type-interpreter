@@ -40,13 +40,14 @@ a:visited {
 }
 
 </style>
-<link rel="stylesheet" href="resources/theme/base16-dark.css">
 </head>
 <body>
 
-<script src="resources/codemirror/lib/codemirror.js"></script>
-<link rel="stylesheet" href="resources/codemirror/lib/codemirror.css">
+<link rel="stylesheet" href="resources/theme/base16-dark.css">
+<link rel="stylesheet" href="resources/codemirror.css">
+<script src="resources/codemirror.js"></script>
 <script src="resources/main.js"></script>
+<script src="resources/dependenttt_mode.js"></script>
 
   <script async src="index.js"></script>
 
@@ -56,6 +57,7 @@ a:visited {
     <option value="fibonacci">Fibonacci</option>
     <option value="nats">Natural Numbers</option>
     <option value="vectors">Vectors</option>
+    <option value="binomial">Binomial Coefficients</option>
     <option value="calculator">Parser (Calculator)</option>
   </select>
   <input type="button" value="Load" onclick="load_chosen_example()">
@@ -101,6 +103,7 @@ a:visited {
     lineNumbers: true,
     tabSize: 2,
     theme: "base16-dark",
+    mode: "dependenttt",
     extraKeys: {
       'Shift-Enter': (cm) => {
         run_script(cm.getValue(), true);

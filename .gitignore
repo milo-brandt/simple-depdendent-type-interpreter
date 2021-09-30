@@ -12,3 +12,5 @@ Web/resources/codemirror/**
 **/*.pyc
 Runtime/**
 Makefile
+Web/resources/codemirror.css
+Web/resources/codemirror.js

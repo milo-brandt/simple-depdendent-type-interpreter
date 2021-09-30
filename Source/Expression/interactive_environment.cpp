@@ -344,7 +344,7 @@ namespace expression::interactive {
         This block prints a list of variables. Should be factored out to to show this information as needed
         instead of just in a block. (Possibly with an option to print the whole blog for debugging?)
 */
-        std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
+        /*std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
         for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
         for(auto const& [var, reason] : sorted_variables) {
           output << std::visit(mdb::overloaded{
@@ -372,7 +372,7 @@ namespace expression::interactive {
           auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
           output << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
         }
-        output << "\n";
+        output << "\n";*/
         for(auto const& unconstrainable : value->error_info.unconstrainable_patterns) {
           auto const& reason = value->evaluate_result.rule_explanations[unconstrainable.rule_index];
           auto const& pos = value->instruction_locator[reason.index];
