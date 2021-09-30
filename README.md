@@ -8,6 +8,8 @@ A live demo of the project is hosted [here](https://themilobrandt.com/typetheory
 
 At the moment, this project is mostly intended for my own interest - so I've yet to do nice things with deploying it. It should be possible to compile this code on any system with python3 (and the jinja2 python library), make, and a recent C++ compiler, though it's not been tested aside from on Ubuntu. It can compile both natively and for WebAssembly. It uses a significant amount of code generation, so cannot be compiled just by pointing a C++ compiler at the repository and hoping for the best.
 
+You should also, in a folder "Dependencies" in the main directory (as a sibling to "Source") put a copy of [termcolor.hpp](https://github.com/ikalnytskyi/termcolor) and [catch.hpp](https://github.com/catchorg/Catch2) (to build for testing). Within Web/resources, a copy of [codemirror.js and codemirror.css](https://github.com/codemirror/CodeMirror) need to be placed to run the web version.
+
 If you have the prerequisites, you can generate a Makefile with the following command, while in the main directory:
 
 ```
