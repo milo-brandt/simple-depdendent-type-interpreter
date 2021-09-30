@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Syntax sugar for arrow types expands properly.
+# TEST SET expr
+
+Type -> Type
+
+# TEST SET expanded
+
+arrow Type \.Type
+
+# TEST DEFINITION
+
+REQUIRE(environment.deep_compare(expr, expanded));

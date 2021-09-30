@@ -1,0 +1,14 @@
+# TEST BEGIN
+# TEST NAME Ill-typed patterns are rejected.
+# TEST FULL_SET compile_result
+
+block {
+  declare f : U64 -> Type;
+  f U64 = 5;
+  f
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.has_result()); //no syntax errors
+REQUIRE(!compile_result.is_fully_solved());

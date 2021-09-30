@@ -1,0 +1,15 @@
+# TEST BEGIN
+# TEST NAME Comments are ignored.
+# TEST SET expr
+
+# this is a comment
+68 # this is a comment
+# this is a comment
+
+# TEST SET type
+
+68
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

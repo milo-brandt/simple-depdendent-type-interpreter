@@ -1,0 +1,14 @@
+# TEST BEGIN
+# TEST NAME Patterns repeating a capture without type constraints forcing this are invalid.
+# TEST FULL_SET compile_result
+
+block {
+  declare f : U64 -> U64 -> U64;
+  f x x = 0;
+  f
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.has_result());
+REQUIRE(!compile_result.is_fully_solved());

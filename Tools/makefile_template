@@ -1,5 +1,6 @@
 compiler = g++-10
 emcc_compiler = em++
+test_files := $(shell grep -r -l '\# TEST BEGIN' Source/Tests)
 
 {% for target in targets %}
 {{ target.program }}:{% for object in target.objects %} {{ object.file }}{% endfor %}
@@ -15,6 +16,36 @@ emcc_compiler = em++
 .PHONY: debug
 debug: Debug/program
 	gdb Debug/program -x Tools/gdb_init
+
+.PHONY: debug_test
+debug_test: DebugTest/program
+	gdb DebugTest/program -x Tools/gdb_init
+
+.PHONY: test
+test: Test/program
+	Test/program
+
+.PHONY: run
+run: Build/program
+	Build/program
+
+.PHONY: clean
+clean:
+	rm -r -f Debug
+	rm -r -f DebugTest
+	rm -r -f Test
+	rm -r -f Build
+	rm -r -f WebBuild
+	rm -r -f EmscriptenBuild
+	rm -f Source/Tests/full_cases_impl.cpp
+{%- for source_generator in source_generators %}
+{%- for output in source_generator.outputs %}
+	rm -f {{ output }}
+{%- endfor %}
+{%- endfor %}
+
+Source/Tests/full_cases_impl.cpp: $(test_files)
+	python3 Tools/test_generator.py Source/Tests/full_cases_impl.cpp $(test_files)
 
 WebBuild: EmscriptenBuild/index.js $(shell find Web -type f | sed 's/ /\\ /g')
 	rm -r -f WebBuildTmp

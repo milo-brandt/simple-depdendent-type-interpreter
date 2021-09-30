@@ -2,16 +2,23 @@
 #include <unordered_map>
 #include <optional>
 #include <unordered_set>
+#include "../Utility/vector_utility.hpp"
 
 namespace expression::solver {
   namespace {
-    struct Equation {
-      expression::Stack stack;
-      tree::Expression lhs;
-      tree::Expression rhs;
+    struct Listener {
+      bool handled = false;
+      std::uint64_t equations_remaining;
+      std::uint64_t base_index;
+      mdb::Promise<std::optional<SolveError> > promise;
+    };
+    struct EquationInfo {
+      Equation equation;
+      std::size_t indeterminate_context;
       std::uint64_t parent = std::uint64_t(-1); //-1 for no parent
       bool handled = false; //not necessarily satisfied - but no further action needed
       bool failed = false;
+      std::shared_ptr<Listener> listener;
     };
     enum class AttemptResult {
       nothing,
@@ -160,59 +167,75 @@ namespace expression::solver {
   }
   struct Solver::Impl {
     Context context;
-    std::vector<Equation> equations;
-    std::unordered_set<std::uint64_t> variables;
-    AttemptResult try_to_extract_rule(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
-      if(auto extracted_rule = get_rule_from_equation(lhs.expression, rhs.expression, variables, context)) {
+    std::vector<std::unordered_set<std::uint64_t> > indeterminate_contexts;
+    std::vector<EquationInfo> equations;
+    std::vector<std::pair<std::uint64_t, mdb::Promise<std::optional<SolveError> > > > waiting_routines;
+    AttemptResult try_to_extract_rule(std::uint64_t index, EquationInfo const& info, Simplification const& lhs, Simplification const& rhs) {
+      if(auto extracted_rule = get_rule_from_equation(lhs.expression, rhs.expression, indeterminate_contexts[info.indeterminate_context], context)) {
         context.define_variable(extracted_rule->head, extracted_rule->arg_count, std::move(extracted_rule->replacement));
-        variables.erase(extracted_rule->head);
+        indeterminate_contexts[info.indeterminate_context].erase(extracted_rule->head);
         return AttemptResult::handled;
       } else {
         return AttemptResult::nothing;
       }
     }
-    AttemptResult try_to_deepen(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_deepen(std::uint64_t index, EquationInfo const& info, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.state == SimplificationState::lambda_like) {
         auto lhs_type = context.expression_context().get_domain_and_codomain(
-          stack.type_of(context.expression_context(), lhs.expression)
+          info.equation.stack.type_of(context.expression_context(), lhs.expression)
         );
         if(!lhs_type) std::terminate();
         equations.push_back({
-          .stack = stack.extend(context.expression_context(), std::move(lhs_type->domain)),
-          .lhs =  tree::Apply{lhs.expression, tree::Arg{stack.depth()}},
-          .rhs = tree::Apply{rhs.expression, tree::Arg{stack.depth()}},
-          .parent = index
+          .equation = {
+            .stack = info.equation.stack.extend(context.expression_context(), std::move(lhs_type->domain)),
+            .lhs =  tree::Apply{lhs.expression, tree::Arg{info.equation.stack.depth()}},
+            .rhs = tree::Apply{rhs.expression, tree::Arg{info.equation.stack.depth()}}
+          },
+          .indeterminate_context = info.indeterminate_context,
+          .parent = index,
+          .listener = info.listener
         });
+        ++info.listener->equations_remaining;
         return AttemptResult::handled;
       } else if(rhs.state == SimplificationState::lambda_like) {
         auto rhs_type = context.expression_context().get_domain_and_codomain(
-          stack.type_of(context.expression_context(), rhs.expression)
+          info.equation.stack.type_of(context.expression_context(), rhs.expression)
         );
         if(!rhs_type) std::terminate();
         equations.push_back({
-          .stack = stack.extend(context.expression_context(), std::move(rhs_type->domain)),
-          .lhs =  tree::Apply{lhs.expression, tree::Arg{stack.depth()}},
-          .rhs = tree::Apply{rhs.expression, tree::Arg{stack.depth()}},
-          .parent = index
+          .equation = {
+            .stack = info.equation.stack.extend(context.expression_context(), std::move(rhs_type->domain)),
+            .lhs =  tree::Apply{lhs.expression, tree::Arg{info.equation.stack.depth()}},
+            .rhs = tree::Apply{rhs.expression, tree::Arg{info.equation.stack.depth()}}
+          },
+          .indeterminate_context = info.indeterminate_context,
+          .parent = index,
+          .listener = info.listener
         });
+        ++info.listener->equations_remaining;
         return AttemptResult::handled;
       } else {
         return AttemptResult::nothing;
       }
     }
-    AttemptResult try_to_explode_symmetric(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_explode_symmetric(std::uint64_t index, EquationInfo const& info, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.state == SimplificationState::head_closed && rhs.state == SimplificationState::head_closed) {
         auto unfold_lhs = unfold(lhs.expression);
         auto unfold_rhs = unfold(rhs.expression);
         if(unfold_lhs.head == unfold_rhs.head && unfold_lhs.args.size() == unfold_rhs.args.size()) {
           for(std::uint64_t i = 0; i < unfold_lhs.args.size(); ++i) {
             equations.push_back({
-              .stack = stack,
-              .lhs = unfold_lhs.args[i],
-              .rhs = unfold_rhs.args[i],
-              .parent = index
+              .equation = {
+                .stack = info.equation.stack,
+                .lhs = unfold_lhs.args[i],
+                .rhs = unfold_rhs.args[i],
+              },
+              .indeterminate_context = info.indeterminate_context,
+              .parent = index,
+              .listener = info.listener
             });
           }
+          info.listener->equations_remaining += unfold_lhs.args.size();
           return AttemptResult::handled;
         } else {
           return AttemptResult::failed;
@@ -220,54 +243,58 @@ namespace expression::solver {
       }
       return AttemptResult::nothing;
     }
-    void process_asymmetric_explosion(std::uint64_t index, expression::Stack stack, AsymmetricExplodeSpec spec) {
+    void process_asymmetric_explosion(std::uint64_t index, EquationInfo const& info, AsymmetricExplodeSpec spec) {
       auto replacement = std::visit([](auto const& x) -> tree::Expression { return x; }, spec.irreducible_head);
       for(std::uint64_t i = 0; i < spec.irreducible_args.size(); ++i) {
         auto next_type_opt = context.expression_context().get_domain_and_codomain(
-          stack.type_of(context.expression_context(), replacement)
+          info.equation.stack.type_of(context.expression_context(), replacement)
         );
         if(!next_type_opt) std::terminate();
-        auto var = context.introduce_variable(stack.instance_of_type_family(context.expression_context(),
+        auto var = context.introduce_variable(info.equation.stack.instance_of_type_family(context.expression_context(),
          std::move(next_type_opt->domain)
        ));
-        variables.insert(var);
+        indeterminate_contexts[info.indeterminate_context].insert(var);
         replacement = tree::Apply{std::move(replacement), apply_args_enumerated(tree::External{var}, spec.pattern_args.size())};
         equations.push_back({
-          .stack = stack,
-          .lhs = apply_args_vector(tree::External{var}, spec.pattern_args),
-          .rhs = spec.irreducible_args[i],
-          .parent = index
+          .equation = {
+            .stack = info.equation.stack,
+            .lhs = apply_args_vector(tree::External{var}, spec.pattern_args),
+            .rhs = spec.irreducible_args[i],
+          },
+          .indeterminate_context = info.indeterminate_context,
+          .parent = index,
+          .listener = info.listener
         });
       }
+      info.listener->equations_remaining += spec.irreducible_args.size();
 
-      variables.erase(spec.pattern_head);
       context.define_variable(
         spec.pattern_head,
         spec.pattern_args.size(),
         std::move(replacement)
       );
-      variables.erase(spec.pattern_head);
+      indeterminate_contexts[info.indeterminate_context].erase(spec.pattern_head);
     }
-    AttemptResult try_to_explode_asymmetric(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_explode_asymmetric(std::uint64_t index, EquationInfo const& info, Simplification const& lhs, Simplification const& rhs) {
       if(rhs.state == SimplificationState::head_closed) {
-        auto asymmetric = get_asymmetric_explode_from_equation(lhs.expression, rhs.expression, variables);
+        auto asymmetric = get_asymmetric_explode_from_equation(lhs.expression, rhs.expression, indeterminate_contexts[info.indeterminate_context]);
         if(std::holds_alternative<AsymmetricHeadFailure>(asymmetric)) return AttemptResult::failed;
         if(auto* success = std::get_if<AsymmetricExplodeSpec>(&asymmetric)) {
-          process_asymmetric_explosion(index, stack, std::move(*success));
+          process_asymmetric_explosion(index, info, std::move(*success));
           return AttemptResult::handled;
         }
       }
       if(lhs.state == SimplificationState::head_closed) {
-        auto asymmetric = get_asymmetric_explode_from_equation(rhs.expression, lhs.expression, variables);
+        auto asymmetric = get_asymmetric_explode_from_equation(rhs.expression, lhs.expression, indeterminate_contexts[info.indeterminate_context]);
         if(std::holds_alternative<AsymmetricHeadFailure>(asymmetric)) return AttemptResult::failed;
         if(auto* success = std::get_if<AsymmetricExplodeSpec>(&asymmetric)) {
-          process_asymmetric_explosion(index, stack, std::move(*success));
+          process_asymmetric_explosion(index, info, std::move(*success));
           return AttemptResult::handled;
         }
       }
       return AttemptResult::nothing;
     }
-    AttemptResult try_to_judge_equal(std::uint64_t index, expression::Stack stack, Simplification const& lhs, Simplification const& rhs) {
+    AttemptResult try_to_judge_equal(std::uint64_t index, EquationInfo const& stack, Simplification const& lhs, Simplification const& rhs) {
       if(lhs.expression == rhs.expression) {
         return AttemptResult::handled;
       } else {
@@ -275,13 +302,14 @@ namespace expression::solver {
       }
     }
     bool examine_equation(std::uint64_t index) {
-      auto& equation = equations[index];
-      auto lhs = context.simplify(std::move(equation.lhs));
-      auto rhs = context.simplify(std::move(equation.rhs));
+      auto info = std::move(equations[index]); //move the equation *out* of the stack - so it can't move
+      if(info.handled || info.failed) std::terminate(); //precondition
+      auto lhs = context.simplify(std::move(info.equation.lhs));
+      auto rhs = context.simplify(std::move(info.equation.rhs));
 
       AttemptResult ret = AttemptResult::nothing;
       std::apply([&](auto... tests) {
-        (is_definitive(ret = (this->*tests)(index, equation.stack, lhs, rhs)) || ...);
+        (is_definitive(ret = (this->*tests)(index, info, lhs, rhs)) || ...);
       }, std::make_tuple(
         &Impl::try_to_extract_rule,
         &Impl::try_to_deepen,
@@ -289,18 +317,48 @@ namespace expression::solver {
         &Impl::try_to_explode_asymmetric,
         &Impl::try_to_judge_equal)
       );
-      auto& equation_final = equations[index]; //Vector might move!!!
-      equation_final.lhs = std::move(lhs.expression);
-      equation_final.rhs = std::move(rhs.expression);
+      auto& info_final = equations[index]; //Vector might move!!!
+      info_final = std::move(info); //move it back
+      info_final.equation.lhs = std::move(lhs.expression);
+      info_final.equation.rhs = std::move(rhs.expression);
       if(ret == AttemptResult::handled) {
-        equation_final.handled = true;
+        info_final.handled = true;
+        if(--info_final.listener->equations_remaining == 0) {
+          info_final.listener->handled = true;
+          info_final.listener->promise.set_value(std::nullopt); //solved!
+        }
         return true;
       } else if(ret == AttemptResult::failed) {
-        equation_final.failed = true;
+        info_final.failed = true;
+        if(!info_final.listener->handled) {
+          info_final.listener->handled = true;
+          info_final.listener->promise.set_value(SolveError{
+            .equation_id = info_final.listener->base_index,
+            .failed = true
+          });
+        }
         return true;
       } else {
         return false;
       }
+    }
+    bool is_equation_satisfied(std::uint64_t index) {
+      std::unordered_set<std::uint64_t> requirements;
+      auto check_required_equation = [&](std::uint64_t i) {
+        if(equations[i].handled) {
+          requirements.insert(i);
+          return true;
+        } else {
+          return false;
+        }
+      };
+      if(!check_required_equation(index)) return false;
+      for(std::uint64_t i = index + 1; i < equations.size(); ++i) {
+        if(requirements.contains(equations[i].parent)) {
+          if(!check_required_equation(i)) return false;
+        }
+      }
+      return true;
     }
     bool try_to_make_progress() {
       bool made_progress = false;
@@ -326,35 +384,31 @@ namespace expression::solver {
       }
       return made_progress;
     }
-    void register_variable(std::uint64_t index) {
-      variables.insert(index);
-    }
-    std::uint64_t add_equation(expression::Stack stack, tree::Expression lhs, tree::Expression rhs) {
-      auto ret = equations.size();
-      equations.push_back({
-        .stack = stack,
-        .lhs = std::move(lhs),
-        .rhs = std::move(rhs)
-      });
+    IndeterminateContext create_context(request::CreateContext create_context) {
+      IndeterminateContext ret{
+        .index = indeterminate_contexts.size()
+      };
+      indeterminate_contexts.push_back(std::move(create_context.indeterminates));
       return ret;
     }
-    bool is_equation_satisfied(std::uint64_t index) {
-      std::unordered_set<std::uint64_t> requirements;
-      auto check_required_equation = [&](std::uint64_t i) {
-        if(equations[i].handled) {
-          requirements.insert(i);
-          return true;
-        } else {
-          return false;
-        }
-      };
-      if(!check_required_equation(index)) return false;
-      for(std::uint64_t i = index + 1; i < equations.size(); ++i) {
-        if(requirements.contains(equations[i].parent)) {
-          if(!check_required_equation(i)) return false;
-        }
-      }
-      return true;
+    void register_indeterminate(request::RegisterIndeterminate register_indeterminate) {
+      indeterminate_contexts[register_indeterminate.indeterminate_context.index].insert(register_indeterminate.new_variable);
+    }
+    mdb::Future<std::optional<SolveError> > solve(request::Solve solve) {
+      auto eq_index = equations.size();
+      auto [promise, future] = mdb::create_promise_future_pair<std::optional<SolveError> >();
+      auto listener = std::shared_ptr<Listener>{new Listener{
+        .equations_remaining = 1,
+        .base_index = eq_index,
+        .promise = std::move(promise)
+      }};
+      equations.push_back({
+        .equation = std::move(solve.equation),
+        .indeterminate_context = solve.indeterminate_context.index,
+        .listener = std::move(listener)
+      });
+      waiting_routines.emplace_back(eq_index, std::move(promise));
+      return std::move(future);
     }
     bool is_fully_satisfied() {
       for(auto const& equation : equations) {
@@ -362,45 +416,63 @@ namespace expression::solver {
       }
       return true;
     }
+    void close() {
+      for(auto const& equation : equations) {
+        if(!equation.listener->handled) {
+          equation.listener->promise.set_value(SolveError{
+            .equation_id = equation.listener->base_index,
+            .failed = false
+          });
+          equation.listener->handled = true;
+        }
+      }
+    }
+    SolveErrorInfo get_error_info(std::uint64_t index) {
+      std::unordered_set<std::uint64_t> requirements;
+      SolveErrorInfo ret{
+        .primary = equations[index].equation
+      };
+      auto check_required_equation = [&](std::uint64_t i) {
+        if(i != index) {
+          if(equations[i].failed) {
+            ret.secondary_fail.push_back(equations[i].equation);
+          } else if(!equations[i].handled) {
+            ret.secondary_stuck.push_back(equations[i].equation);
+          }
+        }
+        requirements.insert(i);
+      };
+      check_required_equation(index);
+      for(std::uint64_t i = index + 1; i < equations.size(); ++i) {
+        if(requirements.contains(equations[i].parent)) {
+          check_required_equation(i);
+        }
+      }
+      return ret;
+    }
   };
-  Solver::Solver(Context context):impl(new Impl{.context = std::move(context)}) {}
-  void Solver::register_variable(std::uint64_t index) {
-    return impl->register_variable(index);
+  Solver::Solver(Context context):impl(new Impl{.context = std::move(context)}) {
+    impl->indeterminate_contexts.emplace_back();
   }
-  std::uint64_t Solver::add_equation(expression::Stack stack, tree::Expression lhs, tree::Expression rhs) {
-    return impl->add_equation(std::move(stack), std::move(lhs), std::move(rhs));
+  IndeterminateContext Solver::create_context(request::CreateContext create_context) {
+    return impl->create_context(std::move(create_context));
   }
-  bool Solver::is_equation_satisfied(std::uint64_t index) {
-    return impl->is_equation_satisfied(index);
+  void Solver::register_indeterminate(request::RegisterIndeterminate register_indeterminate) {
+    return impl->register_indeterminate(std::move(register_indeterminate));
   }
-  bool Solver::is_fully_satisfied() {
-    return impl->is_fully_satisfied();
+  mdb::Future<std::optional<SolveError> > Solver::solve(request::Solve solve) {
+    return impl->solve(std::move(solve));
   }
   bool Solver::try_to_make_progress() {
     return impl->try_to_make_progress();
   }
-  std::vector<HungEquation> Solver::get_hung_equations() {
-    auto get_source_index = [this](std::uint64_t index) {
-      while(true) {
-        auto next_index = impl->equations[index].parent;
-        if(next_index == -1) return index;
-        else index = next_index;
-      }
-    };
-    std::vector<HungEquation> ret;
-    for(std::uint64_t i = 0; i < impl->equations.size(); ++i) {
-      auto const& equation = impl->equations[i];
-      if(equation.handled) continue;
-      ret.push_back(HungEquation{
-        .lhs = equation.lhs,
-        .rhs = equation.rhs,
-        .depth = equation.stack.depth(),
-        .source_index = get_source_index(i),
-        .failed = equation.failed
-      });
-    }
-    return ret;
+  void Solver::close() {
+    return impl->close();
   }
+  SolveErrorInfo Solver::get_error_info(std::uint64_t equation_id) {
+    return impl->get_error_info(equation_id);
+  }
+
   Solver::Solver(Solver&&) = default;
   Solver& Solver::operator=(Solver&&) = default;
   Solver::~Solver() = default;

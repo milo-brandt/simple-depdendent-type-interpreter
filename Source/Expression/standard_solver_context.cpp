@@ -28,7 +28,7 @@ namespace expression::solver {
     auto simplified = evaluation.reduce(base);
     auto unfolded = unfold_ref(simplified);
     SimplificationState state = [&] {
-      if(unfolded.head->holds_arg()) {
+      if(unfolded.head->holds_arg() || unfolded.head->holds_data()) {
         return SimplificationState::head_closed;
       } else {
         auto const& external = unfolded.head->get_external();

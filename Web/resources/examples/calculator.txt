@@ -25,7 +25,7 @@ block {
   # Define the canonical projection operations from Pair S T.
   declare first : (S : Type) -> (T : Type) -> Pair S T -> S;
   first S T (pair S T s t) = s;
-  axiom second : (S : Type) -> (T : Type) -> Pair S T -> T;
+  declare second : (S : Type) -> (T : Type) -> Pair S T -> T;
   second S T (pair S T s t) = t;
 
   # Define a unit type - to use as the return type of functions that don't return

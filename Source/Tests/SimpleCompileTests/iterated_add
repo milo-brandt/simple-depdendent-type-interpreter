@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME A partial evaluation of an external function works with functional constructs.
+# TEST SET expr
+
+(\f.\x.f (f x)) (add 5) 7
+
+# TEST SET type
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

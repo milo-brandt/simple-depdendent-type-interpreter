@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME The constant lambda is accepted and computes.
+# TEST SET expr
+
+(\.Type) U64
+
+# TEST SET type
+
+Type
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

@@ -151,12 +151,20 @@ inline auto yellow_string(T&& inner) { //should only be used in single expressio
     }
   };
 }
+template<class T>
+inline auto grey_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << "<span style=\"color:grey;\">" << std::forward<T>(inner) << "</span>";
+    }
+  };
+}
 #else
 inline auto format_error(std::string_view substring, std::string_view full) {
   return Print {
     [=](std::ostream& o) {
       detail::string_around(o, full, substring, [&] {
-        o << termcolor::red << termcolor::bold << termcolor::underline << substring << termcolor::reset;
+        o << termcolor::colorize << termcolor::red << termcolor::bold << termcolor::underline << substring << termcolor::reset;
       });
     }
   };
@@ -165,7 +173,7 @@ inline auto format_info(std::string_view substring, std::string_view full) {
   return Print {
     [=](std::ostream& o) {
       detail::string_around(o, full, substring, [&] {
-        o << termcolor::bold << termcolor::green << substring << termcolor::reset;
+        o << termcolor::colorize << termcolor::bold << termcolor::green << substring << termcolor::reset;
       });
     }
   };
@@ -177,9 +185,9 @@ inline auto format_info_pair(std::string_view substring_1, std::string_view subs
   return Print {
     [=](std::ostream& o) {
       detail::string_around(o, full, joined, [&] {
-        o << termcolor::bold << termcolor::green << substring_1 << termcolor::reset
+        o << termcolor::colorize << termcolor::bold << termcolor::green << substring_1 << termcolor::reset
           << between
-          << termcolor::bold << termcolor::cyan << substring_2 << termcolor::reset;
+          << termcolor::colorize << termcolor::bold << termcolor::cyan << substring_2 << termcolor::reset;
       });
     }
   };
@@ -188,7 +196,7 @@ template<class T>
 inline auto red_string(T&& inner) { //should only be used in single expression; doesn't capture by value
   return Print {
     [=](std::ostream& o) {
-      o << termcolor::red << std::forward<T>(inner) << termcolor::reset;
+      o << termcolor::colorize << termcolor::red << std::forward<T>(inner) << termcolor::reset;
     }
   };
 }
@@ -196,7 +204,15 @@ template<class T>
 inline auto yellow_string(T&& inner) { //should only be used in single expression; doesn't capture by value
   return Print {
     [=](std::ostream& o) {
-      o << termcolor::yellow << std::forward<T>(inner) << termcolor::reset;
+      o << termcolor::colorize << termcolor::yellow << std::forward<T>(inner) << termcolor::reset;
+    }
+  };
+}
+template<class T>
+inline auto grey_string(T&& inner) { //should only be used in single expression; doesn't capture by value
+  return Print {
+    [=](std::ostream& o) {
+      o << termcolor::colorize << termcolor::bright_grey << std::forward<T>(inner) << termcolor::reset;
     }
   };
 }

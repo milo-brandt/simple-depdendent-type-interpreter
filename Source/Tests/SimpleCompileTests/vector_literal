@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME An expression with vector literals and lfold_vec evaluates.
+# TEST SET expr
+
+lfold_vec U64 U64 4 add [5, 8]
+
+# TEST SET type
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

@@ -1,0 +1,23 @@
+# TEST BEGIN
+# TEST NAME Type deduction can take place within the first phase of rule resolution.
+# TEST SET expr
+
+block {
+  axiom Wrapped : Type -> Type;
+  axiom wrap : (T : Type) -> T -> Wrapped T;
+  declare unwrap : (T : Type) -> Wrapped T -> T;
+
+  let Q = _;
+
+  rule unwrap T (wrap (Q T) x) = x;
+
+  unwrap _ (wrap _ 17)
+}
+
+# TEST SET value
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == value);

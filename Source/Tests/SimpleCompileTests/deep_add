@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME An expression with nested operations on literals evaluates.
+# TEST SET expr
+
+add (mul 8 9) (mul 6 5)
+
+# TEST SET type
+
+102
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

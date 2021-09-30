@@ -1,0 +1,10 @@
+# TEST BEGIN
+# TEST NAME A vector with inconsistent types is rejected.
+# TEST FULL_SET compile_result
+
+["a", 7]
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.has_result()); //no syntax errors
+REQUIRE(!compile_result.is_fully_solved());

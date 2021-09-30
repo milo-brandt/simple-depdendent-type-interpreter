@@ -1,5 +1,6 @@
 Build/**
 Debug/**
+DebugTest/**
 EmscriptenBuild/**
 WebBuild/**
 Dependencies/**
@@ -11,3 +12,6 @@ Web/resources/codemirror/**
 **/*.pyc
 Runtime/**
 Makefile
+Web/resources/codemirror.css
+Web/resources/codemirror.js
+Test/**

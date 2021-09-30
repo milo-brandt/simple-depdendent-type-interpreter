@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME An expression with literal addition evaluates.
+# TEST SET expr
+
+add 17 34
+
+# TEST SET type
+
+51
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

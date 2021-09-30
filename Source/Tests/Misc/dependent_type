@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Syntax sugar for dependent types expands properly, even given names with digits.
+# TEST SET expr
+
+(T1 : Type) -> T1
+
+# TEST SET expanded
+
+arrow Type \T:Type.T
+
+# TEST DEFINITION
+
+REQUIRE(environment.deep_compare(expr, expanded));

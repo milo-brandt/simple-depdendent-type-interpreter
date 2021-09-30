@@ -21,6 +21,8 @@ def remove_c_comments(text): # from https://stackoverflow.com/questions/241327/r
 @lru_cache
 def get_direct_includes_of(filename):
     if not os.path.isfile(filename):
+        if filename == "Source/Tests/full_cases_impl.cpp":
+            return ["Source/Tests/test_utility.hpp"]
         raise RuntimeError("No file at " + filename)
     with open(filename) as file:
         source = file.read()
@@ -66,8 +68,14 @@ def get_nested_associates_of(filename):
                 ret.add(include)
     return ret
 
-def objects_to_compile(filename, object_folder):
-    associates = get_nested_associates_of(filename)
+def get_nested_associates_of_multi(filenames):
+    return {
+        associate
+        for filename in filenames
+        for associate in get_nested_associates_of(filename)
+    }
+
+def objects_from_associates(associates, object_folder):
     associate_cpp_roots = [
         os.path.relpath(os.path.splitext(file)[0], "Source")
         for file in associates if os.path.splitext(file)[1] == '.cpp'
@@ -77,6 +85,9 @@ def objects_to_compile(filename, object_folder):
         "source": "Source/" + root + ".cpp",
         "sources_needed": get_nested_includes_of("Source/" + root + ".cpp")
     } for root in associate_cpp_roots]
+
+def objects_to_compile(filename, object_folder):
+    return objects_from_associates(get_nested_associates_of(filename), object_folder)
 
 def generate_python_info():
     def is_source_generator(name):
@@ -103,6 +114,11 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)) + "/..")
 jinja_env = Environment(
     loader=FileSystemLoader('Tools')
 );
+
+test_cpp = [file for folder in os.walk("Source/Tests") for file in glob(os.path.join(folder[0],"*.cpp"))]
+test_associates = get_nested_associates_of_multi(test_cpp)
+test_associates.add("Source/Tests/full_cases_impl.cpp") # Manually add generated file in case it doesn't exist
+
 makefile = jinja_env.get_template('makefile_template').render(
     targets = [
         {
@@ -118,6 +134,27 @@ makefile = jinja_env.get_template('makefile_template').render(
             "compiler": "$(compiler)",
             "compile_options": "-std=c++20 -ggdb -O0",
             "link_options": "-std=c++20 -ggdb -O0"
+        },
+        {
+            "program": "Build/program",
+            "objects": objects_to_compile("Source/main.cpp", "Build"),
+            "compiler": "$(compiler)",
+            "compile_options": "-std=c++20 -O3",
+            "link_options": "-std=c++20 -O3"
+        },
+        {
+            "program": "DebugTest/program",
+            "objects": objects_from_associates(test_associates, "DebugTest"),
+            "compiler": "$(compiler)",
+            "compile_options": "-std=c++20 -ggdb -O0",
+            "link_options": "-std=c++20 -ggdb -O0"
+        },
+        {
+            "program": "Test/program",
+            "objects": objects_from_associates(test_associates, "Test"),
+            "compiler": "$(compiler)",
+            "compile_options": "-std=c++20 -O3",
+            "link_options": "-std=c++20 -O3"
         }
     ],
     source_generators = source_generators

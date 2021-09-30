@@ -4,6 +4,9 @@
 #include "expression_tree.hpp"
 #include "solver_context.hpp"
 #include "stack.hpp"
+#include <memory>
+#include <unordered_set>
+#include "../Utility/async.hpp"
 
 /*
 Solving algorithm: repeatedly loop over all equations (as long as progress is being made), and apply the following steps.
@@ -70,12 +73,35 @@ handled.
 */
 
 namespace expression::solver {
-  struct HungEquation {
+  struct IndeterminateContext {
+    std::size_t index = 0;
+  };
+  struct Equation {
+    expression::Stack stack;
     tree::Expression lhs;
     tree::Expression rhs;
-    std::uint64_t depth;
-    std::uint64_t source_index; //which introduction led to this one
-    bool failed; //"false" means merely stuck
+  };
+  struct SolveError {
+    std::uint64_t equation_id;
+    bool failed;
+  };
+  namespace request {
+    struct CreateContext {
+      std::unordered_set<std::uint64_t> indeterminates;
+    };
+    struct RegisterIndeterminate {
+      IndeterminateContext indeterminate_context;
+      std::uint64_t new_variable;
+    };
+    struct Solve {
+      IndeterminateContext indeterminate_context;
+      Equation equation;
+    };
+  }
+  struct SolveErrorInfo {
+    Equation primary;
+    std::vector<Equation> secondary_fail;
+    std::vector<Equation> secondary_stuck;
   };
   class Solver {
     struct Impl;
@@ -85,12 +111,12 @@ namespace expression::solver {
     Solver(Solver&&);
     Solver& operator=(Solver&&);
     ~Solver();
-    void register_variable(std::uint64_t);
-    std::uint64_t add_equation(expression::Stack, tree::Expression lhs, tree::Expression rhs);
-    bool is_equation_satisfied(std::uint64_t);
-    bool is_fully_satisfied();
+    IndeterminateContext create_context(request::CreateContext);
+    void register_indeterminate(request::RegisterIndeterminate);
+    mdb::Future<std::optional<SolveError> > solve(request::Solve);
     bool try_to_make_progress(); //returns true if progress was made.
-    std::vector<HungEquation> get_hung_equations();
+    void close(); //releases all routines connected to this one.
+    SolveErrorInfo get_error_info(std::uint64_t equation_id);
   };
 }
 

@@ -1,0 +1,20 @@
+# TEST BEGIN
+# TEST NAME Variable indexing is preserved even after blocks in lambdas.
+# TEST SET expr
+
+block {
+  let X = \T:Type.block {
+    let Y = Type;
+    Y
+  };
+  let Z = 34;
+  Z
+}
+
+# TEST SET type
+
+34
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

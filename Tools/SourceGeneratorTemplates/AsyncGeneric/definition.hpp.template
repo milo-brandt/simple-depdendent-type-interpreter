@@ -1,0 +1,57 @@
+{%- macro generic_async_interface(info) -%}
+{{ source_include("Source/Utility/function.hpp") }}
+{{ source_include("Source/Utility/async.hpp") }}
+{%- call in_namespace(info.namespace) %}
+  template<class T> concept {{info.interpreter_name}}Concept =
+    {%- for primitive in info.primitives %}
+    requires(T interpreter, {{primitive}} primitive, mdb::function<void(mdb::async::RoutineTypeOf<{{primitive}}>)> then) {
+      interpreter.request(std::move(primitive), std::move(then));
+    }{% if not loop.last %} && {% endif %}
+  {%- endfor %};
+  class {{info.interpreter_name}} {
+    struct AbstractBase {
+      {%- for primitive in info.primitives %}
+      virtual void request({{primitive}} primitive, mdb::function<void(mdb::async::RoutineTypeOf<{{primitive}}>)> then) = 0;
+      {%- endfor %}
+      virtual ~AbstractBase() = default;
+    };
+    template<class T> struct Implementation : AbstractBase {
+      T implementation_value;
+      Implementation(T&& implementation_value):implementation_value(std::move(implementation_value)) {}
+      {%- for primitive in info.primitives %}
+      virtual void request({{primitive}} primitive, mdb::function<void(mdb::async::RoutineTypeOf<{{primitive}}>)> then) override {
+        return implementation_value.request(std::move(primitive), std::move(then));
+      }
+      {%- endfor %}
+    };
+    std::unique_ptr<AbstractBase> impl;
+  public:
+    template<{{info.interpreter_name}}Concept T>
+    {{info.interpreter_name}}(T value):impl(new Implementation<T>{std::move(value)}) {}
+    {{info.interpreter_name}}({{info.interpreter_name}}&& other):impl(std::move(other.impl)) {}
+    {{info.interpreter_name}}& operator=({{info.interpreter_name}}&& other) { impl = std::move(other.impl); return *this; }
+    {%- for primitive in info.primitives %}
+    void request({{primitive}} primitive, mdb::function<void(mdb::async::RoutineTypeOf<{{primitive}}>)> then) {
+      return impl->request(std::move(primitive), std::move(then));
+    }
+    {%- endfor %}
+  };
+  template<class RetType>
+  class {{info.routine_name}} {
+    mdb::function<void({{info.interpreter_name}}, mdb::function<void(RetType)>)> m_execute_then;
+  public:
+    template<class T>
+    {{info.routine_name}}(T routine):m_execute_then([routine = std::move(routine)]({{info.interpreter_name}}& interpreter, mdb::function<void(RetType)> then) mutable {
+      execute_then(interpreter, std::move(routine), std::move(then));
+    }){}
+    template<class Interpreter, class Then> requires {{info.interpreter_name}}Concept<Interpreter>
+    friend void execute_then(Interpreter interpreter, {{info.routine_name}} routine, Then then) {
+      routine.m_execute_then(std::move(interpreter), std::move(then));
+    }
+    template<class Interpreter> requires {{info.interpreter_name}}Concept<Interpreter>
+    friend void execute(Interpreter interpreter, {{info.routine_name}} routine) {
+      routine.m_execute_then(std::move(interpreter), [](auto&&...){});
+    }
+  };
+{%- endcall %}
+{%- endmacro %}

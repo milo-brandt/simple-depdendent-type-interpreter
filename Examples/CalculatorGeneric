@@ -4,23 +4,10 @@ block {
   axiom succ : Nat -> Nat;
 
   declare u_to_nat : U64 -> Nat;
-  rule u_to_nat n = indexed_recurse Nat (\.succ) zero n;
+  rule u_to_nat n = iterate Nat succ zero n;
   declare nat_to_u : Nat -> U64;
   rule nat_to_u zero = 0;
   rule nat_to_u (succ n) = add (nat_to_u n) 1;
-
-  declare vec_cons_type : Type -> Nat -> Type;
-  rule vec_cons_type T zero = Vector T;
-  rule vec_cons_type T (succ n) = T -> (vec_cons_type T n);
-
-  declare vec_cons_impl : (T : Type) -> (n : Nat) -> (base : Vector T) -> vec_cons_type T n;
-  rule vec_cons_impl T zero base = base;
-  rule vec_cons_impl T (succ n) base first = vec_cons_impl T n (push_vec _ base first);
-
-  declare vec_cons : (T : Type) -> (n : Nat) -> vec_cons_type T n;
-  rule vec_cons T n = vec_cons_impl T n (empty_vec _);
-
-  let vec_cons_u64 = \T.\n.vec_cons T (u_to_nat n);
 
   axiom Unit : Type;
   axiom unit : Unit;
@@ -103,7 +90,7 @@ block {
 
   declare first : (S : Type) -> (T : Type) -> Pair S T -> S;
   rule first S T (pair S T s t) = s;
-  axiom second : (S : Type) -> (T : Type) -> Pair S T -> T;
+  declare second : (S : Type) -> (T : Type) -> Pair S T -> T;
   rule second S T (pair S T s t) = t;
 
   declare parse_lookup : (T : Type) -> Vector (Pair String T) -> Parser T;
@@ -118,18 +105,18 @@ block {
   };
 
   declare parse_digit : Parser U64;
-  rule parse_digit = parse_lookup U64 (vec_cons_u64 _ 10
-    (pair _ _ "0" 0)
-    (pair _ _ "1" 1)
-    (pair _ _ "2" 2)
-    (pair _ _ "3" 3)
-    (pair _ _ "4" 4)
-    (pair _ _ "5" 5)
-    (pair _ _ "6" 6)
-    (pair _ _ "7" 7)
-    (pair _ _ "8" 8)
-    (pair _ _ "9" 9)
-  );
+  rule parse_digit = parse_lookup U64 [
+    pair _ _ "0" 0,
+    pair _ _ "1" 1,
+    pair _ _ "2" 2,
+    pair _ _ "3" 3,
+    pair _ _ "4" 4,
+    pair _ _ "5" 5,
+    pair _ _ "6" 6,
+    pair _ _ "7" 7,
+    pair _ _ "8" 8,
+    pair _ _ "9" 9
+  ];
 
   let Binop = U64 -> U64 -> U64;
 
@@ -185,18 +172,18 @@ block {
     map _ _ (kleene_star _ parse_digit) \remaining_digits.
     lfold_vec _ _ first_digit (\x.\y.add (mul 10 x) y) remaining_digits;
 
-  let parse_expr = parenthesized_expr_with_terms parse_integer (vec_cons_u64 _ 3
-    (right_assoc \\ vec_cons_u64 _ 1
+  let parse_expr = parenthesized_expr_with_terms parse_integer [
+    right_assoc [
       (pair _ _ "^" exp)
-    )
-    (left_assoc \\ vec_cons_u64 _ 1
+    ],
+    left_assoc [
       (pair _ _ "*" mul)
-    )
-    (left_assoc \\ vec_cons_u64 _ 2
-      (pair _ _ "+" add)
-      (pair _ _ "-" sub)
-    )
-  );
+    ],
+    left_assoc [
+      pair _ _ "+" add,
+      pair _ _ "-" sub
+    ]
+  ];
 
   parse_expr "(1+5*(2+3))^(8-5-1)^3"
 }

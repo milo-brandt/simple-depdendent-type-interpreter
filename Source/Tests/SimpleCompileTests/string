@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME An expression involving a string literal evaluates.
+# TEST SET expr
+
+substr "abc" 1 1
+
+# TEST SET type
+
+"b"
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

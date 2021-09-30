@@ -196,11 +196,11 @@ def parse_template_output(output, filebase):
             command_index = int(output[command_pos:command_end])
             commands_used[command_index].act(context)
             context.position = command_end + 3
-    print(context.output_pieces)
     return { extension:piece.take_content(filebase, extension, context) for (extension, piece) in context.output_pieces.items()}
 
 tree_template = jinja_env.get_template('tree.hpp.template')
 type_erasure_template = jinja_env.get_template('type_erasure.hpp.template')
+async_generic_template = jinja_env.get_template('async_generic.hpp.template')
 
 # Utilities for writing trees
 class TypeInfo:
@@ -434,6 +434,18 @@ class TypeErasedKind:
             "type_erase_info": self,
             "file_info": file_info
         })
+# Async generic utilities
+class AsyncGeneric:
+    def __init__(self, namespace, interpreter_name, routine_name, primitives):
+        self.namespace = namespace
+        self.interpreter_name = interpreter_name
+        self.routine_name = routine_name
+        self.primitives = primitives
+    def write_string(self, file_info):
+        return async_generic_template.render({
+            "async_info": self,
+            "file_info": file_info
+        })
 
 # File writing utilities
 class FileWriter:
@@ -479,7 +491,8 @@ class FileContext:
             "Multitree": Multitree,
             "TreeOutput": TreeOutput,
             "TypeErasedKind": TypeErasedKind,
-            "MemberFunction": MemberFunction
+            "MemberFunction": MemberFunction,
+            "AsyncGeneric": AsyncGeneric
         }
 
 def process_file(path_to_file):
@@ -490,10 +503,18 @@ def process_file(path_to_file):
         for (filename, writer) in context.outputs.items():
             outputs = parse_template_output("\n".join(writer.outputs), filename)
             for (extension, content) in outputs.items():
-                with open(filename + "." + extension, "w") as file:
-                    print("Writing: " + filename + "." + extension)
+                true_filename = filename + "." + extension
+                if os.path.exists(true_filename):
+                    with open(true_filename) as file:
+                        body = file.read()
+                        if content == body:
+                            print(true_filename + " is up to date. No changes made.")
+                            files_written.append(true_filename)
+                            continue
+                with open(true_filename, "w") as file:
+                    print("Writing: " + true_filename)
                     file.write(content)
-                    files_written.append(filename + "." + extension)
+                    files_written.append(true_filename)
     return files_written
 
 

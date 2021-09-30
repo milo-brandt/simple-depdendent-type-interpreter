@@ -1,0 +1,6 @@
+{%- from "AsyncGeneric/definition.hpp.template" import generic_async_interface %}
+
+{%- from "head_macros.hpp.template" import make_head %}
+
+{{- make_head(file_info) }}
+{{ generic_async_interface(async_info) }}
