@@ -337,195 +337,7 @@ namespace expression::interactive {
         std::terminate();
       }
     }
-    void debug_parse(std::string_view expr, std::ostream& output) {
-      auto compile = full_compile(expr);
-      if(auto* value = compile.get_if_value()) {
-        /*
-        This block prints a list of variables. Should be factored out to to show this information as needed
-        instead of just in a block. (Possibly with an option to print the whole blog for debugging?)
-*/
-        /*std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
-        for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
-        for(auto const& [var, reason] : sorted_variables) {
-          output << std::visit(mdb::overloaded{
-            [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
-            [&](compiler::evaluate::variable_explanation::ApplyCodomain const&) { return "ApplyCodomain: "; },
-            [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "ApplyLHSCast: "; },
-            [&](compiler::evaluate::variable_explanation::ExplicitHole const&) { return "ExplicitHole: "; },
-            [&](compiler::evaluate::variable_explanation::Declaration const&) { return "Declaration: "; },
-            [&](compiler::evaluate::variable_explanation::Axiom const&) { return "Axiom: "; },
-            [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "TypeFamilyCast: "; },
-            [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "HoleTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "DeclareTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "AxiomTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "LetTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::LetCast const&) { return "LetCast: "; },
-            [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "ForAllTypeCast: "; },
-            [&](compiler::evaluate::variable_explanation::VarType const&) { return "VarType: "; }
-          }, reason) << var << "\n";
-          auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
-            return reason.index;
-          }, reason);
-          auto const& pos = value->instruction_locator[index];
-          auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
-          auto const& locator_pos = value->parser_locator[locator_index];
-          auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-          output << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
-        }
-        output << "\n";*/
-        for(auto const& unconstrainable : value->error_info.unconstrainable_patterns) {
-          auto const& reason = value->evaluate_result.rule_explanations[unconstrainable.rule_index];
-          auto const& pos = value->instruction_locator[reason.index];
-          auto const& locator_index = pos.source.index;
-          auto const& locator_pos = value->parser_locator[locator_index];
-          output << "Proposed rule could not have its pattern represented in a suitable form: ";
-          if(locator_pos.holds_rule()) {
-            auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
-            auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
-            output << format_info_pair(
-              expression_parser::position_of(lhs_pos, value->lexer_locator),
-              expression_parser::position_of(rhs_pos, value->lexer_locator),
-              value->source
-            );
-          } else {
-            //this shouldn't happen - rules *can* come from non-rule locators, but those shouldn't ever fail.
-            auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
-            output << format_info(
-              expression_parser::position_of(pos, value->lexer_locator),
-              value->source
-            );
-          }
-          output << "\n";
-        }
-        for(auto const& eq : value->error_info.failed_equations) {
-          if(eq.failed) {
-            output << red_string("False Equation: ");
-          } else {
-            output << yellow_string("Undetermined Equation: ");
-          }
-          auto depth = eq.info.primary.stack.depth();
-          auto fancy = fancy_format(*value);
-          output << fancy(eq.info.primary.lhs, depth) << (eq.failed ? " =!= " : " =?= ") << fancy(eq.info.primary.rhs, depth) << "\n";
-          for(auto const& secondary_fail : eq.info.secondary_fail) {
-            auto depth = secondary_fail.stack.depth();
-            output << grey_string("Failure in sub-equation: ") << fancy(secondary_fail.lhs, depth) << " =!= " << fancy(secondary_fail.rhs, depth) << "\n";
-          }
-          for(auto const& secondary_stuck : eq.info.secondary_stuck) {
-            auto depth = secondary_stuck.stack.depth();
-            output << grey_string("Stuck in sub-equation: ") << fancy(secondary_stuck.lhs, depth) << " =!= " << fancy(secondary_stuck.rhs, depth) << "\n";
-          }
-
-          if(eq.source_kind == solver::SourceKind::cast_equation) {
-            auto const& cast = value->evaluate_result.casts[eq.source_index];
-            auto cast_var = cast.variable;
-            if(value->evaluate_result.variables.contains(cast_var)) {
-              auto const& reason = value->evaluate_result.variables.at(cast_var);
-              bool is_apply_cast = false;
-              auto reason_string = std::visit(mdb::overloaded{
-                [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { is_apply_cast = true; return "While matching RHS to domain type in application: "; },
-                [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { is_apply_cast = true; return "While matching LHS to function type in application: "; },
-                [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "While matching the type of a type family: "; },
-                [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "While matching the type of a hole: "; },
-                [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "While matching the declaration type against Type: "; },
-                [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "While matching the axiom type against Type: "; },
-                [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "While matching the let type against Type: "; },
-                [&](compiler::evaluate::variable_explanation::LetCast const&) { return "While matching the declared type of the let with the expression type: "; },
-                [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "While matching the for all type against Type: "; },
-                [&](auto const&) { return "For unknown reasons: "; }
-              }, reason);
-              auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
-                return reason.index;
-              }, reason);
-              auto const& pos = value->instruction_locator[index];
-              auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
-              auto const& locator_pos = value->parser_locator[locator_index];
-              if(is_apply_cast && locator_pos.holds_apply()) {
-                auto const& apply = locator_pos.get_apply();
-                auto const& lhs_pos = apply.lhs.visit([&](auto const& o) { return o.position; });
-                auto const& rhs_pos = apply.rhs.visit([&](auto const& o) { return o.position; });
-                output << reason_string << format_info_pair(
-                  expression_parser::position_of(lhs_pos, value->lexer_locator),
-                  expression_parser::position_of(rhs_pos, value->lexer_locator),
-                  value->source
-                );
-              } else {
-                auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
-                output << reason_string << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source);
-              }
-            } else {
-              output << "From cast #" << eq.source_index << ". Could not be located.";
-            }
-          } else if(eq.source_index != -1) {
-            auto const& reason = value->evaluate_result.rule_explanations[eq.source_index];
-            auto const& pos = value->instruction_locator[reason.index];
-            auto const& locator_index = pos.source.index;
-            auto const& locator_pos = value->parser_locator[locator_index];
-            switch(eq.source_kind) {
-              case solver::SourceKind::rule_equation:
-                output << "While checking the LHS and RHS of rule have same type: "; break;
-              case solver::SourceKind::rule_skeleton:
-                output << "While deducing relations among the capture-point skeleton of: "; break;
-              case solver::SourceKind::rule_skeleton_verify:
-                output << "While checking satisfaction of relations amount capture-point skeleton of: "; break;
-              default:
-                output << "While doing unknown task with rule: "; break;
-            }
-            if(locator_pos.holds_rule()) {
-              auto const& lhs_pos = locator_pos.get_rule().pattern.visit([&](auto const& o) { return o.position; });
-              auto const& rhs_pos = locator_pos.get_rule().replacement.visit([&](auto const& o) { return o.position; });
-              output << format_info_pair(
-                expression_parser::position_of(lhs_pos, value->lexer_locator),
-                expression_parser::position_of(rhs_pos, value->lexer_locator),
-                value->source
-              );
-            } else {
-              //this shouldn't be reachable
-              auto const& pos = locator_pos.visit([&](auto const& o) { return o.position; });
-              output << format_info(
-                expression_parser::position_of(pos, value->lexer_locator),
-                value->source
-              );
-            }
-          } else {
-            output << "Unknown source.";
-          }
-          output << "\n\n";
-        }
-        auto fancy = fancy_format(*value); //get the formatters
-        auto deep = deep_format(*value);
-        /*
-        This block prints every new rule.
-
-        std::vector<expression::Rule> new_rules;
-        for(auto i = value->rule_begin; i < value->rule_end; ++i) {
-          new_rules.push_back(expression_context.rules[i]);
-        }
-        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
-          return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
-        });
-        for(auto const& rule : new_rules) {
-          output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
-        }
-        output << "\n";
-        */
-
-        //throw new variables into context
-        for(auto const& entry : value->get_outer_values()) {
-          //output << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
-          names_to_values.insert_or_assign(entry.first, entry.second);
-        }
-        for(auto const& var_data : value->evaluate_result.variables) {
-          auto const& var_index = var_data.first;
-          if(auto str = value->get_explicit_name(var_index)) {
-            externals_to_names.insert(std::make_pair(var_index, std::move(*str)));
-          }
-        }
-        output << "Final: " << fancy_format(*value)(value->evaluate_result.result.value) << " of type " << fancy_format(*value)(value->evaluate_result.result.type) << "\n";
-        output << "Deep: " << deep_format(*value)(value->evaluate_result.result.value) << " of type " << deep_format(*value)(value->evaluate_result.result.type) << "\n";
-      } else {
-        output << compile.get_error() << "\n";
-      }
-    }
+    void debug_parse(std::string_view expr, std::ostream& output);
     ParseResult parse(std::string_view expr);
     bool deep_compare(tree::Expression lhs, tree::Expression rhs) {
       solver::StandardSolverContext context{expression_context};
@@ -546,6 +358,15 @@ namespace expression::interactive {
           && deep_compare(std::move(lhs.type), std::move(rhs.type));
     }
   };
+  /*
+    Everything below this point in the code is either boilerplate or terribly
+    written; eventually, I think it will be necessary to more explicitly expose
+    all the data generated through the compilation process and add methods to
+    handle both individual steps and their compound (e.g. backtracing from a
+    variable to a span of the source code).
+
+    However, for now, the project has a hacked-together front-end. :(
+  */
 
   Environment::Environment():impl(std::make_unique<Impl>()) {}
   Environment::Environment(Environment&&) = default;
@@ -727,6 +548,18 @@ namespace expression::interactive {
       auto fancy = environment->fancy_format(info());
       output << fancy(value);
     }
+    void put_values_into_context() {
+      for(auto const& entry : info().get_outer_values()) {
+        //output << entry.first << " : " << fancy_format(*value)(entry.second.type) << "\n";
+        environment->names_to_values.insert_or_assign(entry.first, entry.second);
+      }
+      for(auto const& var_data : info().evaluate_result.variables) {
+        auto const& var_index = var_data.first;
+        if(auto str = info().get_explicit_name(var_index)) {
+          environment->externals_to_names.insert(std::make_pair(var_index, std::move(*str)));
+        }
+      }
+    }
   };
   ParseResult Environment::Impl::parse(std::string_view expr) {
     auto compile = full_compile(expr);
@@ -740,6 +573,71 @@ namespace expression::interactive {
         .environment = this,
         .data = std::move(compile.get_error())
       }}};
+    }
+  }
+  void Environment::Impl::debug_parse(std::string_view expr, std::ostream& output)  {
+    auto result = parse(expr);
+    if(result.has_result()) {
+      /*
+      This block should print a list of variables. Should be factored out to to show this information as needed
+      instead of just in a block. (Possibly with an option to print the whole blog for debugging?)
+
+      It probably doesn't work right now because of changes in progress, but also probably isn't too hard to fix.
+      */
+      /*std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
+      for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
+      for(auto const& [var, reason] : sorted_variables) {
+        output << std::visit(mdb::overloaded{
+          [&](compiler::evaluate::variable_explanation::ApplyRHSCast const&) { return "ApplyRHSCast: "; },
+          [&](compiler::evaluate::variable_explanation::ApplyCodomain const&) { return "ApplyCodomain: "; },
+          [&](compiler::evaluate::variable_explanation::ApplyLHSCast const&) { return "ApplyLHSCast: "; },
+          [&](compiler::evaluate::variable_explanation::ExplicitHole const&) { return "ExplicitHole: "; },
+          [&](compiler::evaluate::variable_explanation::Declaration const&) { return "Declaration: "; },
+          [&](compiler::evaluate::variable_explanation::Axiom const&) { return "Axiom: "; },
+          [&](compiler::evaluate::variable_explanation::TypeFamilyCast const&) { return "TypeFamilyCast: "; },
+          [&](compiler::evaluate::variable_explanation::HoleTypeCast const&) { return "HoleTypeCast: "; },
+          [&](compiler::evaluate::variable_explanation::DeclareTypeCast const&) { return "DeclareTypeCast: "; },
+          [&](compiler::evaluate::variable_explanation::AxiomTypeCast const&) { return "AxiomTypeCast: "; },
+          [&](compiler::evaluate::variable_explanation::LetTypeCast const&) { return "LetTypeCast: "; },
+          [&](compiler::evaluate::variable_explanation::LetCast const&) { return "LetCast: "; },
+          [&](compiler::evaluate::variable_explanation::ForAllTypeCast const&) { return "ForAllTypeCast: "; },
+          [&](compiler::evaluate::variable_explanation::VarType const&) { return "VarType: "; }
+        }, reason) << var << "\n";
+        auto const& index = std::visit([&](auto const& reason) -> compiler::instruction::archive_index::PolymorphicKind {
+          return reason.index;
+        }, reason);
+        auto const& pos = value->instruction_locator[index];
+        auto const& locator_index = pos.visit([&](auto const& obj) { return obj.source.index; });
+        auto const& locator_pos = value->parser_locator[locator_index];
+        auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
+        output << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
+      }
+      output << "\n";*/
+      /*
+      This block prints every new rule.
+
+      Probably also doesn't work due to variable renaming.
+
+      std::vector<expression::Rule> new_rules;
+      for(auto i = value->rule_begin; i < value->rule_end; ++i) {
+        new_rules.push_back(expression_context.rules[i]);
+      }
+      std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
+        return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
+      });
+      for(auto const& rule : new_rules) {
+        output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+      }
+      output << "\n";
+      */
+      result.print_errors_to(output);
+      auto fancy = fancy_format(std::get<EvaluateInfo>(result.impl->data));
+      auto deep = deep_format(std::get<EvaluateInfo>(result.impl->data));
+      output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
+      output << "Deep: " << deep(result.get_result().value) << " of type " << deep(result.get_result().type) << "\n";
+      result.impl->put_values_into_context();
+    } else {
+      result.print_errors_to(output);
     }
   }
   ParseResult::ParseResult(std::unique_ptr<Impl> impl):impl(std::move(impl)) {}
