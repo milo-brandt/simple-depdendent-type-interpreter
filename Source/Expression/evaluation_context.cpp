@@ -179,6 +179,101 @@ namespace expression {
   }
   namespace {
     template<class Filter>
+    tree::Expression reduce_flat(Context& ctx, tree::Expression tree, Filter&& filter) {
+      struct StackFrame {
+        std::uint64_t arg_count;
+        std::uint64_t next_arg_to_reduce;
+      };
+      std::vector<tree::Expression*> spine_stack;
+      std::vector<tree::Expression*> arg_stack;
+      std::vector<StackFrame> stack;
+      auto push_stack_frame = [&](tree::Expression* expr) {
+        //Push the expressions spine and args to the appropriate stacks, and
+        //push a stack frame with the requisite information.
+        auto next_arg_to_reduce = arg_stack.size();
+        std::uint64_t arg_count = 0;
+        tree::Expression* head = expr;
+        spine_stack.push_back(head);
+        while(auto* apply = head->get_if_apply()) {
+          arg_stack.push_back(&apply->rhs);
+          head = &apply->lhs;
+          spine_stack.push_back(head);
+          ++arg_count;
+        }
+        stack.push_back({
+          .arg_count = arg_count,
+          .next_arg_to_reduce = next_arg_to_reduce
+        });
+      };
+      auto reduce_next_arg = [&] { //returns "true" if something was reduced; false if we reduced everything.
+        auto& stack_top = stack.back();
+        if(stack_top.next_arg_to_reduce < arg_stack.size()) {
+          push_stack_frame(arg_stack[stack_top.next_arg_to_reduce]);
+          ++stack_top.next_arg_to_reduce;
+          return true;
+        } else {
+          return false;
+        }
+      };
+      auto find_local_reduction = [&] { //returns "true" if something was changed
+        auto const& stack_top = stack.back();
+        auto* head = spine_stack.back();
+        auto spine_back_index = spine_stack.size() - 1;
+        if(auto* ext = head->get_if_external()) {
+          auto const& ext_info = ctx.external_info[ext->external_index];
+          for(auto const& rule_info : ext_info.rules) {
+            if(rule_info.arg_count <= stack_top.arg_count) {
+              auto test_pos = spine_stack[spine_back_index - rule_info.arg_count];
+              auto const& rule = ctx.rules[rule_info.index];
+              if(!filter(rule)) continue;
+              if(term_matches(*test_pos, rule.pattern)) {
+                replace_with_substitution_at(test_pos, rule.pattern, rule.replacement);
+                return true;
+              }
+            }
+          }
+          for(auto const& rule_info : ext_info.data_rules) {
+            if(rule_info.arg_count <= stack_top.arg_count) {
+              auto test_pos = spine_stack[spine_back_index - rule_info.arg_count];
+              auto const& rule = ctx.data_rules[rule_info.index];
+              if(term_matches(*test_pos, rule.pattern)) {
+                *test_pos = rule.replace(destructure_match(std::move(*test_pos), rule.pattern));
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      };
+      auto pop_stack_frame = [&] {
+        auto back_arg_count = stack.back().arg_count;
+        spine_stack.erase(spine_stack.end() - back_arg_count - 1, spine_stack.end());
+        arg_stack.erase(arg_stack.end() - back_arg_count, arg_stack.end());
+        stack.pop_back();
+      };
+      auto repush_top_frame = [&] { //pop and push a frame after simplifying
+        auto const& stack_top = stack.back();
+        auto* expr = spine_stack[spine_stack.size() - 1 - stack_top.arg_count];
+        pop_stack_frame();
+        push_stack_frame(expr);
+      };
+      /*
+        Body
+      */
+      push_stack_frame(&tree);
+      while(!stack.empty()) {
+        while(reduce_next_arg()); //push args onto stack as long as we can
+        //At this point, the top stack frame has reduced all of its args.
+        if(find_local_reduction()) {
+          repush_top_frame();
+        } else {
+          pop_stack_frame();
+        }
+      }
+      return tree;
+    }
+    /*
+    template<class Filter>
     tree::Expression reduce_impl(Context& ctx, tree::Expression tree, Filter&& filter) {
       struct Detail {
         Context& ctx;
@@ -233,13 +328,13 @@ namespace expression {
       };
       Detail{ctx, filter}.reduce(&tree);
       return std::move(tree);
-    }
+    }*/
   }
   tree::Expression Context::reduce(tree::Expression tree) {
-    return reduce_impl(*this, std::move(tree), [](auto&&) { return true; });
+    return reduce_flat(*this, std::move(tree), [](auto&&) { return true; });
   }
   tree::Expression Context::reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter) {
-    return reduce_impl(*this, std::move(tree), std::move(filter));
+    return reduce_flat(*this, std::move(tree), std::move(filter));
   }
   TypedValue Context::get_external(std::uint64_t i) {
     return {
