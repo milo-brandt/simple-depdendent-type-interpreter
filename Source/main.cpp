@@ -211,10 +211,29 @@ EMSCRIPTEN_BINDINGS(my_module) {
 #else
 
 int main(int argc, char** argv) {
-  std::string last_line = "";
 
   auto environment = setup_enviroment();
 
+  if(argc == 2) {
+    std::ifstream f(argv[1]);
+    if(!f) {
+      std::cout << "Failed to read file \"" << argv[1] << "\"\n";
+      return -1;
+    } else {
+      environment = setup_enviroment(); //clean environment
+      std::string source_str;
+      std::getline(f, source_str, '\0'); //just read the whole file - assuming no null characters in it
+      std::string_view source = source_str;
+      environment.debug_parse(source);
+      return 0;
+    }
+  } else if(argc > 2) {
+    std::cout << "The interpreter expects either a single file to run as an argument or no arguments to run in interactive mode.\n";
+    return -1;
+  }
+
+  //interactive mode
+  std::string last_line = "";
   while(true) {
     std::string line;
     std::getline(std::cin, line);
