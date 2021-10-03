@@ -192,9 +192,18 @@ namespace expression::interactive {
             embeds.push_back(names_to_values.at(s));
             names_to_embeds.insert(std::make_pair(std::move(s), index));
             return index;
-          } else {
-            return std::nullopt;
+          } else if(s.starts_with("ext_")) {
+            std::stringstream outstr(s.substr(4));
+            std::uint64_t ext_index;
+            outstr >> ext_index;
+            if(ext_index < expression_context.external_info.size()) {
+              auto index = embeds.size();
+              embeds.push_back(expression_context.get_external(ext_index));
+              return index;
+            }
           }
+          return std::nullopt;
+
         },
         [&](auto const& literal) -> std::uint64_t { //embed_literal
           auto ret = embeds.size();
@@ -595,7 +604,8 @@ namespace expression::interactive {
 
       It probably doesn't work right now because of changes in progress, but also probably isn't too hard to fix.
       */
-      /*std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
+      auto value = std::get_if<1>(&result.impl->data);
+      std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
       for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
       for(auto const& [var, reason] : sorted_variables) {
         output << std::visit(mdb::overloaded{
@@ -624,12 +634,12 @@ namespace expression::interactive {
         auto const& str_pos = locator_pos.visit([&](auto const& o) { return o.position; });
         output << "Position: " << format_info(expression_parser::position_of(str_pos, value->lexer_locator), value->source) << "\n";
       }
-      output << "\n";*/
+      output << "\n";
       /*
       This block prints every new rule.
 
       Probably also doesn't work due to variable renaming.
-
+      */
       std::vector<expression::Rule> new_rules;
       for(auto i = value->rule_begin; i < value->rule_end; ++i) {
         new_rules.push_back(expression_context.rules[i]);
@@ -641,10 +651,15 @@ namespace expression::interactive {
         output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
       }
       output << "\n";
-      */
+
       result.print_errors_to(output);
       auto fancy = fancy_format(std::get<EvaluateInfo>(result.impl->data));
       auto deep = deep_format(std::get<EvaluateInfo>(result.impl->data));
+      output << "Raw: " << raw_format(result.get_result().value) << "\n";
+      output << "Raw type: " << raw_format(result.get_result().type) << "\n";
+      output << "Spine: " << raw_format(expression_context.reduce_spine(result.get_result().value)) << "\n";
+      output << "Spine type: " << raw_format(expression_context.reduce_spine(result.get_result().type)) << "\n";
+
       output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
       output << "Deep: " << deep(result.get_result().value) << " of type " << deep(result.get_result().type) << "\n";
       result.impl->put_values_into_context();
