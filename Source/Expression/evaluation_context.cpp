@@ -331,17 +331,117 @@ namespace expression {
       return std::move(tree);
     }*/
   }
+  /*
+    Patterns can...
+      1. request a subpattern be matched against an axiomatic expression...
+      2. re-use results of these matches
+  */
   tree::Expression Context::reduce(tree::Expression tree) {
     return reduce_flat(*this, std::move(tree), [](auto&&) { return true; });
   }
   tree::Expression Context::reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter) {
     return reduce_flat(*this, std::move(tree), std::move(filter));
   }
+  namespace {
+    void reduce_spine_impl(Context& ctx, tree::Expression* term) {
+    REDUCTION_START:
+      auto unfolding = unfold_ref(*term);
+      auto replace_after_args = [&](std::uint64_t arg_count, tree::Expression replacement) {
+        tree::Expression* candidate = term;
+        for(std::size_t i = 0; i < unfolding.args.size() - arg_count; ++i) {
+          candidate = &candidate->get_apply().lhs;
+        }
+        *candidate = std::move(replacement);
+      };
+      if(auto ext_head = unfolding.head->get_if_external()) {
+        auto head = ext_head->external_index;
+        auto const& program = ctx.external_info[head].program;
+        if(program.args_needed > unfolding.args.size()) return; //no reduction possible
+        auto& register_list = unfolding.args; //reuse same vector
+        register_list.resize(program.registers_needed, nullptr);
+        std::size_t instruction_pointer = 0;
+        PROGRAM_RUN_HEAD:
+        {
+          //Interpret program
+          namespace element = fast_rule::program_element;
+          auto const& instruction = program.instructions[instruction_pointer];
+          if(auto* expand = std::get_if<element::Expand>(&instruction)) {
+            auto* subterm = register_list[expand->source_register];
+            reduce_spine_impl(ctx, subterm);
+            auto target_unfolding = unfold_ref(*subterm);
+            if(auto* data_head = target_unfolding.head->get_if_data()) {
+              for(auto const& data_case : expand->data_checks) {
+                if(data_case.data_type == data_head->data.get_type_index()) {
+                  instruction_pointer = data_case.next_instruction;
+                  goto PROGRAM_RUN_HEAD;
+                }
+              }
+            } else {
+              auto const& ext_head = target_unfolding.head->get_external();
+              for(auto const& ext_case : expand->cases) {
+                if(ext_case.head_external == ext_head.external_index
+                && ext_case.arg_count == target_unfolding.args.size()) {
+                  for(std::size_t i = 0; i < target_unfolding.args.size(); ++i) {
+                    register_list[expand->base_output + i] = target_unfolding.args[i];
+                  }
+                  instruction_pointer = ext_case.next_instruction;
+                }
+              }
+            }
+            instruction_pointer = expand->default_next;
+            goto PROGRAM_RUN_HEAD;
+          } else if(auto* replace = std::get_if<element::Replace>(&instruction)) {
+            auto const& rule_info = ctx.external_info[head].rules[replace->pattern_index];
+            auto const& rule = ctx.rules[rule_info.index];
+            std::vector<tree::Expression> matches;
+            for(auto register_index : replace->pattern_arg_registers) {
+              matches.push_back(std::move(*register_list[register_index]));
+            }
+            replace_after_args(
+              rule_info.arg_count,
+              substitute_into_replacement(matches, rule.replacement)
+            );
+            goto REDUCTION_START;
+          } else if(auto* data_replace = std::get_if<element::ReplaceData>(&instruction)) {
+            auto const& rule_info = ctx.external_info[head].data_rules[replace->pattern_index];
+            auto const& rule = ctx.data_rules[rule_info.index];
+            std::vector<tree::Expression> matches;
+            for(auto register_index : replace->pattern_arg_registers) {
+              matches.push_back(std::move(*register_list[register_index]));
+            }
+            replace_after_args(
+              rule_info.arg_count,
+              rule.replace(std::move(matches))
+            );
+            goto REDUCTION_START;
+          } else {
+            return;
+          }
+        }
+      }
+    }
+  }
+  tree::Expression Context::reduce_spine(tree::Expression tree) {
+    return reduce_flat(*this, std::move(tree), [](auto&&) { return true; });
+  }
   TypedValue Context::get_external(std::uint64_t i) {
     return {
       .value = tree::External{i},
       .type = external_info[i].type
     };
+  }
+  namespace {
+    void regenerate_program_for(Context& context, std::uint64_t head) {
+      std::vector<indexed_pattern::Pattern> patterns;
+      std::vector<indexed_data_pattern::Pattern> data_patterns;
+      for(auto const& rule : context.external_info[head].rules) {
+        patterns.push_back(index_pattern(context.rules[rule.index].pattern));
+      }
+      for(auto const& rule : context.external_info[head].data_rules) {
+        data_patterns.push_back(index_pattern(context.data_rules[rule.index].pattern));
+      }
+      context.external_info[head].program = fast_rule::from_patterns(patterns, data_patterns);
+    }
   }
   void Context::add_rule(Rule rule) {
     auto index = rules.size();
@@ -352,6 +452,7 @@ namespace expression {
       .index = index,
       .arg_count = args
     });
+    regenerate_program_for(*this, head);
   }
   void Context::add_data_rule(DataRule rule) {
     auto index = data_rules.size();
@@ -362,6 +463,7 @@ namespace expression {
       .index = index,
       .arg_count = args
     });
+    regenerate_program_for(*this, head);
   }
 
   std::optional<Context::FunctionData> Context::get_domain_and_codomain(tree::Expression in) {

@@ -11,6 +11,9 @@ void debug_print_pattern(expression::pattern::Pattern const& pat) {
 void debug_print_rule(expression::Rule const& rule) {
   std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
 }
+void debug_print_program(expression::fast_rule::Program const& program) {
+  std::cout << format(program) << "\n";
+}
 
 expression::interactive::Environment setup_enviroment() {
   expression::interactive::Environment environment;

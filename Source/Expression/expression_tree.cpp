@@ -348,4 +348,67 @@ namespace expression {
     std::reverse(ret.args.begin(), ret.args.end());
     return ret;
   }
+
+  indexed_pattern::Pattern index_pattern(pattern::Pattern const& p) {
+    struct Detail {
+      std::uint64_t next_index = 0;
+      indexed_pattern::Pattern index(pattern::Pattern const& p) {
+        return p.visit(mdb::overloaded{
+          [&](pattern::Apply const& apply) -> indexed_pattern::Pattern {
+            auto lhs = index(apply.lhs);
+            auto rhs = index(apply.rhs);
+            return indexed_pattern::Apply{
+              std::move(lhs),
+              std::move(rhs)
+            };
+          },
+          [&](pattern::Wildcard const& wildcard) -> indexed_pattern::Pattern {
+            return indexed_pattern::Wildcard{
+              next_index++
+            };
+          },
+          [&](pattern::Fixed const& fixed) -> indexed_pattern::Pattern {
+            return indexed_pattern::Fixed{
+              .external_index = fixed.external_index
+            };
+          }
+        });
+      }
+    };
+    return Detail{}.index(p);
+  }
+  indexed_data_pattern::Pattern index_pattern(data_pattern::Pattern const& p) {
+    struct Detail {
+      std::uint64_t next_index = 0;
+      indexed_data_pattern::Pattern index(data_pattern::Pattern const& p) {
+        return p.visit(mdb::overloaded{
+          [&](data_pattern::Apply const& apply) -> indexed_data_pattern::Pattern {
+            auto lhs = index(apply.lhs);
+            auto rhs = index(apply.rhs);
+            return indexed_data_pattern::Apply{
+              std::move(lhs),
+              std::move(rhs)
+            };
+          },
+          [&](data_pattern::Wildcard const& wildcard) -> indexed_data_pattern::Pattern {
+            return indexed_data_pattern::Wildcard{
+              next_index++
+            };
+          },
+          [&](data_pattern::Data const& data) -> indexed_data_pattern::Pattern {
+            return indexed_data_pattern::Data{
+              data.type_index,
+              next_index++
+            };
+          },
+          [&](data_pattern::Fixed const& fixed) -> indexed_data_pattern::Pattern {
+            return indexed_data_pattern::Fixed{
+              .external_index = fixed.external_index
+            };
+          }
+        });
+      }
+    };
+    return Detail{}.index(p);
+  }
 }

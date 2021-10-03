@@ -64,6 +64,19 @@ namespace expression {
     tree::Expression fold() &&;
   };
   Unfolding unfold(tree::Expression);
+
+  struct Rule {
+    pattern::Pattern pattern;
+    tree::Expression replacement;
+  };
+  struct DataRule {
+    data_pattern::Pattern pattern;
+    mdb::function<tree::Expression(std::vector<tree::Expression>)> replace;
+  };
+
+  indexed_pattern::Pattern index_pattern(pattern::Pattern const&);
+  indexed_data_pattern::Pattern index_pattern(data_pattern::Pattern const&);
+
 }
 
 #endif

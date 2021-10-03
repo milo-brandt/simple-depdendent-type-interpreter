@@ -7,3 +7,6 @@ end
 define print_rule
   call (void)debug_print_rule($arg0)
 end
+define print_program
+  call (void)debug_print_program($arg0)
+end
