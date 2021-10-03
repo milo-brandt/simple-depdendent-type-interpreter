@@ -422,7 +422,9 @@ namespace expression::fast_rule {
   }
   Multiprogram from_patterns(std::vector<indexed_pattern::Pattern> patterns, std::vector<indexed_data_pattern::Pattern> data_patterns) {
     std::vector<Program> programs;
-    auto [first_program, arg_count] = max_from_patterns(patterns, data_patterns);
+    std::uint32_t arg_count;
+    auto [first_program, first_arg_count] = max_from_patterns(patterns, data_patterns);
+    arg_count = first_arg_count;
     programs.push_back(std::move(first_program));
     while(arg_count > 0) {
       mdb::erase_if(patterns, [&](auto const& pat) { return unfold_ref(&pat).args.size() == arg_count; });
