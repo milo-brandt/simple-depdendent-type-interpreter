@@ -376,10 +376,9 @@ namespace expression {
                   goto PROGRAM_RUN_HEAD;
                 }
               }
-            } else {
-              auto const& ext_head = target_unfolding.head->get_external();
+            } else if(auto* ext_head = target_unfolding.head->get_if_external()) {
               for(auto const& ext_case : expand->cases) {
-                if(ext_case.head_external == ext_head.external_index
+                if(ext_case.head_external == ext_head->external_index
                 && ext_case.arg_count == target_unfolding.args.size()) {
                   for(std::size_t i = 0; i < target_unfolding.args.size(); ++i) {
                     register_list[expand->base_output + i] = target_unfolding.args[i];
@@ -387,6 +386,8 @@ namespace expression {
                   instruction_pointer = ext_case.next_instruction;
                 }
               }
+            } else {
+              //must be an argument head; can't match data _or_ external
             }
             instruction_pointer = expand->default_next;
             goto PROGRAM_RUN_HEAD;
@@ -403,10 +404,10 @@ namespace expression {
             );
             goto REDUCTION_START;
           } else if(auto* data_replace = std::get_if<element::ReplaceData>(&instruction)) {
-            auto const& rule_info = ctx.external_info[head].data_rules[replace->pattern_index];
+            auto const& rule_info = ctx.external_info[head].data_rules[data_replace->data_pattern_index];
             auto const& rule = ctx.data_rules[rule_info.index];
             std::vector<tree::Expression> matches;
-            for(auto register_index : replace->pattern_arg_registers) {
+            for(auto register_index : data_replace->pattern_arg_registers) {
               matches.push_back(std::move(*register_list[register_index]));
             }
             replace_after_args(
@@ -422,7 +423,8 @@ namespace expression {
     }
   }
   tree::Expression Context::reduce_spine(tree::Expression tree) {
-    return reduce_flat(*this, std::move(tree), [](auto&&) { return true; });
+    reduce_spine_impl(*this, &tree);
+    return std::move(tree);
   }
   TypedValue Context::get_external(std::uint64_t i) {
     return {
