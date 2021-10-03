@@ -347,11 +347,7 @@ namespace expression {
     REDUCTION_START:
       auto unfolding = unfold_ref(*term);
       auto replace_after_args = [&](std::uint64_t arg_count, tree::Expression replacement) {
-        tree::Expression* candidate = term;
-        for(std::size_t i = 0; i < unfolding.args.size() - arg_count; ++i) {
-          candidate = &candidate->get_apply().lhs;
-        }
-        *candidate = std::move(replacement);
+        *unfolding.spine[arg_count] = std::move(replacement);
       };
       if(auto ext_head = unfolding.head->get_if_external()) {
         auto head = ext_head->external_index;
