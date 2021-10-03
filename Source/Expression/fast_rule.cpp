@@ -117,7 +117,10 @@ namespace expression::fast_rule {
             for(std::size_t register_index = 0; register_index < matches_left.width(); ++register_index) {
               auto const& entry = matches_left(register_index, pattern_row);
               if(auto* arg_index = std::get_if<2>(&entry)) {
-                pattern_arg_registers.resize(*arg_index + 1, (std::uint32_t)-1);
+                if(pattern_arg_registers.size() <= *arg_index) {
+                  //make sure vector is big enough to hold info
+                  pattern_arg_registers.resize(*arg_index + 1, (std::uint32_t)-1);
+                }
                 pattern_arg_registers[*arg_index] = register_index;
               }
             }
