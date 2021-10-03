@@ -23,9 +23,9 @@
 		{{ kind.name }}({{ component.name }} arg);
 		{%- endfor %}
 		{{ kind.name }}({{ kind.name }} const&);
-		{{ kind.name }}({{ kind.name }}&&);
+		{{ kind.name }}({{ kind.name }}&&) noexcept;
 		{{ kind.name }}& operator=({{ kind.name}} const&);
-		{{ kind.name }}& operator=({{ kind.name}}&&);
+		{{ kind.name }}& operator=({{ kind.name}}&&) noexcept;
 		~{{ kind.name }}();
 		{%- for component in kind.components %}
 		{{component.name}}& get_{{component.name|underscore}}() &;
@@ -84,11 +84,11 @@
 	}
 {%- endmacro %}
 {%- macro kind_move_and_assignment(kind) -%}
-	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other):index(other.index), data(other.data) { other.data = nullptr; }
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other) noexcept:index(other.index), data(other.data) { other.data = nullptr; }
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }} const& other) {
 		return *this = {{ kind.name }}{other};
 	}
-	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }}&& other) {
+	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }}&& other) noexcept {
 		std::swap(index, other.index);
 		std::swap(data, other.data);
 		return *this;
