@@ -11,6 +11,10 @@ namespace expression {
     tree::Expression fam;
     tree::Expression var;
     Impl(std::optional<ParentInfo> parent, std::uint64_t depth, tree::Expression fam, tree::Expression var):parent(std::move(parent)),depth(depth),fam(std::move(fam)),var(std::move(var)){}
+    /*
+    fam : Type = ($0 : ctx_0) -> ($1 : ctx_1 $0) -> ($2 : ctx_2 $0 $1) -> ... -> Type
+    var : fam -> Type = (F : fam) -> \$0:ctx_0.\$1:ctx_1 $0.\$2:ctx_2 $0 $1. ... .F $0 $1 $2 ... $n
+    */
   };
   Stack::Stack(std::shared_ptr<Impl> impl):impl(std::move(impl)) {}
 
@@ -62,7 +66,17 @@ namespace expression {
     )};
   }
   Stack Stack::extend(Context& context, tree::Expression extension_family) const {
+    auto extension_ext = context.create_variable(expression::ExternalInfo{ //inner_constant_family
+      .is_axiom = false,
+      .type = impl->fam
+    });
+    context.add_rule({
+      .pattern = expression::lambda_pattern(extension_ext, impl->depth),
+      .replacement = extension_family
+    });
     return context.create_variables<4>([&](auto&& build, auto inner_constant_family, auto family_over, auto as_fibration, auto var_p) {
+      //new_fam is an instance of the in-context type
+      // extension_family $0 ... $n -> Type
       tree::Expression new_fam = tree::Apply{
         impl->var,
         tree::External{family_over}
@@ -81,7 +95,7 @@ namespace expression {
           expression::multi_apply(
             tree::External{context.primitives.constant},
             tree::External{context.primitives.type},
-            tree::External{context.primitives.type},
+            impl->fam,
             new_fam
           )
         )
@@ -106,7 +120,7 @@ namespace expression {
         .pattern = expression::lambda_pattern(family_over, impl->depth),
         .replacement = expression::multi_apply(
           tree::External{context.primitives.arrow},
-          apply_args(extension_family, 0, impl->depth),
+          extension_family,
           apply_args(tree::External{inner_constant_family}, 0, impl->depth)
         )
       });
@@ -114,7 +128,7 @@ namespace expression {
         .pattern = expression::lambda_pattern(as_fibration, impl->depth + 1),
         .replacement = expression::multi_apply(
           tree::External{context.primitives.arrow},
-          apply_args(extension_family, 1, impl->depth),
+          apply_args(tree::External{extension_ext}, 1, impl->depth),
           apply_args(tree::Arg{0}, 1, impl->depth)
         )
       });
@@ -128,6 +142,7 @@ namespace expression {
           }
         }
       });
+      std::cout << "Var: " << var_p << ", Family over: " << family_over << ", Depth: " << impl->depth << "\n";
       return Stack{std::make_shared<Impl>(
         Impl::ParentInfo{
           .parent = impl,
