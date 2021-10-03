@@ -380,6 +380,7 @@ namespace expression {
                     register_list[expand->base_output + i] = target_unfolding.args[i];
                   }
                   instruction_pointer = ext_case.next_instruction;
+                  goto PROGRAM_RUN_HEAD;
                 }
               }
             } else {
