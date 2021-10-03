@@ -384,7 +384,7 @@ class Multitree:
         self.multikind = len(self.kinds) > 1
 
 class TreeOutput:
-    def __init__(self, *, trees, archive_namespace = None, multitrees = None):
+    def __init__(self, *, trees, archive_namespace = None, multitrees = None, shared = False):
         self.trees = trees
         self.shape = self.trees[0].shape
         for tree in self.trees:
@@ -399,12 +399,14 @@ class TreeOutput:
         else:
             self.archive = None
         self.multitrees = multitrees
+        self.shared = shared
     def write_string(self, file_info):
         return tree_template.render({
             "trees": self.trees,
             "archive": self.archive,
             "shape": self.shape,
             "multitrees": self.multitrees,
+            "shared": self.shared,
             "file_info": file_info
         })
 
