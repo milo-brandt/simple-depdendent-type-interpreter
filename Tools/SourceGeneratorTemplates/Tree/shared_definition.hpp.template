@@ -18,7 +18,7 @@
 	{%- for component in kind.components %}
 		struct {{ component.name }}Impl;
 	{%- endfor %}
-		AbstractComponent* data = nullptr;
+		AbstractComponent* p_data = nullptr;
 	public:
 		{%- for component in kind.components %}
 		{{ kind.name }}({{ component.name }} arg);
@@ -33,6 +33,7 @@
 		{{component.name}} const* get_if_{{component.name|underscore}}() const;
 		bool holds_{{component.name|underscore}}() const;
 		{%- endfor %}
+		void const* data() const { return p_data; }
 		template<{{ kind.name }}ConstVisitor Visitor> auto visit(Visitor&& visitor) const -> {{ visitor_return_type(kind) }};
 	};
 {%- endmacro %}
@@ -56,7 +57,7 @@
 		{{ component.name }} value;
 		{{ component.name }}Impl({{component.name}} arg):AbstractComponent({{loop.index0}}),value(std::move(arg)) {}
 	};
-	inline {{ kind.name }}::{{ kind.name }}({{component.name}} arg):data(new {{ component.name }}Impl{std::move(arg)}) {}
+	inline {{ kind.name }}::{{ kind.name }}({{component.name}} arg):p_data(new {{ component.name }}Impl{std::move(arg)}) {}
 	{%- endfor %}
 {%- endmacro %}
 {%- macro deref_data(kind, data_name) %}
@@ -71,21 +72,21 @@
 {%- endmacro %}
 {%- macro kind_destructor(kind) -%}
 	{{ kind.name }}::~{{ kind.name}}() {
-		if(!data) return;
-		{{ deref_data(kind, "data") }}
+		if(!p_data) return;
+		{{ deref_data(kind, "p_data") }}
 	}
 {%- endmacro %}
 {%- macro kind_copy_constructor(kind) -%}
-	{{ kind.name }}::{{ kind.name }}({{ kind.name }} const& other):data(other.data) {
-		if(data) ++data->reference_count;
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }} const& other):p_data(other.p_data) {
+		if(p_data) ++p_data->reference_count;
 	}
 {%- endmacro %}
 {%- macro kind_move_and_assignment(kind) -%}
-	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other) noexcept:data(other.data) { other.data = nullptr; }
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other) noexcept:p_data(other.p_data) { other.p_data = nullptr; }
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }} const& other) {
-		auto old_data = data;
-		data = other.data;
-		++data->reference_count;
+		auto old_data = p_data;
+		p_data = other.p_data;
+		++p_data->reference_count;
 		if(old_data) {
 			{{ deref_data(kind, "old_data") }}
 		}
@@ -93,19 +94,19 @@
 	}
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }}&& other) noexcept {
 		if(this == &other) return *this;
-		if(data) {
-			{{ deref_data(kind, "data") }}
+		if(p_data) {
+			{{ deref_data(kind, "p_data") }}
 		}
-		data = other.data;
-		other.data = nullptr;
+		p_data = other.p_data;
+		other.p_data = nullptr;
 		return *this;
 	}
 {%- endmacro %}
 {%- macro kind_getters(kind) -%}
 	{%- for component in kind.components %}
-	{{ component.name }} const& {{ kind.name }}::get_{{ component.name|underscore }}() const { if(data->discriminator == {{loop.index0}}) return (({{ component.name }}Impl const*)data)->value; else std::terminate(); }
-	{{ component.name }} const* {{ kind.name }}::get_if_{{ component.name|underscore }}() const { if(data->discriminator == {{loop.index0}}) return &(({{ component.name }}Impl const*)data)->value; else return nullptr; }
-	bool {{ kind.name }}::holds_{{component.name|underscore}}() const { return data->discriminator == {{loop.index0}}; }
+	{{ component.name }} const& {{ kind.name }}::get_{{ component.name|underscore }}() const { if(p_data->discriminator == {{loop.index0}}) return (({{ component.name }}Impl const*)p_data)->value; else std::terminate(); }
+	{{ component.name }} const* {{ kind.name }}::get_if_{{ component.name|underscore }}() const { if(p_data->discriminator == {{loop.index0}}) return &(({{ component.name }}Impl const*)p_data)->value; else return nullptr; }
+	bool {{ kind.name }}::holds_{{component.name|underscore}}() const { return p_data->discriminator == {{loop.index0}}; }
 	{%- endfor %}
 {%- endmacro %}
 {%- macro kind_definition(kind) -%}
@@ -142,10 +143,10 @@ std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<
 {%- endmacro %}
 {%- macro visitor_implementation(kind, concept_name) -%}
 	template<{{concept_name}} Visitor> auto {{ kind.name }}::visit(Visitor&& visitor) const -> {{ visitor_return_type(kind) }} {
-		if(!data) std::terminate();
-		switch(data->discriminator) {
+		if(!p_data) std::terminate();
+		switch(p_data->discriminator) {
 		{%- for component in kind.components %}
-			case {{ loop.index0 }}: return std::forward<Visitor>(visitor)((({{ component.name }}Impl const*)data)->value);
+			case {{ loop.index0 }}: return std::forward<Visitor>(visitor)((({{ component.name }}Impl const*)p_data)->value);
 		{%- endfor %}
 			default: std::terminate();
 		}

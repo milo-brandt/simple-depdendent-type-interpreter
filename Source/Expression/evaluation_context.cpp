@@ -180,12 +180,19 @@ namespace expression {
   namespace {
     template<class Filter>
     tree::Expression reduce_flat(Context& ctx, tree::Expression tree, Filter&& filter) {
+      struct TreeHasher {
+        std::hash<void const*> h;
+        auto operator()(tree::Expression const& expr) const noexcept {
+          return h(expr.data());
+        }
+      };
       struct StackFrame {
         tree::Expression head;
         std::uint64_t arg_count;
         std::uint64_t next_arg_to_reduce;
         std::size_t result_position;
       };
+      std::unordered_map<tree::Expression, tree::Expression, TreeHasher> memoized_results;
       std::vector<tree::Expression> arg_stack;
       std::vector<StackFrame> stack;
       auto push_stack_frame = [&](std::size_t result_position) {
@@ -206,16 +213,20 @@ namespace expression {
           .result_position = result_position
         });
       };
-      auto reduce_next_arg = [&] { //returns "true" if something was reduced; false if we reduced everything.
+      auto reduce_next_arg = [&] { //returns "true" if current frame is fully reduced
         auto& stack_top = stack.back();
         std::size_t stack_top_index = stack.size() - 1;
-        if(stack_top.next_arg_to_reduce < arg_stack.size()) {
-          push_stack_frame(stack_top.next_arg_to_reduce);
-          ++stack[stack_top_index].next_arg_to_reduce;
-          return true;
-        } else {
-          return false;
+        while(stack_top.next_arg_to_reduce < arg_stack.size()) {
+          if(memoized_results.contains(arg_stack[stack_top.next_arg_to_reduce])) {
+            arg_stack[stack_top.next_arg_to_reduce] = memoized_results.at(arg_stack[stack_top.next_arg_to_reduce]);
+            ++stack[stack_top_index].next_arg_to_reduce;
+          } else {
+            push_stack_frame(stack_top.next_arg_to_reduce);
+            ++stack[stack_top_index].next_arg_to_reduce;
+            return true;
+          }
         }
+        return false;
       };
       auto recombine_head = [&](tree::Expression head, std::size_t arg_count) {
         for(std::size_t i = 0; i < arg_count; ++i) {
@@ -259,16 +270,19 @@ namespace expression {
         }
         return false;
       };
-      auto pop_stack_frame = [&] {
+      auto pop_stack_frame = [&](bool save_result) {
         auto& stack_top = stack.back();
         auto root_head = recombine_head(stack_top.head, stack_top.arg_count);
         arg_stack.erase(arg_stack.end() - stack_top.arg_count, arg_stack.end());
+        if(save_result) {
+          memoized_results.insert(std::make_pair(arg_stack[stack_top.result_position], root_head));
+        }
         arg_stack[stack_top.result_position] = std::move(root_head);
         stack.pop_back();
       };
       auto repush_top_frame = [&] { //pop and push a frame after simplifying
         auto frame_pos = stack.back().result_position;
-        pop_stack_frame();
+        pop_stack_frame(false);
         push_stack_frame(frame_pos);
       };
       /*
@@ -282,7 +296,7 @@ namespace expression {
         if(find_local_reduction()) {
           repush_top_frame();
         } else {
-          pop_stack_frame();
+          pop_stack_frame(true);
         }
       }
       return std::move(arg_stack[0]);
