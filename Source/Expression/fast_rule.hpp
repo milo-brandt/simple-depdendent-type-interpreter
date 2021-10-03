@@ -63,8 +63,17 @@ namespace expression::fast_rule {
     std::ostream& operator<<(std::ostream&, Formatted const&);
   };
   using Program = program_element::Program;
-  Program from_patterns(std::vector<indexed_pattern::Pattern> const&, std::vector<indexed_data_pattern::Pattern> const&);
-  Program trivial_program();
+  struct Multiprogram {
+    std::vector<Program> options; //ordered in descending number of args
+    Program const& program_to_handle_n_args(std::uint64_t arg_count) {
+      for(std::size_t i = 0; i < options.size(); ++i) {
+        if(options[i].args_needed <= arg_count) return options[i];
+      }
+      std::terminate(); //should have failure as a fallback
+    }
+  };
+  Multiprogram from_patterns(std::vector<indexed_pattern::Pattern>, std::vector<indexed_data_pattern::Pattern>);
+  Multiprogram trivial_program();
 }
 
 #endif

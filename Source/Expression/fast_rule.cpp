@@ -1,5 +1,6 @@
 #include "fast_rule.hpp"
 #include "../Utility/grid.hpp"
+#include "../Utility/vector_utility.hpp"
 #include <variant>
 #include <optional>
 #include <unordered_set>
@@ -403,26 +404,43 @@ namespace expression::fast_rule {
   };
 
   //e.g. if we had f (succ (succ x)) = ... and f (succ zero) = ... and f zero = ..., we would start
-  program_element::Program from_patterns(std::vector<indexed_pattern::Pattern> const& patterns, std::vector<indexed_data_pattern::Pattern> const& data_patterns) {
-    std::uint32_t args_needed = 0;
-    for(auto const& pattern : patterns) {
-      auto arg_count = unfold_ref(&pattern).args.size();
-      if(arg_count > args_needed) args_needed = (std::uint32_t)arg_count;
+  namespace {
+    std::pair<Program, std::uint32_t> max_from_patterns(std::vector<indexed_pattern::Pattern> const& patterns, std::vector<indexed_data_pattern::Pattern> const& data_patterns) {
+      std::uint32_t args_needed = 0;
+      for(auto const& pattern : patterns) {
+        auto arg_count = unfold_ref(&pattern).args.size();
+        if(arg_count > args_needed) args_needed = (std::uint32_t)arg_count;
+      }
+      for(auto const& pattern : data_patterns) {
+        auto arg_count = unfold_ref(&pattern).args.size();
+        if(arg_count > args_needed) args_needed = (std::uint32_t)arg_count;
+      }
+      ProgramBuilder builder;
+      builder.write_tableaux(Tableaux::from_pattern_list(patterns, data_patterns, args_needed));
+      return std::make_pair(std::move(builder).take(args_needed), args_needed);
     }
-    for(auto const& pattern : data_patterns) {
-      auto arg_count = unfold_ref(&pattern).args.size();
-      if(arg_count > args_needed) args_needed = (std::uint32_t)arg_count;
-    }
-    ProgramBuilder builder;
-    builder.write_tableaux(Tableaux::from_pattern_list(patterns, data_patterns, args_needed));
-    return std::move(builder).take(args_needed);
   }
-  Program trivial_program() {
-    return {
+  Multiprogram from_patterns(std::vector<indexed_pattern::Pattern> patterns, std::vector<indexed_data_pattern::Pattern> data_patterns) {
+    std::vector<Program> programs;
+    auto [first_program, arg_count] = max_from_patterns(patterns, data_patterns);
+    programs.push_back(std::move(first_program));
+    while(arg_count > 0) {
+      mdb::erase_if(patterns, [&](auto const& pat) { return unfold_ref(&pat).args.size() == arg_count; });
+      mdb::erase_if(data_patterns, [&](auto const& pat) { return unfold_ref(&pat).args.size() == arg_count; });
+      auto [next_program, next_arg_count] = max_from_patterns(patterns, data_patterns);
+      arg_count = next_arg_count;
+      programs.push_back(std::move(next_program));
+    }
+    return Multiprogram{
+      .options = std::move(programs)
+    };
+  }
+  Multiprogram trivial_program() {
+    return {.options = {{
       .registers_needed = 0,
       .args_needed = 0,
       .instructions = {program_element::Fail{}}
-    };
+    }}};
   }
   namespace program_element {
     std::ostream& operator<<(std::ostream& o, Formatted const& f) {

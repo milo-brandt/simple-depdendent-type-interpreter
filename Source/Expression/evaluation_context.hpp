@@ -25,7 +25,7 @@ namespace expression {
     };
     std::vector<RuleInfo> rules;
     std::vector<RuleInfo> data_rules;
-    fast_rule::Program program = fast_rule::trivial_program();
+    fast_rule::Multiprogram program = fast_rule::trivial_program();
   };
   struct Primitives {
     std::uint64_t type;

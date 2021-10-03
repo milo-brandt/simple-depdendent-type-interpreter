@@ -351,8 +351,7 @@ namespace expression {
       };
       if(auto ext_head = unfolding.head->get_if_external()) {
         auto head = ext_head->external_index;
-        auto const& program = ctx.external_info[head].program;
-        if(program.args_needed > unfolding.args.size()) return; //no reduction possible
+        auto const& program = ctx.external_info[head].program.program_to_handle_n_args(unfolding.args.size());
         auto& register_list = unfolding.args; //reuse same vector
         register_list.resize(program.registers_needed, nullptr);
         std::size_t instruction_pointer = 0;

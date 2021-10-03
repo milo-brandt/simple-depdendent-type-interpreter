@@ -1,9 +1,15 @@
 #ifndef MDB_VECTOR_UTILITY_HPP
 #define MDB_VECTOR_UTILITY_HPP
 
+#include <algorithm>
 #include <vector>
 
 namespace mdb {
+  template<class T, class Predicate>
+  void erase_if(std::vector<T>& vec, Predicate&& predicate) {
+    auto erase_start = std::remove_if(vec.begin(), vec.end(), std::forward<Predicate>(predicate));
+    vec.erase(erase_start, vec.end());
+  }
   template<class T, class Run>
   bool erase_from_active_queue(std::vector<T>& vec, Run&& try_complete) {
     //given a vector, call try_complete on each element once and erase any
