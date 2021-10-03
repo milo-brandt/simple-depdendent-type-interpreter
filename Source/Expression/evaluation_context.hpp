@@ -2,7 +2,6 @@
 #define EVALUATION_CONTEXT_HPP
 
 #include "expression_tree.hpp"
-#include "fast_rule.hpp"
 
 namespace expression {
   constexpr auto lambda_pattern = [](std::uint64_t head, std::uint64_t args) {
@@ -25,7 +24,6 @@ namespace expression {
     };
     std::vector<RuleInfo> rules;
     std::vector<RuleInfo> data_rules;
-    fast_rule::Multiprogram program = fast_rule::trivial_program();
   };
   struct Primitives {
     std::uint64_t type;
@@ -53,7 +51,6 @@ namespace expression {
     void replace_rule(std::size_t index, Rule new_rule);
     void add_data_rule(DataRule);
     tree::Expression reduce(tree::Expression tree);
-    tree::Expression reduce_spine(tree::Expression tree); //only guarunteed to agree with full reduction on spine.
     tree::Expression reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);
     struct FunctionData {
       tree::Expression domain;
