@@ -23,8 +23,23 @@ output = shape.generate_instance(namespace = "expression::data_pattern", data = 
         ]
     }
 })
+indexed_output = shape.generate_instance(namespace = "expression::indexed_data_pattern", data = {
+    "Pattern": {
+        "Apply": [],
+        "Fixed": [
+            ("external_index", "std::uint64_t")
+        ],
+        "Wildcard": [
+            ("match_index", "std::uint64_t")
+        ],
+        "Data": [
+            ("type_index", "std::uint64_t"),
+            ("match_index", "std::uint64_t")
+        ]
+    }
+})
 tree_def = TreeOutput(
-    trees = [output]
+    trees = [output, indexed_output]
 )
 
 main_output = get_output("THIS_impl")

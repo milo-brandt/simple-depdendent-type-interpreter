@@ -13,6 +13,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <map>
+#include "rule_simplification.hpp"
 
 namespace expression::interactive {
   namespace {
@@ -192,9 +193,18 @@ namespace expression::interactive {
             embeds.push_back(names_to_values.at(s));
             names_to_embeds.insert(std::make_pair(std::move(s), index));
             return index;
-          } else {
-            return std::nullopt;
+          } else if(s.starts_with("ext_")) {
+            std::stringstream outstr(s.substr(4));
+            std::uint64_t ext_index;
+            outstr >> ext_index;
+            if(ext_index < expression_context.external_info.size()) {
+              auto index = embeds.size();
+              embeds.push_back(expression_context.get_external(ext_index));
+              return index;
+            }
           }
+          return std::nullopt;
+
         },
         [&](auto const& literal) -> std::uint64_t { //embed_literal
           auto ret = embeds.size();
@@ -589,13 +599,15 @@ namespace expression::interactive {
   void Environment::Impl::debug_parse(std::string_view expr, std::ostream& output)  {
     auto result = parse(expr);
     if(result.has_result()) {
+      auto value = std::get_if<1>(&result.impl->data);
       /*
       This block should print a list of variables. Should be factored out to to show this information as needed
       instead of just in a block. (Possibly with an option to print the whole blog for debugging?)
 
       It probably doesn't work right now because of changes in progress, but also probably isn't too hard to fix.
       */
-      /*std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
+      /*
+      std::map<std::uint64_t, compiler::evaluate::variable_explanation::Any> sorted_variables;
       for(auto const& entry : value->evaluate_result.variables) sorted_variables.insert(entry);
       for(auto const& [var, reason] : sorted_variables) {
         output << std::visit(mdb::overloaded{
@@ -629,24 +641,48 @@ namespace expression::interactive {
       This block prints every new rule.
 
       Probably also doesn't work due to variable renaming.
-
-      std::vector<expression::Rule> new_rules;
-      for(auto i = value->rule_begin; i < value->rule_end; ++i) {
-        new_rules.push_back(expression_context.rules[i]);
-      }
-      std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
-        return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
-      });
-      for(auto const& rule : new_rules) {
-        output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
-      }
-      output << "\n";
       */
+      /*{
+        std::vector<expression::Rule> new_rules;
+        for(auto i = value->rule_begin; i < value->rule_end; ++i) {
+          new_rules.push_back(expression_context.rules[i]);
+        }
+        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
+          return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
+        });
+        for(auto const& rule : new_rules) {
+          output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+        }
+        output << "\n";
+      }*/
+      for(auto i = value->rule_begin; i < value->rule_end; ++i) {
+        expression_context.replace_rule(i, rule::simplify_rule(expression_context.rules[i], expression_context));
+      }
+      /*{
+        std::vector<expression::Rule> new_rules;
+        for(auto i = value->rule_begin; i < value->rule_end; ++i) {
+          new_rules.push_back(expression_context.rules[i]);
+        }
+        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
+          return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
+        });
+        for(auto const& rule : new_rules) {
+          output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+        }
+        output << "\n";
+      }*/
+
       result.print_errors_to(output);
       auto fancy = fancy_format(std::get<EvaluateInfo>(result.impl->data));
       auto deep = deep_format(std::get<EvaluateInfo>(result.impl->data));
-      output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
-      output << "Deep: " << deep(result.get_result().value) << " of type " << deep(result.get_result().type) << "\n";
+      //output << "Raw: " << raw_format(result.get_result().value) << "\n";
+      //output << "Raw type: " << raw_format(result.get_result().type) << "\n";
+
+      //output << "Spine: " << raw_format(expression_context.reduce(result.get_result().value)) << "\n";
+      //output << "Spine type: " << raw_format(expression_context.reduce(result.get_result().type)) << "\n";
+
+      //output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
+      output << deep(result.get_result().value) << " of type " << deep(result.get_result().type) << "\n";
       result.impl->put_values_into_context();
     } else {
       result.print_errors_to(output);
@@ -662,3 +698,10 @@ namespace expression::interactive {
   TypedValue ParseResult::get_reduced_result() const { return impl->get_reduced_result(); }
   void ParseResult::print_errors_to(std::ostream& output) const{ return impl->print_errors_to(output); }
 }
+/*
+Final: \$0.\$1.\$2.\$3.iterate $0 $1 $2 $3 of type
+  ($0 : Type)
+  -> ($1 : ((\$1.\$2.($3 : (\$3.Nat $1 $2 $3 -> $1)) -> Nat $1 $2 $3 -> $1)
+  -> \$2.\$3.($4 : (\$4.Nat $2 $3 $4 -> $2)) -> Nat $2 $3 $4 -> $2) $0) -> ($2 : (\$2.Nat $0 $1 $2 -> $0)) -> Nat $0 $1 $2 -> $0
+
+*/

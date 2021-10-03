@@ -16,10 +16,10 @@ namespace compiler::pattern {
       std::vector<Constraint> constraints;
       std::uint64_t capture_point_index = 0;
       std::unordered_map<std::uint64_t, std::uint64_t> args_to_captures;
-      std::vector<std::pair<std::uint64_t, expression::tree::Expression const*> > constrained_capture_points;
+      std::vector<std::pair<std::uint64_t, expression::tree::Expression> > constrained_capture_points;
       std::optional<Pattern> convert(expression::tree::Expression const& expr, bool spine) {
-        auto unfolded = expression::unfold_ref(expr);
-        if(auto* arg = unfolded.head->get_if_arg()) {
+        auto unfolded = expression::unfold(expr);
+        if(auto* arg = unfolded.head.get_if_arg()) {
           if(unfolded.args.size() > 0) return std::nullopt; //can't match an arg applied to things.
           if(args_to_captures.contains(arg->arg_index)) {
             constraints.push_back({
@@ -31,20 +31,20 @@ namespace compiler::pattern {
           }
           return CapturePoint{};
         }
-        if(unfolded.head->get_if_data()) return std::nullopt; //can't define data heads
-        auto head_index = unfolded.head->get_external().external_index;
+        if(unfolded.head.get_if_data()) return std::nullopt; //can't define data heads
+        auto head_index = unfolded.head.get_external().external_index;
         if(indeterminates.contains(head_index)) return std::nullopt; //cannot match indeterminates ever.
         if(spine && expression_context.external_info[head_index].is_axiom) return std::nullopt; //can't have a rule with axiom head.
         if(!spine && !expression_context.external_info[head_index].is_axiom) { //non-matchable
-          constrained_capture_points.emplace_back(capture_point_index++, &expr);
+          constrained_capture_points.emplace_back(capture_point_index++, expr);
           return CapturePoint{};
         }
         // Beyond here: axiom or declaration applied to args appropriately - woo-hoo!
         Segment ret{
           .head = head_index
         };
-        for(auto const* arg : unfolded.args) {
-          if(auto pat = convert(*arg, false)) {
+        for(auto const& arg : unfolded.args) {
+          if(auto pat = convert(arg, false)) {
             ret.args.push_back(std::move(*pat));
           } else {
             return std::nullopt; //:(
@@ -57,7 +57,7 @@ namespace compiler::pattern {
       }
       bool discharge_held_constraints() {
         for(auto const& [capture_point, capture_expr] : constrained_capture_points) {
-          if(auto constraint = remap_args_to_captures(*capture_expr)) {
+          if(auto constraint = remap_args_to_captures(capture_expr)) {
             constraints.push_back({
               .capture_point = capture_point,
               .equivalent_expression = std::move(*constraint)

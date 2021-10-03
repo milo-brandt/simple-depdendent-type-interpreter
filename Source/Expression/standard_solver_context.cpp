@@ -26,12 +26,12 @@ namespace expression::solver {
   }
   Simplification StandardSolverContext::simplify(tree::Expression base) {
     auto simplified = evaluation.reduce(base);
-    auto unfolded = unfold_ref(simplified);
+    auto unfolded = unfold(simplified);
     SimplificationState state = [&] {
-      if(unfolded.head->holds_arg() || unfolded.head->holds_data()) {
+      if(unfolded.head.holds_arg() || unfolded.head.holds_data()) {
         return SimplificationState::head_closed;
       } else {
-        auto const& external = unfolded.head->get_external();
+        auto const& external = unfolded.head.get_external();
         if(evaluation.external_info[external.external_index].is_axiom) {
           return SimplificationState::head_closed;
         } else {

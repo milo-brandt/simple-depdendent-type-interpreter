@@ -12,12 +12,13 @@
 {%- endfor %}
 {%- endmacro %}
 {%- macro kind_prototype(kind) -%}
-	{{ visitor_requirement(kind, kind.name + "Visitor", reference.ref) }}
-	{{ visitor_requirement(kind, kind.name + "ConstVisitor", reference.cref) }}
-	{{ visitor_requirement(kind, kind.name + "MoveVisitor", reference.rref) }}
+	{{ visitor_requirement(kind, kind.name + "ConstVisitor") }}
 	class {{ kind.name }} {
-		std::uint64_t index;
-		void* data = nullptr;
+		struct AbstractComponent { std::uint64_t discriminator; std::atomic<std::uint64_t> reference_count; AbstractComponent(std::uint64_t discriminator):discriminator(discriminator), reference_count(1) {} };
+	{%- for component in kind.components %}
+		struct {{ component.name }}Impl;
+	{%- endfor %}
+		AbstractComponent* p_data = nullptr;
 	public:
 		{%- for component in kind.components %}
 		{{ kind.name }}({{ component.name }} arg);
@@ -28,16 +29,12 @@
 		{{ kind.name }}& operator=({{ kind.name}}&&) noexcept;
 		~{{ kind.name }}();
 		{%- for component in kind.components %}
-		{{component.name}}& get_{{component.name|underscore}}() &;
-		{{component.name}} const& get_{{component.name|underscore}}() const&;
-		{{component.name}}&& get_{{component.name|underscore}}() &&;
-		{{component.name}}* get_if_{{component.name|underscore}}();
+		{{component.name}} const& get_{{component.name|underscore}}() const;
 		{{component.name}} const* get_if_{{component.name|underscore}}() const;
 		bool holds_{{component.name|underscore}}() const;
 		{%- endfor %}
-		template<{{ kind.name }}Visitor Visitor> auto visit(Visitor&& visitor) & -> {{ visitor_return_type(kind, reference.ref) }};
-		template<{{ kind.name }}ConstVisitor Visitor> auto visit(Visitor&& visitor) const& -> {{ visitor_return_type(kind, reference.cref) }};
-		template<{{ kind.name }}MoveVisitor Visitor> auto visit(Visitor&& visitor) && -> {{ visitor_return_type(kind, reference.rref) }};
+		void const* data() const { return p_data; }
+		template<{{ kind.name }}ConstVisitor Visitor> auto visit(Visitor&& visitor) const -> {{ visitor_return_type(kind) }};
 	};
 {%- endmacro %}
 {%- macro tree_kind_prototypes(tree) -%}
@@ -56,57 +53,65 @@
 {%- endmacro %}
 {%- macro kind_constructors(kind) -%}
 	{%- for component in kind.components %}
-	{{ kind.name }}::{{ kind.name }}({{component.name}} arg):index({{loop.index0}}),data(new {{ component.name }}{std::move(arg)}) {}
+	struct {{ kind.name }}::{{ component.name }}Impl : AbstractComponent {
+		{{ component.name }} value;
+		{{ component.name }}Impl({{component.name}} arg):AbstractComponent({{loop.index0}}),value(std::move(arg)) {}
+	};
+	inline {{ kind.name }}::{{ kind.name }}({{component.name}} arg):p_data(new {{ component.name }}Impl{std::move(arg)}) {}
 	{%- endfor %}
+{%- endmacro %}
+{%- macro deref_data(kind, data_name) %}
+		if(--{{data_name}}->reference_count == 0) {
+			switch({{data_name}}->discriminator) {
+			{%- for component in kind.components %}
+				case {{ loop.index0 }}: delete ({{ component.name }}Impl*){{data_name}}; break;
+			{%- endfor %}
+				default: std::terminate();
+			}
+		}
 {%- endmacro %}
 {%- macro kind_destructor(kind) -%}
 	{{ kind.name }}::~{{ kind.name}}() {
-		if(!data) return;
-		switch(index) {
-		{%- for component in kind.components %}
-			case {{ loop.index0 }}: delete ({{ component.name }}*)data; break;
-		{%- endfor %}
-			default: std::terminate();
-		}
+		if(!p_data) return;
+		{{ deref_data(kind, "p_data") }}
 	}
 {%- endmacro %}
-{%- macro kind_move_constructor(kind) -%}
-{%- endmacro %}
 {%- macro kind_copy_constructor(kind) -%}
-	{{ kind.name }}::{{ kind.name }}({{ kind.name }} const& other) {
-		if(!other.data) return;
-		switch(other.index) {
-		{%- for component in kind.components %}
-			case {{ loop.index0 }}: index = {{ loop.index0 }}; data = new {{ component.name }}{*({{ component.name }} const*)other.data}; break;
-		{%- endfor %}
-			default: std::terminate();
-		}
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }} const& other):p_data(other.p_data) {
+		if(p_data) ++p_data->reference_count;
 	}
 {%- endmacro %}
 {%- macro kind_move_and_assignment(kind) -%}
-	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other) noexcept:index(other.index), data(other.data) { other.data = nullptr; }
+	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other) noexcept:p_data(other.p_data) { other.p_data = nullptr; }
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }} const& other) {
-		return *this = {{ kind.name }}{other};
+		auto old_data = p_data;
+		p_data = other.p_data;
+		++p_data->reference_count;
+		if(old_data) {
+			{{ deref_data(kind, "old_data") }}
+		}
+		return *this;
 	}
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }}&& other) noexcept {
-		std::swap(index, other.index);
-		std::swap(data, other.data);
+		if(this == &other) return *this;
+		if(p_data) {
+			{{ deref_data(kind, "p_data") }}
+		}
+		p_data = other.p_data;
+		other.p_data = nullptr;
 		return *this;
 	}
 {%- endmacro %}
 {%- macro kind_getters(kind) -%}
 	{%- for component in kind.components %}
-	{{ component.name }}& {{ kind.name }}::get_{{ component.name|underscore }}() & { if(index == {{loop.index0}}) return *({{ component.name }}*)data; else std::terminate(); }
-	{{ component.name }} const& {{ kind.name }}::get_{{ component.name|underscore }}() const& { if(index == {{loop.index0}}) return *({{ component.name }} const*)data; else std::terminate(); }
-	{{ component.name }}&& {{ kind.name }}::get_{{ component.name|underscore }}() && { if(index == {{loop.index0}}) return std::move(*({{ component.name }}*)data); else std::terminate(); }
-	{{ component.name }}* {{ kind.name }}::get_if_{{ component.name|underscore }}() { if(index == {{loop.index0}}) return ({{ component.name }}*)data; else return nullptr; }
-	{{ component.name }} const* {{ kind.name }}::get_if_{{ component.name|underscore }}() const { if(index == {{loop.index0}}) return ({{ component.name }} const*)data; else return nullptr; }
-	bool {{ kind.name }}::holds_{{component.name|underscore}}() const { return index == {{loop.index0}}; }
+	{{ component.name }} const& {{ kind.name }}::get_{{ component.name|underscore }}() const { if(p_data->discriminator == {{loop.index0}}) return (({{ component.name }}Impl const*)p_data)->value; else std::terminate(); }
+	{{ component.name }} const* {{ kind.name }}::get_if_{{ component.name|underscore }}() const { if(p_data->discriminator == {{loop.index0}}) return &(({{ component.name }}Impl const*)p_data)->value; else return nullptr; }
+	bool {{ kind.name }}::holds_{{component.name|underscore}}() const { return p_data->discriminator == {{loop.index0}}; }
 	{%- endfor %}
 {%- endmacro %}
 {%- macro kind_definition(kind) -%}
-{%- call in_extension("cpp") %}
 	{{ kind_constructors(kind) }}
+{%- call in_extension("cpp") %}
 	{{ kind_copy_constructor(kind) }}
 	{{ kind_move_and_assignment(kind) }}
 	{{ kind_destructor(kind) }}
@@ -121,27 +126,27 @@
 {#
 	Visitation macros
 #}
-{%- macro visitor_return_type(kind, ref) -%}
-std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<Visitor&&, {{ component.name }}{{ ref.suffix }}>{% if not loop.last %}, {% endif %}{% endfor %} >
+{%- macro visitor_return_type(kind) -%}
+std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<Visitor&&, {{ component.name }} const&>{% if not loop.last %}, {% endif %}{% endfor %} >
 {%- endmacro %}
-{%- macro visitor_requirement(kind, concept_name, ref) -%}
+{%- macro visitor_requirement(kind, concept_name) -%}
 	template<class Visitor> concept {{ concept_name }} = requires(Visitor visitor
 	{%- for component in kind.components -%}
-	, {{ component.name }}{{ ref.suffix }} {{component.name|underscore}}
+	, {{ component.name }} const& {{component.name|underscore}}
 	{%- endfor -%}
 	) {
 		{%- for component in kind.components %}
-		std::forward<Visitor>(visitor)({% call ref.forward() %}{{ component.name|underscore }}{% endcall %});
+		std::forward<Visitor>(visitor)({{ component.name|underscore }});
 		{%- endfor %}
-		typename {{ visitor_return_type(kind, ref) }};
+		typename {{ visitor_return_type(kind) }};
 	};
 {%- endmacro %}
-{%- macro visitor_implementation(kind, concept_name, ref) -%}
-	template<{{concept_name}} Visitor> auto {{ kind.name }}::visit(Visitor&& visitor) {{ ref.suffix | trim }} -> {{ visitor_return_type(kind, ref) }} {
-		if(!data) std::terminate();
-		switch(index) {
+{%- macro visitor_implementation(kind, concept_name) -%}
+	template<{{concept_name}} Visitor> auto {{ kind.name }}::visit(Visitor&& visitor) const -> {{ visitor_return_type(kind) }} {
+		if(!p_data) std::terminate();
+		switch(p_data->discriminator) {
 		{%- for component in kind.components %}
-			case {{ loop.index0 }}: return std::forward<Visitor>(visitor)({% call ref.forward() %}*({{ component.name }}{{ ref.const_qualifier }}*)data{% endcall %});
+			case {{ loop.index0 }}: return std::forward<Visitor>(visitor)((({{ component.name }}Impl const*)p_data)->value);
 		{%- endfor %}
 			default: std::terminate();
 		}
@@ -149,9 +154,7 @@ std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<
 {%- endmacro %}
 {%- macro tree_visitor_implementations(tree) -%}
 {%- for kind in tree.kinds %}
-	{{ visitor_implementation(kind, kind.name + "Visitor", reference.ref) }}
-	{{ visitor_implementation(kind, kind.name + "ConstVisitor", reference.cref) }}
-	{{ visitor_implementation(kind, kind.name + "MoveVisitor", reference.rref) }}
+	{{ visitor_implementation(kind, kind.name + "ConstVisitor") }}
 {%- endfor %}
 {%- endmacro %}
 {#
@@ -196,7 +199,8 @@ std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<
 {#
 	General definition
 #}
-{%- macro tree_definition(tree) -%}
+{%- macro shared_tree_definition(tree) -%}
+{{ absolute_include("atomic") }}
 {%- call in_extension("proto.hpp") %}
 {{ tree_component_prototypes(tree) }}
 {{ kind_prototypes_small(tree) }}

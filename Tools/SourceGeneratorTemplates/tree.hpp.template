@@ -1,4 +1,5 @@
 {%- from "Tree/definition.hpp.template" import tree_definition %}
+{%- from "Tree/shared_definition.hpp.template" import shared_tree_definition %}
 {%- from "Tree/match.hpp.template" import match_definition %}
 {%- from "Tree/archive.hpp.template" import archive_definition %}
 {%- from "Tree/debug_format.hpp.template" import define_formatter, define_archive_unique_formatter %}
@@ -9,7 +10,11 @@
 {{- make_head(file_info) }}
 {%- for tree in trees %}
 {% call in_namespace(tree.namespace) %}
+{%- if shared %}
+  {{ shared_tree_definition(tree) }}
+{%- else %}
   {{ tree_definition(tree) }}
+{%- endif %}
   {# { match_definition(tree) } #}
 {% endcall %}
 {%- endfor %}

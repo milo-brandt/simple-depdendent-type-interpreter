@@ -15,14 +15,6 @@ namespace expression {
     ((head = tree::Apply{std::move(head), std::forward<Args>(args)}) , ...);
     return head;
   };
-  struct Rule {
-    pattern::Pattern pattern;
-    tree::Expression replacement;
-  };
-  struct DataRule {
-    data_pattern::Pattern pattern;
-    mdb::function<tree::Expression(std::vector<tree::Expression>)> replace;
-  };
   struct ExternalInfo {
     bool is_axiom;
     tree::Expression type;
@@ -56,6 +48,7 @@ namespace expression {
     Context();
     TypedValue get_external(std::uint64_t);
     void add_rule(Rule);
+    void replace_rule(std::size_t index, Rule new_rule);
     void add_data_rule(DataRule);
     tree::Expression reduce(tree::Expression tree);
     tree::Expression reduce_filter_rules(tree::Expression tree, mdb::function<bool(Rule const&)> filter);

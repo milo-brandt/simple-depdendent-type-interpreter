@@ -26,7 +26,8 @@ output = shape.generate_instance(namespace = "expression::tree", data = {
     }
 })
 tree_def = TreeOutput(
-    trees = [output]
+    trees = [output],
+    shared = True
 )
 
 main_output = get_output("THIS_impl")

@@ -76,139 +76,56 @@ namespace expression {
     std::uint64_t index = 0;
     return trivial_replacement_for_impl(pat, index);
   }
-  namespace {
-    template<class T, class Callback>
-    void destructure_match_impl(T term, pattern::Pattern const& pattern, Callback&& insert) {
-      pattern.visit(mdb::overloaded{
-        [&](pattern::Apply const& apply) {
-          if(auto* app = term.get_if_apply()) {
-            destructure_match_impl<T>(app->lhs, apply.lhs, insert);
-            destructure_match_impl<T>(app->rhs, apply.rhs, insert);
-          } else {
-            throw NoMatchException{};
+  std::vector<tree::Expression> destructure_match(tree::Expression const& term, pattern::Pattern const& p) {
+    struct Detail {
+      std::vector<tree::Expression> captures;
+      void examine(tree::Expression const& term, pattern::Pattern const& p) {
+        p.visit(mdb::overloaded{
+          [&](pattern::Apply const& apply) {
+            if(auto* app = term.get_if_apply()) {
+              examine(app->lhs, apply.lhs);
+              examine(app->rhs, apply.rhs);
+            } else {
+              throw NoMatchException{};
+            }
+          },
+          [&](pattern::Fixed const& fixed) {},
+          [&](pattern::Wildcard const&) {
+            captures.push_back(term);
           }
-        },
-        [&](pattern::Fixed const& fixed) {},
-        [&](pattern::Wildcard const&) {
-          insert(term);
-        }
-      });
-    }
+        });
+      }
+    };
+    Detail detail;
+    detail.examine(term, p);
+    return std::move(detail.captures);
   }
-  std::vector<tree::Expression*> destructure_match_ref(tree::Expression& term, pattern::Pattern const& pattern) {
-    std::vector<tree::Expression*> ret;
-    destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(&term); });
-    return ret;
-  }
-  std::vector<tree::Expression const*> destructure_match_ref(tree::Expression const& term, pattern::Pattern const& pattern) {
-    std::vector<tree::Expression const*> ret;
-    destructure_match_impl<tree::Expression const&>(term, pattern, [&](tree::Expression const& term) { ret.push_back(&term); });
-    return ret;
-  }
-  std::vector<tree::Expression> destructure_match(tree::Expression term, pattern::Pattern const& pattern) {
-    std::vector<tree::Expression> ret;
-    destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(std::move(term)); });
-    return ret;
-  }
-  namespace {
-    template<class T, class Callback>
-    void destructure_match_impl(T term, data_pattern::Pattern const& pattern, Callback&& insert) {
-      pattern.visit(mdb::overloaded{
-        [&](data_pattern::Apply const& apply) {
-          if(auto* app = term.get_if_apply()) {
-            destructure_match_impl<T>(app->lhs, apply.lhs, insert);
-            destructure_match_impl<T>(app->rhs, apply.rhs, insert);
-          } else {
-            throw NoMatchException{};
+  std::vector<tree::Expression> destructure_match(tree::Expression const& term, data_pattern::Pattern const& p) {
+    struct Detail {
+      std::vector<tree::Expression> captures;
+      void examine(tree::Expression const& term, data_pattern::Pattern const& p) {
+        p.visit(mdb::overloaded{
+          [&](data_pattern::Apply const& apply) {
+            if(auto* app = term.get_if_apply()) {
+              examine(app->lhs, apply.lhs);
+              examine(app->rhs, apply.rhs);
+            } else {
+              throw NoMatchException{};
+            }
+          },
+          [&](data_pattern::Fixed const& fixed) {},
+          [&](data_pattern::Wildcard const&) {
+            captures.push_back(term);
+          },
+          [&](data_pattern::Data const& data) {
+            captures.push_back(term);
           }
-        },
-        [&](data_pattern::Fixed const& fixed) {},
-        [&](data_pattern::Wildcard const&) {
-          insert(term);
-        },
-        [&](data_pattern::Data const& data) {
-          insert(term);
-        }
-      });
-    }
-  }
-  std::vector<tree::Expression> destructure_match(tree::Expression term, data_pattern::Pattern const& pattern) {
-    std::vector<tree::Expression> ret;
-    destructure_match_impl<tree::Expression&>(term, pattern, [&](tree::Expression& term) { ret.push_back(std::move(term)); });
-    return ret;
-  }
-
-  std::vector<tree::Expression*> find_all_matches(tree::Expression& term, pattern::Pattern const& pattern) {
-    struct Detail {
-      std::vector<tree::Expression*> ret;
-      pattern::Pattern const& pattern;
-      void search(tree::Expression& expression) {
-        if(term_matches(expression, pattern)) {
-          ret.push_back(&expression);
-        }
-        if(auto* apply = expression.get_if_apply()) {
-          search(apply->lhs);
-          search(apply->rhs);
-        }
+        });
       }
     };
-    Detail detail{.pattern = pattern};
-    detail.search(term);
-    return std::move(detail.ret);
-  }
-  std::vector<tree::Expression const*> find_all_matches(tree::Expression const& term, pattern::Pattern const& pattern) {
-    struct Detail {
-      std::vector<tree::Expression const*> ret;
-      pattern::Pattern const& pattern;
-      void search(tree::Expression const& expression) {
-        if(term_matches(expression, pattern)) {
-          ret.push_back(&expression);
-        }
-        if(auto* apply = expression.get_if_apply()) {
-          search(apply->lhs);
-          search(apply->rhs);
-        }
-      }
-    };
-    Detail detail{.pattern = pattern};
-    detail.search(term);
-    return std::move(detail.ret);
-  }
-  std::vector<tree::Expression*> find_all_matches(tree::Expression& term, data_pattern::Pattern const& pattern) {
-    struct Detail {
-      std::vector<tree::Expression*> ret;
-      data_pattern::Pattern const& pattern;
-      void search(tree::Expression& expression) {
-        if(term_matches(expression, pattern)) {
-          ret.push_back(&expression);
-        }
-        if(auto* apply = expression.get_if_apply()) {
-          search(apply->lhs);
-          search(apply->rhs);
-        }
-      }
-    };
-    Detail detail{.pattern = pattern};
-    detail.search(term);
-    return std::move(detail.ret);
-  }
-  std::vector<tree::Expression const*> find_all_matches(tree::Expression const& term, data_pattern::Pattern const& pattern) {
-    struct Detail {
-      std::vector<tree::Expression const*> ret;
-      data_pattern::Pattern const& pattern;
-      void search(tree::Expression const& expression) {
-        if(term_matches(expression, pattern)) {
-          ret.push_back(&expression);
-        }
-        if(auto* apply = expression.get_if_apply()) {
-          search(apply->lhs);
-          search(apply->rhs);
-        }
-      }
-    };
-    Detail detail{.pattern = pattern};
-    detail.search(term);
-    return std::move(detail.ret);
+    Detail detail;
+    detail.examine(term, p);
+    return std::move(detail.captures);
   }
 
   tree::Expression substitute_into_replacement(std::vector<tree::Expression> const& terms, tree::Expression const& replacement) {
@@ -309,34 +226,6 @@ namespace expression {
     }
   }
 
-  CRefUnfolding unfold_ref(tree::Expression const& tree) {
-    CRefUnfolding ret{
-      .head = &tree
-    };
-    while(auto* app = ret.head->get_if_apply()) {
-      ret.head = &app->lhs;
-      ret.args.push_back(&app->rhs);
-    }
-    std::reverse(ret.args.begin(), ret.args.end());
-    return ret;
-  }
-  RefUnfolding unfold_ref(tree::Expression& tree) {
-    RefUnfolding ret{
-      .head = &tree
-    };
-    ret.spine.reserve(16);
-    ret.args.reserve(16);
-    ret.spine.push_back(&tree);
-    while(auto* app = ret.head->get_if_apply()) {
-      ret.head = &app->lhs;
-      ret.spine.push_back(&app->lhs);
-      ret.args.push_back(&app->rhs);
-    }
-    std::reverse(ret.spine.begin(), ret.spine.end());
-    std::reverse(ret.args.begin(), ret.args.end());
-    return ret;
-  }
-
   Unfolding unfold(tree::Expression tree) {
     Unfolding ret{
       .head = std::move(tree)
@@ -347,5 +236,68 @@ namespace expression {
     }
     std::reverse(ret.args.begin(), ret.args.end());
     return ret;
+  }
+
+  indexed_pattern::Pattern index_pattern(pattern::Pattern const& p) {
+    struct Detail {
+      std::uint64_t next_index = 0;
+      indexed_pattern::Pattern index(pattern::Pattern const& p) {
+        return p.visit(mdb::overloaded{
+          [&](pattern::Apply const& apply) -> indexed_pattern::Pattern {
+            auto lhs = index(apply.lhs);
+            auto rhs = index(apply.rhs);
+            return indexed_pattern::Apply{
+              std::move(lhs),
+              std::move(rhs)
+            };
+          },
+          [&](pattern::Wildcard const& wildcard) -> indexed_pattern::Pattern {
+            return indexed_pattern::Wildcard{
+              next_index++
+            };
+          },
+          [&](pattern::Fixed const& fixed) -> indexed_pattern::Pattern {
+            return indexed_pattern::Fixed{
+              .external_index = fixed.external_index
+            };
+          }
+        });
+      }
+    };
+    return Detail{}.index(p);
+  }
+  indexed_data_pattern::Pattern index_pattern(data_pattern::Pattern const& p) {
+    struct Detail {
+      std::uint64_t next_index = 0;
+      indexed_data_pattern::Pattern index(data_pattern::Pattern const& p) {
+        return p.visit(mdb::overloaded{
+          [&](data_pattern::Apply const& apply) -> indexed_data_pattern::Pattern {
+            auto lhs = index(apply.lhs);
+            auto rhs = index(apply.rhs);
+            return indexed_data_pattern::Apply{
+              std::move(lhs),
+              std::move(rhs)
+            };
+          },
+          [&](data_pattern::Wildcard const& wildcard) -> indexed_data_pattern::Pattern {
+            return indexed_data_pattern::Wildcard{
+              next_index++
+            };
+          },
+          [&](data_pattern::Data const& data) -> indexed_data_pattern::Pattern {
+            return indexed_data_pattern::Data{
+              data.type_index,
+              next_index++
+            };
+          },
+          [&](data_pattern::Fixed const& fixed) -> indexed_data_pattern::Pattern {
+            return indexed_data_pattern::Fixed{
+              .external_index = fixed.external_index
+            };
+          }
+        });
+      }
+    };
+    return Detail{}.index(p);
   }
 }
