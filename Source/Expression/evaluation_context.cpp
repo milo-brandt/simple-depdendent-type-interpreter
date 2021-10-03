@@ -482,6 +482,19 @@ namespace expression {
     });
     regenerate_program_for(*this, head);
   }
+  void Context::replace_rule(std::size_t index, Rule new_rule) {
+    auto head = get_pattern_head(new_rule.pattern);
+    auto args = count_pattern_args(new_rule.pattern);
+    for(auto& rule_info : external_info[head].rules) {
+      if(rule_info.index == index) {
+        rules[index] = std::move(new_rule);
+        rule_info.arg_count = args;
+        regenerate_program_for(*this, head);
+        return;
+      }
+    }
+    std::terminate(); //o no
+  }
   void Context::add_data_rule(DataRule rule) {
     auto index = data_rules.size();
     auto head = get_pattern_head(rule.pattern);

@@ -2,7 +2,7 @@
 
 namespace expression::rule {
   namespace {
-    std::uint64_t count_wildcards(pattern::Tree const& pattern) {
+    std::uint64_t count_wildcards(pattern::Pattern const& pattern) {
       return pattern.visit(mdb::overloaded{
         [&](pattern::Apply const& apply) {
           return count_wildcards(apply.lhs) + count_wildcards(apply.rhs);
@@ -15,7 +15,7 @@ namespace expression::rule {
         }
       });
     }
-    /*bool expression_uses_arg(tree::Tree const& tree, std::uint64_t arg_index) {
+    /*bool expression_uses_arg(tree::Expression const& tree, std::uint64_t arg_index) {
       return tree.visit(mdb::overloaded{
         [&](tree::Apply const& apply) {
           return expression_uses_arg(apply.lhs, arg_index) || expression_uses_arg(apply.rhs, arg_index);
@@ -32,9 +32,9 @@ namespace expression::rule {
       pattern::match::Any{},
       pattern::match::Wildcard{}
     };*/
-    bool needs_more_arguments(tree::Tree const& input, Context& context) {
+    bool needs_more_arguments(tree::Expression const& input, Context& context) {
       for(auto const& rule : context.rules) {
-        pattern::Tree const* pat = &rule.pattern;
+        pattern::Pattern const* pat = &rule.pattern;
         while(pattern::Apply const* app = pat->get_if_apply()) {
           if(term_matches(input, app->lhs)) {
             return true;
@@ -56,12 +56,12 @@ namespace expression::rule {
     }
     return rule;
   }
-  std::uint64_t get_rule_head(Rule const& rule) {
+  /*std::uint64_t get_rule_head(Rule const& rule) {
     auto const* head = &rule.pattern;
     while(auto const* apply = head->get_if_apply()) {
       head = &apply->lhs;
     }
-    return head->get_fixed().index;
+    return head->get_fixed().external_index;
   }
   void DependencyFinder::examine_external(std::uint64_t x) {
     if(seen.contains(x)) return;
@@ -72,16 +72,19 @@ namespace expression::rule {
       }
     }
   }
-  void DependencyFinder::examine_expression(tree::Tree const& tree) {
+  void DependencyFinder::examine_expression(tree::Expression const& tree) {
     tree.visit(mdb::overloaded{
       [&](tree::Apply const& apply) {
         examine_expression(apply.lhs);
         examine_expression(apply.rhs);
       },
       [&](tree::External const& ext) {
-        examine_external(ext.index);
+        examine_external(ext.external_index);
       },
-      [&](tree::Arg const&) {}
+      [&](tree::Arg const&) {},
+      [&](tree::Data const&) {
+        //TODO
+      }
     });
-  }
+  }*/
 }

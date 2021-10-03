@@ -50,6 +50,7 @@ namespace expression {
     Context();
     TypedValue get_external(std::uint64_t);
     void add_rule(Rule);
+    void replace_rule(std::size_t index, Rule new_rule);
     void add_data_rule(DataRule);
     tree::Expression reduce(tree::Expression tree);
     tree::Expression reduce_spine(tree::Expression tree); //only guarunteed to agree with full reduction on spine.

@@ -13,6 +13,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <map>
+#include "rule_simplification.hpp"
 
 namespace expression::interactive {
   namespace {
@@ -640,17 +641,35 @@ namespace expression::interactive {
 
       Probably also doesn't work due to variable renaming.
       */
-      std::vector<expression::Rule> new_rules;
+      {
+        std::vector<expression::Rule> new_rules;
+        for(auto i = value->rule_begin; i < value->rule_end; ++i) {
+          new_rules.push_back(expression_context.rules[i]);
+        }
+        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
+          return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
+        });
+        for(auto const& rule : new_rules) {
+          output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+        }
+        output << "\n";
+      }
       for(auto i = value->rule_begin; i < value->rule_end; ++i) {
-        new_rules.push_back(expression_context.rules[i]);
+        expression_context.replace_rule(i, rule::simplify_rule(expression_context.rules[i], expression_context));
       }
-      std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
-        return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
-      });
-      for(auto const& rule : new_rules) {
-        output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+      {
+        std::vector<expression::Rule> new_rules;
+        for(auto i = value->rule_begin; i < value->rule_end; ++i) {
+          new_rules.push_back(expression_context.rules[i]);
+        }
+        std::sort(new_rules.begin(), new_rules.end(), [](auto const& lhs, auto const& rhs) {
+          return get_pattern_head(lhs.pattern) < get_pattern_head(rhs.pattern);
+        });
+        for(auto const& rule : new_rules) {
+          output << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
+        }
+        output << "\n";
       }
-      output << "\n";
 
       result.print_errors_to(output);
       auto fancy = fancy_format(std::get<EvaluateInfo>(result.impl->data));
@@ -661,7 +680,7 @@ namespace expression::interactive {
       //output << "Spine: " << raw_format(expression_context.reduce(result.get_result().value)) << "\n";
       //output << "Spine type: " << raw_format(expression_context.reduce(result.get_result().type)) << "\n";
 
-      output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
+      //output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
       output << "Deep: " << deep(result.get_result().value) << " of type " << deep(result.get_result().type) << "\n";
       result.impl->put_values_into_context();
     } else {
