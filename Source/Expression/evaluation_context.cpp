@@ -207,9 +207,10 @@ namespace expression {
       };
       auto reduce_next_arg = [&] { //returns "true" if something was reduced; false if we reduced everything.
         auto& stack_top = stack.back();
+        std::size_t stack_top_index = stack.size() - 1;
         if(stack_top.next_arg_to_reduce < arg_stack.size()) {
           push_stack_frame(arg_stack[stack_top.next_arg_to_reduce]);
-          ++stack_top.next_arg_to_reduce;
+          ++stack[stack_top_index].next_arg_to_reduce;
           return true;
         } else {
           return false;
