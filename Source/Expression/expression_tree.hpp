@@ -15,16 +15,8 @@ namespace expression {
 
   tree::Expression trivial_replacement_for(pattern::Pattern const&); //mostly for printing!
 
-  std::vector<tree::Expression*> destructure_match_ref(tree::Expression&, pattern::Pattern const&); //throws if not matching
-  std::vector<tree::Expression const*> destructure_match_ref(tree::Expression const&, pattern::Pattern const&); //throws if not matching
-  std::vector<tree::Expression> destructure_match(tree::Expression, pattern::Pattern const&); //throws if not matching
-  std::vector<tree::Expression> destructure_match(tree::Expression, data_pattern::Pattern const&); //throws if not matching
-
-
-  std::vector<tree::Expression*> find_all_matches(tree::Expression&, pattern::Pattern const&);
-  std::vector<tree::Expression const*> find_all_matches(tree::Expression const&, pattern::Pattern const&);
-  std::vector<tree::Expression*> find_all_matches(tree::Expression&, data_pattern::Pattern const&);
-  std::vector<tree::Expression const*> find_all_matches(tree::Expression const&, data_pattern::Pattern const&);
+  std::vector<tree::Expression> destructure_match(tree::Expression const&, data_pattern::Pattern const&); //throws if not matching
+  std::vector<tree::Expression> destructure_match(tree::Expression const&, pattern::Pattern const&); //throws if not matching
 
   struct NotEnoughArguments : std::runtime_error {
     NotEnoughArguments():std::runtime_error("Not enough arguments to substitute into replacement.") {}
@@ -45,18 +37,6 @@ namespace expression {
       return lhs.value == rhs.value && lhs.type == rhs.type;
     }
   };
-
-  struct CRefUnfolding {
-    tree::Expression const* head;
-    std::vector<tree::Expression const*> args;
-  };
-  CRefUnfolding unfold_ref(tree::Expression const&);
-  struct RefUnfolding {
-    tree::Expression* head;
-    std::vector<tree::Expression*> args;
-    std::vector<tree::Expression*> spine;
-  };
-  RefUnfolding unfold_ref(tree::Expression&);
 
   struct Unfolding {
     tree::Expression head;

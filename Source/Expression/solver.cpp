@@ -34,14 +34,14 @@ namespace expression::solver {
       std::unordered_map<std::uint64_t, std::uint64_t> arg_to_index;    //which arguments appear at which indices
     };
     std::optional<DefinitionFormData> is_term_in_definition_form(tree::Expression const& term, std::unordered_set<std::uint64_t> const& variables) {
-      auto unfolded = unfold_ref(term);
-      if(auto const* ext = unfolded.head->get_if_external()) {
+      auto unfolded = unfold(term);
+      if(auto const* ext = unfolded.head.get_if_external()) {
         if(variables.contains(ext->external_index)) {
           DefinitionFormData ret{
             .head = ext->external_index
           };
           for(std::uint64_t index = 0; index < unfolded.args.size(); ++index) {
-            if(auto const* arg_data = unfolded.args[index]->get_if_arg()) {
+            if(auto const* arg_data = unfolded.args[index].get_if_arg()) {
               if(ret.arg_to_index.contains(arg_data->arg_index)) {
                 return std::nullopt; //a single argument is applied twice
               } else {

@@ -96,7 +96,7 @@ namespace expression::format {
           return response;
         }
         return expr.visit(mdb::overloaded{
-          [&](tree::Apply& apply) {
+          [&](tree::Apply apply) {
             if(options.parenthesize_application) options.o << "(";
             auto response = write_expression(std::move(apply.lhs), {
               .o = options.o,
@@ -116,18 +116,18 @@ namespace expression::format {
             if(options.parenthesize_application) options.o << ")";
             return response;
           },
-          [&](tree::Arg& arg) {
+          [&](tree::Arg arg) {
             Response response{
               .args_used = {arg.arg_index}
             };
             options.o << "$" << arg.arg_index;
             return response;
           },
-          [&](tree::External& external) {
+          [&](tree::External external) {
             context.write_external(options.o, external.external_index);
             return Response{};
           },
-          [&](tree::Data& data) {
+          [&](tree::Data data) {
             Response ret{};
             data.data.pretty_print(options.o, [&](tree::Expression sub_expr) {
               ret.merge(write_expression(std::move(sub_expr), {

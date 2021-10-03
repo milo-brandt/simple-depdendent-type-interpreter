@@ -142,7 +142,6 @@ namespace expression {
           }
         }
       });
-      std::cout << "Var: " << var_p << ", Family over: " << family_over << ", Depth: " << impl->depth << "\n";
       return Stack{std::make_shared<Impl>(
         Impl::ParentInfo{
           .parent = impl,
@@ -156,7 +155,7 @@ namespace expression {
   }
   tree::Expression Stack::type_of(Context& context, tree::Expression expression) const {
     return expression.visit(mdb::overloaded{
-      [&](tree::Apply& apply) -> tree::Expression {
+      [&](tree::Apply apply) -> tree::Expression {
         auto lhs_type = type_of(context, apply.lhs);
         if(auto func_data = context.get_domain_and_codomain(std::move(lhs_type))) {
           return tree::Apply{std::move(func_data->codomain), std::move(apply.rhs)};
@@ -164,13 +163,13 @@ namespace expression {
           std::terminate();
         }
       },
-      [&](tree::External& external) -> tree::Expression {
+      [&](tree::External external) -> tree::Expression {
         return context.external_info.at(external.external_index).type;
       },
-      [&](tree::Arg& arg) -> tree::Expression {
+      [&](tree::Arg arg) -> tree::Expression {
         return type_of_arg(arg.arg_index);
       },
-      [&](tree::Data& data) -> tree::Expression {
+      [&](tree::Data data) -> tree::Expression {
         return data.data.type_of();
       }
     });

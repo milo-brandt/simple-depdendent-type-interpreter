@@ -1,0 +1,17 @@
+
+block {
+  # Declare the natural numbers to be a type with two constructors, zero and succ.
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare NAryOp : (n : Nat) -> Type;
+  NAryOp zero = U64;
+  NAryOp (succ x) = U64 -> NAryOp x;
+
+  declare sum_many : (n : Nat) -> U64 -> NAryOp n;
+  sum_many zero x = x;
+  sum_many (succ n) x y = sum_many n (add x y);
+
+  sum_many (succ (succ zero)) 5 3 1
+}

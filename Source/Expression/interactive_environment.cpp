@@ -657,8 +657,9 @@ namespace expression::interactive {
       auto deep = deep_format(std::get<EvaluateInfo>(result.impl->data));
       output << "Raw: " << raw_format(result.get_result().value) << "\n";
       output << "Raw type: " << raw_format(result.get_result().type) << "\n";
-      output << "Spine: " << raw_format(expression_context.reduce_spine(result.get_result().value)) << "\n";
-      output << "Spine type: " << raw_format(expression_context.reduce_spine(result.get_result().type)) << "\n";
+
+      //output << "Spine: " << raw_format(expression_context.reduce(result.get_result().value)) << "\n";
+      //output << "Spine type: " << raw_format(expression_context.reduce(result.get_result().type)) << "\n";
 
       output << "Final: " << fancy(result.get_result().value) << " of type " << fancy(result.get_result().type) << "\n";
       output << "Deep: " << deep(result.get_result().value) << " of type " << deep(result.get_result().type) << "\n";
@@ -677,3 +678,10 @@ namespace expression::interactive {
   TypedValue ParseResult::get_reduced_result() const { return impl->get_reduced_result(); }
   void ParseResult::print_errors_to(std::ostream& output) const{ return impl->print_errors_to(output); }
 }
+/*
+Final: \$0.\$1.\$2.\$3.iterate $0 $1 $2 $3 of type
+  ($0 : Type)
+  -> ($1 : ((\$1.\$2.($3 : (\$3.Nat $1 $2 $3 -> $1)) -> Nat $1 $2 $3 -> $1)
+  -> \$2.\$3.($4 : (\$4.Nat $2 $3 $4 -> $2)) -> Nat $2 $3 $4 -> $2) $0) -> ($2 : (\$2.Nat $0 $1 $2 -> $0)) -> Nat $0 $1 $2 -> $0
+
+*/

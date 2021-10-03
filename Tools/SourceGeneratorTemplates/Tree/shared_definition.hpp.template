@@ -56,7 +56,7 @@
 		{{ component.name }} value;
 		{{ component.name }}Impl({{component.name}} arg):AbstractComponent({{loop.index0}}),value(std::move(arg)) {}
 	};
-	{{ kind.name }}::{{ kind.name }}({{component.name}} arg):data(new {{ component.name }}Impl{std::move(arg)}) {}
+	inline {{ kind.name }}::{{ kind.name }}({{component.name}} arg):data(new {{ component.name }}Impl{std::move(arg)}) {}
 	{%- endfor %}
 {%- endmacro %}
 {%- macro deref_data(kind, data_name) %}

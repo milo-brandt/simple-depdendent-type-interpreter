@@ -39,7 +39,7 @@ namespace compiler::evaluate {
     expression::tree::Expression cast(expression::TypedValue input, expression::tree::Expression new_type, variable_explanation::Any cast_var_explanation, expression::Stack& local_context) {
       if(expression_context.reduce(input.type) == expression_context.reduce(new_type)) return std::move(input.value);
       auto cast_var = make_variable(new_type, cast_var_explanation, local_context);
-      auto var = expression::unfold_ref(cast_var).head->get_external().external_index;
+      auto var = expression::unfold(cast_var).head.get_external().external_index;
       casts.push_back({
         .stack = local_context,
         .variable = var,
@@ -104,8 +104,8 @@ namespace compiler::evaluate {
             );
             auto func = make_variable(expected_function_type, variable_explanation::ApplyLHSCast{local_context.depth(), apply.index()}, local_context);
             auto arg = make_variable(domain, variable_explanation::ApplyRHSCast{local_context.depth(), apply.index()}, local_context);
-            auto func_var = expression::unfold_ref(func).head->get_external().external_index;
-            auto arg_var = expression::unfold_ref(arg).head->get_external().external_index;
+            auto func_var = expression::unfold(func).head.get_external().external_index;
+            auto arg_var = expression::unfold(arg).head.get_external().external_index;
             function_casts.push_back({
               .stack = local_context,
               .function_variable = func_var,

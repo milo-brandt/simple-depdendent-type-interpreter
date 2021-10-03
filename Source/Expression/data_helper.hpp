@@ -57,8 +57,9 @@ namespace expression::data {
           }()
         });
         auto ret = tree::Expression{tree::Data{}};
-        ret.get_data().data.type_index = type_index;
-        new (&ret.get_data().data.storage) Store{std::move(new_info)};
+        auto& data = const_cast<tree::Data&>(ret.get_data());
+        data.data.type_index = type_index;
+        new (&data.data.storage) Store{std::move(new_info)};
         return ret;
       }
       void visit_children(Buffer const& me, mdb::function<void(tree::Expression const&)> visitor) const override {
@@ -84,8 +85,9 @@ namespace expression::data {
     }
     tree::Expression make_expression(tree::Expression type, std::vector<tree::Expression> data) const {
       auto ret = tree::Expression{tree::Data{}};
-      ret.get_data().data.type_index = type_index;
-      new (&ret.get_data().data.storage) Store{std::make_shared<Info>(Info{
+      auto& d = const_cast<tree::Data&>(ret.get_data());
+      d.data.type_index = type_index;
+      new (&d.data.storage) Store{std::make_shared<Info>(Info{
         .type = std::move(type),
         .vec = std::move(data)
       })};
@@ -129,8 +131,9 @@ namespace expression::data {
       }
       tree::Expression substitute(Buffer const& me, std::vector<tree::Expression> const&) const override {
         auto ret = tree::Expression{tree::Data{}};
-        ret.get_data().data.type_index = type_index;
-        new (&ret.get_data().data.storage) T{get(me)};
+        auto& data = const_cast<tree::Data&>(ret.get_data());
+        data.data.type_index = type_index;
+        new (&data.data.storage) T{get(me)};
         return ret;
       }
       void visit_children(Buffer const& me, mdb::function<void(tree::Expression const&)>) const override {
@@ -157,8 +160,9 @@ namespace expression::data {
     }
     tree::Expression make_expression(T value) const {
       auto ret = tree::Expression{tree::Data{}};
-      ret.get_data().data.type_index = type_index;
-      new (&ret.get_data().data.storage) T{std::move(value)};
+      auto& data = const_cast<tree::Data&>(ret.get_data());
+      data.data.type_index = type_index;
+      new (&data.data.storage) T{std::move(value)};
       return ret;
     }
     tree::Expression operator()(T value) const {
