@@ -1,5 +1,5 @@
 compiler = g++-10
-emcc_compiler = em++
+emcc_compiler = /home/milo/Documents/Programming/Emscripten/emsdk/upstream/emscripten/em++
 test_files := $(shell grep -r -l '\# TEST BEGIN' Source/Tests)
 
 {% for target in targets %}

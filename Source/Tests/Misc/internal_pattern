@@ -1,0 +1,23 @@
+# TEST BEGIN
+# TEST NAME Rules can be declared involving types local to a non-trivial context.
+# TEST SET expr
+
+block {
+  let contrived_first = \T:Type.block {
+    axiom Pair : Type;
+    axiom pair : T -> T -> Pair;
+    declare first : Pair -> T;
+    first (pair x y) = x;
+
+    \x.\y.first (pair x y)
+  };
+  contrived_first _ 5 6
+}
+
+# TEST SET value
+
+5
+
+# TEST DEFINITION
+
+REQUIRE(expr == value);

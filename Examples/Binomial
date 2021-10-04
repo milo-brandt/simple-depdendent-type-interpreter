@@ -1,0 +1,44 @@
+block {
+  declare adjacent_sums_of : Vector U64 -> Vector U64;
+  adjacent_sums_of v = block {
+ 		axiom State : Type;
+    axiom state : Vector U64 -> U64 -> State;
+
+    declare transition : State -> U64 -> State;
+    transition (state vec last) next = state (push_vec _ vec (add last next)) next;
+    declare finish : State -> Vector U64;
+    finish (state vec last) = push_vec _ vec last;
+
+    finish \\ lfold_vec _ _
+    	(state [] 0)
+      transition
+      v
+	};
+
+  axiom Optional : Type -> Type;
+  axiom some : (T : Type) -> T -> Optional T;
+  axiom none : (T : Type) -> Optional T;
+
+  declare try_assert : (b : Bool) -> Optional (Assert b);
+  try_assert yes = some _ witness;
+  try_assert no = none _;
+
+ 	declare at_default : (T : Type) -> T -> Vector T -> U64 -> T;
+  at_default T default vec index = block {
+  	# Lacking a match statement, we have to manually relate the vector to things.
+    let InRangePf = (Assert (lt index (len_vec _ vec)));
+    declare get_result : Optional InRangePf -> T;
+    get_result (some InRangePf w) = at_vec _ vec index w;
+    get_result (none InRangePf) = default;
+
+    get_result (try_assert (lt index (len_vec _ vec)))
+  };
+
+  declare binomial : U64 -> U64 -> U64;
+  binomial x y = block {
+    let row = iterate _ adjacent_sums_of [1] x;
+  	at_default _ 0 row y
+  };
+
+  binomial 100 5
+ }
