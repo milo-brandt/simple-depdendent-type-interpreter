@@ -8,7 +8,8 @@ shape = CompoundShape({
         ],
         "Arg": [],
         "External": [],
-        "Data": []
+        "Data": [],
+        "Conglomerate": []
     }
 })
 output = shape.generate_instance(namespace = "expression::tree", data = {
@@ -22,6 +23,9 @@ output = shape.generate_instance(namespace = "expression::tree", data = {
         ],
         "Data": [
             ("data", "data::Data")
+        ],
+        "Conglomerate": [
+            ("conglomerate_index", "std::uint64_t")
         ]
     }
 })

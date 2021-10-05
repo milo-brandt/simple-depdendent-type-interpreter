@@ -148,6 +148,9 @@ namespace expression {
       },
       [&](tree::Data const& data) -> tree::Expression {
         return data.data.substitute(terms);
+      },
+      [&](tree::Conglomerate const& conglomerate) -> tree::Expression {
+        std::terminate();
       }
     });
   }
@@ -173,6 +176,9 @@ namespace expression {
               okay = okay && is_acceptable(expr);
             });
             return okay;
+          },
+          [&](tree::Conglomerate const&) -> bool {
+            std::terminate();
           }
         });
       }

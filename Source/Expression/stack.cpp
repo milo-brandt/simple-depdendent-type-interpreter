@@ -171,6 +171,9 @@ namespace expression {
       },
       [&](tree::Data data) -> tree::Expression {
         return data.data.type_of();
+      },
+      [&](tree::Conglomerate) -> tree::Expression {
+        std::terminate(); //we don't know how to deal with that yet.
       }
     });
   }

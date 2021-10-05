@@ -139,6 +139,10 @@ namespace expression::format {
               }));
             });
             return ret;
+          },
+          [&](tree::Conglomerate conglomerate) {
+            options.o << "#" << conglomerate.conglomerate_index;
+            return Response{};
           }
         });
       }

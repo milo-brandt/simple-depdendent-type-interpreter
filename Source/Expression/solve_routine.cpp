@@ -64,6 +64,9 @@ namespace expression::solver {
             },
             [&](expression::tree::Data const& data) -> std::optional<expression::pattern::Pattern> {
               return std::nullopt;
+            },
+            [&](expression::tree::Conglomerate const&) -> std::optional<expression::pattern::Pattern> {
+              return std::nullopt;
             }
           });
         }

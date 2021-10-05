@@ -103,6 +103,9 @@ namespace expression::solver {
                 okay = okay && is_acceptable(expr);
               });
               return okay;
+            },
+            [&](tree::Conglomerate const& conglomerate) -> bool {
+              std::terminate();
             }
           });
         }

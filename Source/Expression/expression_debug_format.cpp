@@ -30,6 +30,9 @@ namespace expression {
           },
           [&](tree::Data const& data) {
             o << data.data;
+          },
+          [&](tree::Conglomerate const& conglomerate) {
+            o << "#" << conglomerate.conglomerate_index;
           }
         });
       }
