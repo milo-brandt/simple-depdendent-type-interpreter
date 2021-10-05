@@ -1,0 +1,71 @@
+Example: Want to define the function
+
+iteration_count : (f : Nat -> Nat) -> (x : Nat) -> Nat;
+iteration_count f x = block {
+  declare get_return : Nat -> Nat;
+  get_return zero = x
+  get_return (succ n) = n;
+  get_return (f x)
+};
+
+Which should be possible to define as
+
+iteration_count f x = match(f x) {
+  (zero) => { x }
+  (succ n) => { n }
+}
+
+############################################
+Option: [Exact ...] and [given ...] clauses.
+############################################
+
+Have [Exact S T s t] V represent a value of V, assuming s : S and t : T are
+judgmentally equal. Have [Exact T T t t] V reduce to V judgmentally.
+  (Note: V should also be interpreted in a context where s = t - so it's really
+  in [Exact S T s t] Type)
+
+A value of type [Exact S T s t] V can be constructed as
+  [given S T s t] expr
+where expr is compiled in a context in which s = t and type checked against V
+in this context as well. Again, if s = t, the [given ...] expr reduces to expr
+judgmentally.
+
+Add a way to fuse a bunch of values of type [Exact S T1 s t1] V, [Exact S T2 s t2], ...
+into a single value of type V.
+
+Might write the given function, at a low level, as (omitting types from Exact and given):
+
+iteration_count_zero : (f : Nat -> Nat) -> (x : Nat) -> [Exact (f x) zero] Nat;
+iteration_count_zero f x = [given (f x) zero] x;
+iteration_count_succ : (f : Nat -> Nat) -> (x : Nat) -> (n : Nat) -> [Exact (f x) (succ n)] Nat;
+iteration_count_succ f x n = [given (f x) (succ n)] n; (??? The extra arg is bothersome.)
+fuse ...
+
+* This represents the types of definitions in a useful way.
+* This has some awkwardness for when we want to *destructure* a value, not merely
+say it is equal to something. It also requires some unusual computational behavior.
+* Patterns are awkward, especially if we had multiple depths.
+
+###################################
+Option: Patterns with where clauses
+###################################
+
+Write
+
+iteration_count f x
+  where f x = zero
+= x;
+iteration_count f x
+  where f x = succ n
+= n;
+
+Then check where clauses in expression_context.
+
+###############################
+Option: Everything is a program
+###############################
+
+Represent everything as a program allowing matching of expressions on stack,
+and substitution of stack values into templates (creating new stack values).
+
+Contexts could be specified for each node in such a context.

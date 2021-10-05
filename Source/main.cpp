@@ -1,6 +1,7 @@
 #include <fstream>
 #include "Expression/interactive_environment.hpp"
 #include "Expression/expression_debug_format.hpp"
+#include "Evaluator/evaluator.hpp"
 
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
@@ -210,7 +211,7 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 #else
 
-int main(int argc, char** argv) {
+int mainn(int argc, char** argv) {
 
   auto environment = setup_enviroment();
 
@@ -267,4 +268,55 @@ int main(int argc, char** argv) {
   }
   return 0;
 }
+
+
+int main(int argc, char** argv) {
+  using namespace expression;
+  std::vector<bool> is_external_axiom = {true, true, true, false};
+  std::vector<expression::Rule> rules = {};
+  std::vector<expression::DataRule> data_rules = {};
+  /*std::vector<std::pair<tree::Expression, tree::Expression> > replacements = {
+    {
+      multi_apply(
+        tree::Arg{0},
+        tree::Arg{1}
+      ),
+      multi_apply(
+        tree::External{2}
+      )
+    }
+  };*/
+  std::vector<std::pair<tree::Expression, tree::Expression> > replacements = {
+    {
+      multi_apply(
+        tree::Arg{0},
+        tree::Arg{1}
+      ),
+      multi_apply(
+        tree::External{1},
+        tree::External{2}
+      )
+    },
+    {
+      multi_apply(
+        tree::Arg{0},
+        tree::Arg{1}
+      ),
+      multi_apply(
+        tree::External{1},
+        multi_apply(
+          tree::Arg{2},
+          tree::Arg{1}
+        )
+      )
+    }
+  };
+  auto instance = evaluator::Instance::create(
+    std::move(is_external_axiom),
+    std::move(rules),
+    std::move(data_rules),
+    std::move(replacements)
+  );
+}
+
 #endif
