@@ -19,10 +19,10 @@ namespace evaluator {
     expression::tree::Expression infectious_substitute_into_replacement(Instance& instance, std::vector<expression::tree::Expression> const& terms, expression::tree::Expression const& replacement) {
       auto unfolding = expression::unfold(replacement);
       if(auto* arg_head = unfolding.head.get_if_arg()) { //might be marked!
-        auto term_head = terms.at(arg_head->arg_index);
-        if(instance.marks.contains(term_head)) {
-          auto& mark_set = instance.marks.at(term_head);
-          auto ext_head = expression::unfold(term_head).head.get_if_external();
+        unfolding.head = terms.at(arg_head->arg_index);
+        if(instance.marks.contains(unfolding.head)) {
+          auto& mark_set = instance.marks.at(unfolding.head);
+          auto ext_head = expression::unfold(unfolding.head).head.get_if_external();
           bool is_axiom_head = ext_head && instance.is_external_axiom[ext_head->external_index];
           for(auto& arg : unfolding.args) {
             auto new_arg = infectious_substitute_into_replacement(instance, terms, std::move(arg));
@@ -63,8 +63,19 @@ namespace evaluator {
         if(memoized.contains(input)) return memoized.at(input);
         std::vector<expression::tree::Expression> steps;
         auto ret = [&] {
+          std::unordered_set<std::uint64_t> accumulated_marks;
           expression::tree::Expression target = input;
         RESTART_REDUCTION:
+          if(me.marks.contains(target)) {
+            for(auto mark : me.marks.at(target)) {
+              accumulated_marks.insert(mark);
+            }
+          }
+          if(!accumulated_marks.empty()) {
+            for(auto mark : accumulated_marks) {
+              infect_axioms(me, target, mark);
+            }
+          }
           if(memoized.contains(target)) return memoized.at(target);
           steps.push_back(target);
           if(auto* apply = target.get_if_apply()) {
@@ -76,7 +87,7 @@ namespace evaluator {
           for(auto const& rule : me.rules) {
             if(expression::term_matches(target, rule.pattern)) {
               auto args = expression::destructure_match(target, rule.pattern);
-              target = expression::substitute_into_replacement(std::move(args), rule.replacement);
+              target = infectious_substitute_into_replacement(me, std::move(args), rule.replacement);
               goto RESTART_REDUCTION;
             }
           }

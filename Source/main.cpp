@@ -12,6 +12,15 @@ void debug_print_pattern(expression::pattern::Pattern const& pat) {
 void debug_print_rule(expression::Rule const& rule) {
   std::cout << expression::raw_format(expression::trivial_replacement_for(rule.pattern)) << " -> " << expression::raw_format(rule.replacement) << "\n";
 }
+void print_mark_set(evaluator::Instance const& instance) {
+  for(auto const& entry : instance.marks) {
+    std::cout << "Marks of " << expression::raw_format(entry.first) << ":";
+    for(auto const& mark : entry.second) {
+      std::cout << " " << mark;
+    }
+    std::cout << "\n";
+  }
+}
 
 expression::interactive::Environment setup_enviroment() {
   expression::interactive::Environment environment;
@@ -272,9 +281,9 @@ int mainn(int argc, char** argv) {
 
 int main(int argc, char** argv) {
   using namespace expression;
-  std::vector<bool> is_external_axiom = {true, true, true, false};
+  /*std::vector<bool> is_external_axiom = {true, true, true};
   std::vector<expression::Rule> rules = {};
-  std::vector<expression::DataRule> data_rules = {};
+  std::vector<expression::DataRule> data_rules = {};*/
   /*std::vector<evaluator::Replacement> replacements = {
     {
       multi_apply(
@@ -311,7 +320,7 @@ int main(int argc, char** argv) {
       )
     }
   };*/
-  std::vector<evaluator::Replacement> replacements = {
+  /*std::vector<evaluator::Replacement> replacements = {
     {
       multi_apply(
         tree::Arg{0},
@@ -325,13 +334,132 @@ int main(int argc, char** argv) {
         )
       )
     }
+  };*/
+  /*
+    Setup environment for code:
+    axiom Nat : Type;
+    axiom zero : Nat;
+    axiom succ : Nat -> Nat;
+
+    axiom Tree : Type;
+    axiom root : Nat -> Tree;
+    axiom node : (Nat -> Tree) -> Tree;
+
+    declare choose : Tree -> Tree -> Nat -> Tree;
+    choose x y zero = x;
+    choose x y (succ n) = y;
+
+    declare head : Nat -> Tree -> Nat;
+    head m (root n) = n;
+    head m (node f) = weight (f m);
+
+  */
+  std::vector<bool> is_external_axiom = {true, true, true, true, true, true, false, false};
+  std::vector<expression::Rule> rules = {
+    {
+      .pattern = expression::pattern::Apply{
+        expression::pattern::Apply{
+          expression::pattern::Apply{
+            expression::pattern::Fixed{6},
+            expression::pattern::Wildcard{}
+          },
+          expression::pattern::Wildcard{}
+        },
+        expression::pattern::Fixed{1}
+      },
+      .replacement = expression::tree::Arg{0}
+    },
+    {
+      .pattern = expression::pattern::Apply{
+        expression::pattern::Apply{
+          expression::pattern::Apply{
+            expression::pattern::Fixed{6},
+            expression::pattern::Wildcard{}
+          },
+          expression::pattern::Wildcard{}
+        },
+        expression::pattern::Apply{
+          expression::pattern::Fixed{1},
+          expression::pattern::Wildcard{}
+        }
+      },
+      .replacement = expression::tree::Arg{1}
+    },
+    {
+      .pattern = expression::pattern::Apply{
+        expression::pattern::Apply{
+          expression::pattern::Fixed{7},
+          expression::pattern::Wildcard{}
+        },
+        expression::pattern::Apply{
+          expression::pattern::Fixed{4},
+          expression::pattern::Wildcard{}
+        }
+      },
+      .replacement = expression::tree::Arg{1}
+    },
+    {
+      .pattern = expression::pattern::Apply{
+        expression::pattern::Apply{
+          expression::pattern::Fixed{7},
+          expression::pattern::Wildcard{}
+        },
+        expression::pattern::Apply{
+          expression::pattern::Fixed{5},
+          expression::pattern::Wildcard{}
+        }
+      },
+      .replacement = expression::tree::Apply{
+        expression::tree::Apply{
+          expression::tree::External{7},
+          expression::tree::Arg{0}
+        },
+        expression::tree::Apply{
+          expression::tree::Arg{1},
+          expression::tree::Arg{0}
+        }
+      }
+    }
   };
+  std::vector<expression::DataRule> data_rules = {};
+  //Take $0 : Nat -> Tree, $1 : Nat.
+  std::vector<evaluator::Replacement> replacements = {
+    {
+      multi_apply(
+        tree::Arg{0},
+        tree::Arg{1}
+      ),
+      multi_apply(
+        tree::External{5},
+        tree::Arg{0}
+      )
+    }
+  };
+  for(auto const& rule : rules) {
+    debug_print_rule(rule);
+  }
   auto instance = evaluator::Instance::create(
     std::move(is_external_axiom),
     std::move(rules),
     std::move(data_rules),
     std::move(replacements)
   );
+  //head $1 (node $0) ---> replace full expression
+  //head $1 ($0 $1) ----> replace *sub*expression
+  //head $1 (node $0)
+
+  auto test_val = expression::tree::Apply{
+    expression::tree::Apply{
+      expression::tree::External{7},
+      expression::tree::Arg{1}
+    },
+    expression::tree::Apply{
+      expression::tree::Arg{0},
+      expression::tree::Arg{1}
+    }
+  };
+  debug_print_expr(test_val);
+  debug_print_expr(instance.reduce(test_val));
 }
 
 #endif
