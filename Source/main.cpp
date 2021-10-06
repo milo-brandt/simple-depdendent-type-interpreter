@@ -275,7 +275,7 @@ int main(int argc, char** argv) {
   std::vector<bool> is_external_axiom = {true, true, true, false};
   std::vector<expression::Rule> rules = {};
   std::vector<expression::DataRule> data_rules = {};
-  /*std::vector<std::pair<tree::Expression, tree::Expression> > replacements = {
+  /*std::vector<evaluator::Replacement> replacements = {
     {
       multi_apply(
         tree::Arg{0},
@@ -286,7 +286,7 @@ int main(int argc, char** argv) {
       )
     }
   };*/
-  std::vector<std::pair<tree::Expression, tree::Expression> > replacements = {
+  /*std::vector<evaluator::Replacement> replacements = {
     {
       multi_apply(
         tree::Arg{0},
@@ -306,6 +306,21 @@ int main(int argc, char** argv) {
         tree::External{1},
         multi_apply(
           tree::Arg{2},
+          tree::Arg{1}
+        )
+      )
+    }
+  };*/
+  std::vector<evaluator::Replacement> replacements = {
+    {
+      multi_apply(
+        tree::Arg{0},
+        tree::Arg{1}
+      ),
+      multi_apply(
+        tree::External{1},
+        multi_apply(
+          tree::Arg{0},
           tree::Arg{1}
         )
       )
