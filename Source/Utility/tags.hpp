@@ -12,6 +12,9 @@ namespace mdb {
     T* ptr;
   };
   template<class T> Ref<T> ref(T& value) { return Ref<T>{&value}; }
+
+  template<class T> struct Tag{};
+  template<class T> constexpr Tag<T> tag{};
 };
 
 #endif

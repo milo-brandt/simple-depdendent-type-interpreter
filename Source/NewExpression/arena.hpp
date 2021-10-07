@@ -24,9 +24,9 @@ namespace new_expression {
     friend Arena;
     friend UniqueExpression;
   public:
-    OwnedExpression(OwnedExpression&&) = default;
+    OwnedExpression(OwnedExpression&&) noexcept = default;
     OwnedExpression(OwnedExpression const&) = delete;
-    OwnedExpression& operator=(OwnedExpression&&) = default;
+    OwnedExpression& operator=(OwnedExpression&&) noexcept = default;
     OwnedExpression& operator=(OwnedExpression const&) = delete;
 
     std::size_t index() const { return p_index; }
