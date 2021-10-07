@@ -2,6 +2,7 @@
 #include "Expression/interactive_environment.hpp"
 #include "Expression/expression_debug_format.hpp"
 #include "Evaluator/evaluator.hpp"
+#include "Utility/event.hpp"
 
 void debug_print_expr(expression::tree::Expression const& expr) {
   std::cout << expression::raw_format(expr) << "\n";
