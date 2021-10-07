@@ -137,7 +137,7 @@ namespace new_expression {
       add_type(std::move(unique_type));
       return ret;
     }
-    mdb::Event<std::span<std::size_t> >& terms_erased();
+    mdb::Event<std::span<WeakExpression> >& terms_erased();
     Apply const* get_if_apply(WeakExpression) const;
     Apply const& get_apply(WeakExpression) const;
     bool holds_apply(WeakExpression) const;

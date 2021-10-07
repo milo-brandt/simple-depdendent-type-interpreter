@@ -82,7 +82,7 @@ namespace mdb {
       explicit Hook(FunctionNode* node):node(node) {}
     public:
       Hook() = default;
-      void disconnect() && { node->disconnect(); delete node; node = nullptr; }
+      void disconnect() && { if(node) { node->disconnect(); delete node; node = nullptr; } }
     };
     class UniqueHook {
       FunctionNode* node = nullptr;
@@ -95,8 +95,8 @@ namespace mdb {
       }
       Hook get() const { return Hook{node}; }
       void detach() { node = nullptr; }
-      void disconnect() && { node->disconnect(); delete node; node = nullptr; }
-      ~UniqueHook() { if(node) disconnect(); }
+      void disconnect() && { if(node) { node->disconnect(); delete node; node = nullptr; } }
+      ~UniqueHook() { std::move(*this).disconnect(); }
     };
     /*
       Note: returned hooks have lifetime until either disconnection or until the event is destroyed.
@@ -112,7 +112,7 @@ namespace mdb {
     }
     template<class F>
     UniqueHook listen_unique(F function) {
-      auto basic_hook = hook(std::move(function));
+      auto basic_hook = listen(std::move(function));
       return UniqueHook{basic_hook};
     }
 

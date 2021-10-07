@@ -62,7 +62,7 @@ namespace new_expression {
     };
     std::vector<std::unique_ptr<DataType> > data_types;
     std::unordered_set<std::size_t> orphan_entries;
-    mdb::Event<std::span<std::size_t> > terms_erased;
+    mdb::Event<std::span<WeakExpression> > terms_erased;
     std::unordered_map<std::pair<WeakExpression, WeakExpression>, WeakExpression, PairHasher> existing_apply;
     std::unordered_map<std::uint64_t, WeakExpression> existing_argument;
     std::unordered_map<std::uint64_t, WeakExpression> existing_conglomerate;
@@ -171,10 +171,10 @@ namespace new_expression {
       return {entry.discriminator, &entry.data};
     }
     void clear_orphaned_expressions() { //clears every expression it can.
-      std::vector<std::size_t> cleared_list;
+      std::vector<WeakExpression> cleared_list;
       while(!orphan_entries.empty()) {
         auto target = *orphan_entries.begin();
-        cleared_list.push_back(target);
+        cleared_list.push_back(WeakExpression{target});
         destroy_entry(target);
         orphan_entries.erase(target);
       }
@@ -238,17 +238,21 @@ namespace new_expression {
  bool Arena::Impl::clear_orphans() {
    //for now, just try to clear 256 orphans on each call
    if(orphan_entries.size() < 256) return false;
-   std::size_t deleted_entries[256];
+   union WeakExpressionArray {
+     int dummy;
+     WeakExpression data[256];
+   };
+   WeakExpressionArray array{ .dummy = 0 };
    std::size_t count = 0;
    for(auto entry : orphan_entries) {
-     deleted_entries[count++] = entry;
+     array.data[count++] = WeakExpression{entry};
      if(count == 256) break;
    }
-   terms_erased(std::span{deleted_entries});
-   for(auto entry : deleted_entries) {
-     destroy_entry(entry);
-     orphan_entries.erase(entry);
+   for(auto entry : array.data) {
+     destroy_entry(entry.index());
+     orphan_entries.erase(entry.index());
    }
+   terms_erased(std::span{array.data});
    return true;
  }
  void Arena::Impl::Handler::move_destroy(std::span<ArenaEntry> new_span, std::span<ArenaEntry> old_span) {
@@ -291,7 +295,7 @@ namespace new_expression {
   Arena::~Arena() = default;
   OwnedExpression Arena::copy(OwnedExpression const& expr) { return impl->copy(expr); }
   OwnedExpression Arena::copy(WeakExpression const& expr) { return impl->copy(expr); }
-  mdb::Event<std::span<std::size_t> >& Arena::terms_erased() { return impl->terms_erased; }
+  mdb::Event<std::span<WeakExpression> >& Arena::terms_erased() { return impl->terms_erased; }
   //Boilerplate code for the getters.
   Apply const* Arena::get_if_apply(WeakExpression expr) const {
     auto& entry = impl->entries[expr.index()];
