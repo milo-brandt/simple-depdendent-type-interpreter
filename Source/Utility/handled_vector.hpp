@@ -25,7 +25,7 @@ namespace mdb {
     }
     void realloc(std::size_t new_capacity) { //capacity must be positive and bigger than length
       auto new_begin = (T*)malloc(sizeof(T) * new_capacity);
-      auto new_end = new_begin + (p_begin - p_end);
+      auto new_end = new_begin + (p_end - p_begin);
       if(p_begin) {
         p_handler.move_destroy(
           std::span<T>{new_begin, new_end},
