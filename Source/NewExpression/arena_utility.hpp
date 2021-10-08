@@ -16,6 +16,7 @@ namespace new_expression {
   };
   OwnedUnfolding unfold_owned(Arena&, OwnedExpression);
   OwnedExpression substitute_into(Arena&, WeakExpression target, std::span<OwnedExpression const> args);
+  OwnedExpression substitute_into(Arena&, WeakExpression target, std::span<WeakExpression const> args);
 }
 
 #endif

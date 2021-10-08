@@ -76,6 +76,28 @@ TEST_CASE("Expressions can be substituted into.") {
     arena.drop(std::move(new_expr));
     arena.drop(std::move(manual));
   }
+  SECTION("Substitution into a deep application gives appropriate value.") {
+    auto substitution = arena.apply(
+      arena.copy(args[2]),
+      arena.apply(
+        arena.copy(args[2]),
+        arena.argument(0)
+      )
+    );
+    auto new_expr = substitute_into(arena, substitution, args);
+    auto manual = arena.apply(
+      arena.copy(args[2]),
+      arena.apply(
+        arena.copy(args[2]),
+        arena.copy(args[0])
+      )
+    );
+    REQUIRE(new_expr == manual);
+    arena.drop(std::move(substitution));
+    arena.drop(std::move(new_expr));
+    arena.drop(std::move(manual));
+  }
+
   for(auto& arg : args) arena.drop(std::move(arg));
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());

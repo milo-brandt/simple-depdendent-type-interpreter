@@ -42,7 +42,7 @@ namespace new_expression {
     explicit WeakExpression(std::size_t index):p_index(index) {}
     friend Arena;
   public:
-    WeakExpression(OwnedExpression const& expr):p_index(expr.index()) {}
+    WeakExpression(OwnedExpression const& expr) noexcept:p_index(expr.index()) {}
     WeakExpression(OwnedExpression&&) = delete;
     std::size_t index() const { return p_index; }
     friend bool operator==(WeakExpression const& lhs, WeakExpression const& rhs) {
@@ -173,6 +173,7 @@ namespace new_expression {
 
     void clear_orphaned_expressions(); //primarily for testing.
     bool empty() const; //primarily for testing
+    void debug_dump() const;
   };
 }
 

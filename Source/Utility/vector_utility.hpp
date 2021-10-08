@@ -14,6 +14,14 @@ namespace mdb {
   std::span<T const> as_span(std::vector<T> const& vec) {
     return std::span<T const>{vec.begin(), vec.begin() + vec.size()};
   }
+  template<class T, class... Ts> //to replace initializer_list init of move-only types
+  std::vector<T> make_vector(T value, Ts... values) {
+    std::vector<T> ret;
+    ret.reserve(sizeof...(Ts) + 1);
+    ret.push_back(std::move(value));
+    (ret.push_back(std::move(values)) , ...);
+    return ret;
+  }
   template<class T, class Predicate>
   void erase_if(std::vector<T>& vec, Predicate&& predicate) {
     auto erase_start = std::remove_if(vec.begin(), vec.end(), std::forward<Predicate>(predicate));

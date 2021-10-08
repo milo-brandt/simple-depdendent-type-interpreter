@@ -19,6 +19,12 @@ namespace new_expression {
       });
     }
   }
+  template<class T1, class T2, class... Ts> //nicer way to destroy lots of things at once
+  void destroy_from_arena(Arena& arena, T1& v1, T2& v2, Ts&... vn) {
+    destroy_from_arena(arena, v1);
+    destroy_from_arena(arena, v2);
+    (destroy_from_arena(arena, vn) , ...);
+  }
   struct PartDestroyer {
     template<class T>
     void operator()(Arena& arena, T& value) {

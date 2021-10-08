@@ -4,6 +4,7 @@
 #include <cstring>
 #include <unordered_set>
 #include <unordered_map>
+#include <iostream>
 
 namespace new_expression {
 
@@ -414,4 +415,20 @@ namespace new_expression {
   void Arena::clear_orphaned_expressions() { return impl->clear_orphaned_expressions(); }
   bool Arena::empty() const { return impl->empty(); }
   void Arena::drop(OwnedExpression&& expr) { return impl->drop(std::move(expr)); }
+  void Arena::debug_dump() const {
+    std::size_t index = 0;
+    for(auto& entry : impl->entries) {
+      std::cout << index++ << " [RefCt " << entry.reference_count << "]: ";
+      switch(entry.discriminator) {
+        case 0: std::cout << "Apply " << entry.data.apply.lhs.index() << " , " << entry.data.apply.rhs.index() << "\n"; break;
+        case 1: std::cout << "Axiom\n"; break;
+        case 2: std::cout << "Declaration\n"; break;
+        case 3: std::cout << "Data\n"; break;
+        case 4: std::cout << "Argument " << entry.data.argument.index << "\n"; break;
+        case 5: std::cout << "Conglomerate " << entry.data.conglomerate.index << "\n"; break;
+        case 6: std::cout << "Free List " << entry.data.free_list_entry.next_free_entry << "\n"; break; 
+        default: std::terminate();
+      }
+    }
+  }
 }

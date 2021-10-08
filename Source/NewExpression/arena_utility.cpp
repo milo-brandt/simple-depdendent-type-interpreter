@@ -29,10 +29,11 @@ namespace new_expression {
     arena.drop(std::move(expr));
     return ret;
   }
-  OwnedExpression substitute_into(Arena& arena, WeakExpression target, std::span<OwnedExpression const> args) {
+  namespace {
+    template<class ArgType>
     struct Detail {
       Arena& arena;
-      std::span<OwnedExpression const> args;
+      std::span<ArgType const> args;
       std::unordered_map<WeakExpression, WeakExpression, ExpressionHasher> memoized_results;
       OwnedExpression substitute(WeakExpression target) {
         if(memoized_results.contains(target)) return arena.copy(memoized_results.at(target));
@@ -58,6 +59,11 @@ namespace new_expression {
         return ret;
       }
     };
-    return Detail{arena, args}.substitute(target);
+  }
+  OwnedExpression substitute_into(Arena& arena, WeakExpression target, std::span<OwnedExpression const> args) {
+    return Detail<OwnedExpression>{arena, args}.substitute(target);
+  }
+  OwnedExpression substitute_into(Arena& arena, WeakExpression target, std::span<WeakExpression const> args) {
+    return Detail<WeakExpression>{arena, args}.substitute(target);
   }
 }
