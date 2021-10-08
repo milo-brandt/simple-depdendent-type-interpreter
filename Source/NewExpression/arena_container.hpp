@@ -19,9 +19,6 @@ namespace new_expression {
     auto operator()(OwnedExpression const& expr) const noexcept { return hash(expr.index()); }
   };
   struct TrivialOnArenaDestructor {};
-  struct PartsOnArenaDestructor {
-
-  };
   template<class T, class OnArenaDestructor = TrivialOnArenaDestructor>
   class WeakKeyMap {
     Arena* arena;

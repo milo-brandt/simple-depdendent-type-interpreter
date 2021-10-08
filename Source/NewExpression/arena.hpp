@@ -43,6 +43,7 @@ namespace new_expression {
     friend Arena;
   public:
     WeakExpression(OwnedExpression const& expr):p_index(expr.index()) {}
+    WeakExpression(OwnedExpression&&) = delete;
     std::size_t index() const { return p_index; }
     friend bool operator==(WeakExpression const& lhs, WeakExpression const& rhs) {
       return lhs.p_index == rhs.p_index;

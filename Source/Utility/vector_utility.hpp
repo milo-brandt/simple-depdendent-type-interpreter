@@ -3,8 +3,17 @@
 
 #include <algorithm>
 #include <vector>
+#include <span>
 
 namespace mdb {
+  template<class T>
+  std::span<T> as_span(std::vector<T>& vec) {
+    return std::span<T>{vec.begin(), vec.begin() + vec.size()};
+  }
+  template<class T>
+  std::span<T const> as_span(std::vector<T> const& vec) {
+    return std::span<T const>{vec.begin(), vec.begin() + vec.size()};
+  }
   template<class T, class Predicate>
   void erase_if(std::vector<T>& vec, Predicate&& predicate) {
     auto erase_start = std::remove_if(vec.begin(), vec.end(), std::forward<Predicate>(predicate));
