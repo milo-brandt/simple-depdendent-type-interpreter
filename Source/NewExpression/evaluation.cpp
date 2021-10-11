@@ -122,7 +122,8 @@ namespace new_expression {
       struct PureOpen {
         WeakExpression representative; //has to be equal to one of the reducers
         std::size_t conglomerate_index; //index of actual associated conglomerate
-        static constexpr auto part_info = mdb::parts::simple<2>;
+        std::vector<std::size_t> application_conglomerates; //any conglomerate with a reducer like "#0 x"
+        static constexpr auto part_info = mdb::parts::simple<3>;
       };
       struct Axiomatic {
         std::uint64_t mark_index;
@@ -155,15 +156,21 @@ namespace new_expression {
           i = update_class_index(i);
         }
         for(auto& conglomerate_class : conglomerate_class_info) {
-          if(auto* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&conglomerate_class.status)) {
-            for(auto& i : axiomatic->applied_conglomerates) {
-              i = update_class_index(i);
+          std::visit(mdb::overloaded{
+            [&](conglomerate_status::Axiomatic& axiomatic) {
+              for(auto& i : axiomatic.applied_conglomerates) {
+                i = update_class_index(i);
+              }
+            },
+            [&](conglomerate_status::PureOpen& pure_open) {
+              for(auto& i : pure_open.application_conglomerates) {
+                i = update_class_index(i);
+              }
             }
-          }
+          }, conglomerate_class.status);
         }
       }
       bool exists_axiomatic_cycle() {
-        return false;
         constexpr std::uint8_t on_stack = 1;
         constexpr std::uint8_t acyclic = 2;
         struct Detail {
@@ -177,13 +184,25 @@ namespace new_expression {
             if(node_info[i] == acyclic) return false;
             if(node_info[i] == on_stack) return true;
             node_info[i] = on_stack;
-            if(auto* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&conglomerate_class_info[i].status)) {
-              for(auto applied : axiomatic->applied_conglomerates) {
-                if(has_cycle(applied)) {
-                  return true;
+            bool subcycle = std::visit(mdb::overloaded{
+              [&](conglomerate_status::Axiomatic const& axiomatic) {
+                for(auto applied : axiomatic.applied_conglomerates) {
+                  if(has_cycle(applied)) {
+                    return true;
+                  }
                 }
+                return false;
+              },
+              [&](conglomerate_status::PureOpen const& pure_open) {
+                for(auto applied : pure_open.application_conglomerates) {
+                  if(has_cycle(applied)) {
+                    return true;
+                  }
+                }
+                return false;
               }
-            }
+            }, conglomerate_class_info[i].status);
+            if(subcycle) return true;
             node_info[i] = acyclic;
             return false;
           }
@@ -225,6 +244,17 @@ namespace new_expression {
               } else {
                 target_class.status = std::move(*source_axiomatic);
               }
+            } else if(auto* target_pure_open = std::get_if<conglomerate_status::PureOpen>(&target_class.status)) {
+              //merge application_conglomerates
+              auto& source_pure_open = std::get<conglomerate_status::PureOpen>(source_class.status);
+              target_pure_open->application_conglomerates.insert(
+                target_pure_open->application_conglomerates.end(),
+                source_pure_open.application_conglomerates.begin(),
+                source_pure_open.application_conglomerates.end()
+              );
+              std::sort(target_pure_open->application_conglomerates.begin(), target_pure_open->application_conglomerates.end());
+              auto unique_end = std::unique(target_pure_open->application_conglomerates.begin(), target_pure_open->application_conglomerates.end());
+              target_pure_open->application_conglomerates.erase(unique_end, target_pure_open->application_conglomerates.end());
             }
             me.conglomerate_class_info.erase(me.conglomerate_class_info.begin() + source);
             auto new_index = [&](std::size_t index) {
@@ -336,6 +366,11 @@ namespace new_expression {
             drop_reducer(target_class, target_reducer);
             return true;
           }
+        } else if(auto* base_conglomerate = arena.get_if_conglomerate(unfolding.head)) {
+          auto base_index = conglomerate_to_class[base_conglomerate->index];
+          auto& base_status = std::get<conglomerate_status::PureOpen>(conglomerate_class_info[base_index].status); //only pure opens can appear as conglomerates
+          base_status.application_conglomerates.push_back(target_class);
+          return !exists_axiomatic_cycle();
         } else {
           return true; //okay - still purely open
         }

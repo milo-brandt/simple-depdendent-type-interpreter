@@ -363,52 +363,40 @@ TEST_CASE("EvaluationContext rejects $0 = (axiom $0) either at assumption time o
         arena.argument(0)
       )
     );
-    auto eval = evaluator.reduce(arena.argument(0));
-    REQUIRE((equal_err || eval.holds_error()));
-    if(auto* value = eval.get_if_value()) {
-      arena.drop(std::move(*value));
-    }
+    REQUIRE(equal_err);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
-TEST_CASE("EvaluationContext rejects a complicated circular case.") {
-  //Assume: $0 $1 = axiom $0.
-  //Declare f (axiom $x) $y = f ($x $y) $y.
-  //Try to evaluate f (axiom $0) $1 = f ($0 $1) $1 = f (axiom $0) $1
+TEST_CASE("EvaluationContext rejects $0 $1 = axiom $0.") {
   Arena arena;
   {
     RuleCollector rules(arena);
     EvaluationContext evaluator(arena, rules);
 
-    auto f = arena.declaration();
     auto ax = arena.axiom();
-
-    rules.register_declaration(f);
-    rules.add_rule(Rule{
-      .pattern = {
-        .head = arena.copy(f),
-        .body = {
-          .args_captured = 2,
-          .sub_matches = mdb::make_vector(PatternMatch{
-            .substitution = arena.argument(0),
-            .expected_head = arena.copy(ax),
-            .args_captured = 1
-          })
-        }
-      },
-      .replacement = arena.apply(
-        arena.apply(
-          arena.copy(f),
-          arena.apply(
-            arena.argument(2),
-            arena.argument(1)
-          )
-        ),
+    auto equal_err = evaluator.assume_equal(
+      arena.apply(
+        arena.argument(0),
         arena.argument(1)
+      ),
+      arena.apply(
+        std::move(ax),
+        arena.argument(0)
       )
-    });
+    );
+    REQUIRE(equal_err);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("EvaluationContext accepts $0 $1 = axiom $1.") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
 
+    auto ax = arena.axiom();
     auto equal_err = evaluator.assume_equal(
       arena.apply(
         arena.argument(0),
@@ -416,41 +404,132 @@ TEST_CASE("EvaluationContext rejects a complicated circular case.") {
       ),
       arena.apply(
         arena.copy(ax),
-        arena.argument(0)
+        arena.argument(1)
       )
     );
-    REQUIRE(!equal_err); //this should pass
-    SECTION("The expression f (ax $0) $1 is rejected") {
-      auto bad = arena.apply(
-        arena.apply(
-          std::move(f),
-          arena.apply(
-            std::move(ax),
-            arena.argument(0)
-          )
-        ),
-        arena.argument(1)
-      );
-      auto eval = evaluator.reduce(std::move(bad));
-      REQUIRE(eval.holds_error());
+    REQUIRE(!equal_err);
+    auto result_1 = evaluator.reduce(arena.apply(
+      std::move(ax),
+      arena.argument(1)
+    ));
+    auto result_2 = evaluator.reduce(arena.apply(
+      arena.argument(0),
+      arena.argument(1)
+    ));
+    REQUIRE(result_1.holds_success());
+    REQUIRE(result_2.holds_success());
+    REQUIRE(result_1.get_value() == result_2.get_value());
+    arena.drop(std::move(result_1.get_value()));
+    arena.drop(std::move(result_2.get_value()));
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    auto nest_expr = [&](std::size_t size) { //gives ($0 ($0 (... ($0 $1) ... ))) with "size" copies of $0
+      auto ret = arena.argument(1);
+      for(std::size_t i = 0; i < size; ++i) {
+        ret = arena.apply(
+          arena.argument(0),
+          std::move(ret)
+        );
+      }
+      return ret;
+    };
+    SECTION("The equality $0 $1 = $1 is accepted.") {
+      EvaluationContext evaluator(arena, rules);
+      auto equal_err = evaluator.assume_equal(nest_expr(1), nest_expr(0));
+      REQUIRE(!equal_err);
+      SECTION("The equality $0 $1 = $1 implies itself.") {
+        auto result_1 = evaluator.reduce(nest_expr(1));
+        auto result_2 = evaluator.reduce(nest_expr(0));
+        REQUIRE(result_1.holds_success());
+        REQUIRE(result_2.holds_success());
+        REQUIRE(result_1.get_value() == result_2.get_value());
+        arena.drop(std::move(result_1.get_value()));
+        arena.drop(std::move(result_2.get_value()));
+      }
+      SECTION("The equality $0 $1 = $1 implies higher iterations are also $1") {
+        EvaluationContext evaluator(arena, rules);
+        auto equal_err = evaluator.assume_equal(nest_expr(1), nest_expr(0));
+        for(std::size_t size = 2; size < 50; ++size) {
+          auto result_1 = evaluator.reduce(nest_expr(size));
+          auto result_2 = evaluator.reduce(nest_expr(0));
+          REQUIRE(result_1.holds_success());
+          REQUIRE(result_2.holds_success());
+          REQUIRE(result_1.get_value() == result_2.get_value());
+          arena.drop(std::move(result_1.get_value()));
+          arena.drop(std::move(result_2.get_value()));
+        }
+      }
     }
-    SECTION("The expression f ($0 $1) $1 is rejected") {
-      auto bad = arena.apply(
-        arena.apply(
-          std::move(f),
-          arena.apply(
-            arena.argument(0),
-            arena.argument(1)
-          )
-        ),
-        arena.argument(1)
-      );
-      arena.drop(std::move(ax)); //didn't use
-      auto eval = evaluator.reduce(std::move(bad));
-      REQUIRE(eval.holds_error());
+    SECTION("Various single equalities of iterates of $0 applied to $1 work properly.") {
+      for(std::size_t base = 0; base <= 5; ++base) {
+        for(std::size_t step = 1; step <= 5; ++step) {
+          EvaluationContext evaluator(arena, rules);
+          auto equal_err = evaluator.assume_equal(nest_expr(base), nest_expr(base + step));
+          REQUIRE(!equal_err);
+          for(std::size_t repeats = 1; repeats <= 5; ++repeats) {
+            auto result_1 = evaluator.reduce(nest_expr(base + step * repeats));
+            auto result_2 = evaluator.reduce(nest_expr(base));
+            REQUIRE(result_1.holds_success());
+            REQUIRE(result_2.holds_success());
+            REQUIRE(result_1.get_value() == result_2.get_value());
+            arena.drop(std::move(result_1.get_value()));
+            arena.drop(std::move(result_2.get_value()));
+          }
+        }
+      }
+    }
+    SECTION("If $0 ($0 $1) = $1 and $0 ($0 ($0 $1)) = $1, then $0 $1 = $1") {
+      EvaluationContext evaluator(arena, rules);
+      auto equal_err = evaluator.assume_equal(nest_expr(2), nest_expr(0));
+      auto equal_err2 = evaluator.assume_equal(nest_expr(3), nest_expr(0));
+      REQUIRE(!equal_err);
+      REQUIRE(!equal_err2);
+      auto result_1 = evaluator.reduce(nest_expr(1));
+      auto result_2 = evaluator.reduce(nest_expr(0));
+      REQUIRE(result_1.holds_success());
+      REQUIRE(result_2.holds_success());
+      REQUIRE(result_1.get_value() == result_2.get_value());
+      arena.drop(std::move(result_1.get_value()));
+      arena.drop(std::move(result_2.get_value()));
+    }
+    SECTION("Various settings various pairs of iterates of $0 applied to $1 equal to $1 itself works properly.") {
+      auto gcd = [](std::size_t x, std::size_t y) {
+        while(x != 0) {
+          y = y % x;
+          std::swap(x, y);
+        }
+        return y;
+      };
+      for(std::size_t x = 1; x < 20; ++x) {
+        for(std::size_t y = x + 1; y <= 20; ++y) {
+          auto divisor = gcd(x, y);
+          EvaluationContext evaluator(arena, rules);
+          auto equal_err = evaluator.assume_equal(nest_expr(x), nest_expr(0));
+          auto equal_err2 = evaluator.assume_equal(nest_expr(y), nest_expr(0));
+          for(std::size_t z = 1; z < 50; ++z) {
+            auto result_1 = evaluator.reduce(nest_expr(z));
+            auto result_2 = evaluator.reduce(nest_expr(0));
+            REQUIRE(result_1.holds_success());
+            REQUIRE(result_2.holds_success());
+            INFO("With iterates " << x << " and " << y << ", checking iterate " << z);
+            if(z % divisor == 0) {
+              REQUIRE(result_1.get_value() == result_2.get_value());
+            } else {
+              REQUIRE(result_1.get_value() != result_2.get_value());
+            }
+            arena.drop(std::move(result_1.get_value()));
+            arena.drop(std::move(result_2.get_value()));
+          }
+        }
+      }
     }
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
-//"EvaluationContext rejects \$0 = (axiom \$0) immediately."
