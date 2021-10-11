@@ -136,7 +136,7 @@ namespace new_expression {
         auto index = next_writable_entry();
         entries[index].discriminator = discriminator_argument;
         entries[index].data.argument = Argument{arg_index};
-        existing_argument.insert(std::make_pair(index, WeakExpression{arg_index}));
+        existing_argument.insert(std::make_pair(arg_index, WeakExpression{index}));
         return OwnedExpression{index};
       }
       auto index = next_writable_entry();
@@ -145,13 +145,13 @@ namespace new_expression {
       return OwnedExpression{index};
     }
     OwnedExpression conglomerate(std::uint64_t conglomerate_index) {
-      if(existing_argument.contains(conglomerate_index)) {
-        return copy(existing_argument.at(conglomerate_index));
+      if(existing_conglomerate.contains(conglomerate_index)) {
+        return copy(existing_conglomerate.at(conglomerate_index));
       } else {
         auto index = next_writable_entry();
         entries[index].discriminator = discriminator_conglomerate;
         entries[index].data.conglomerate = Conglomerate{conglomerate_index};
-        existing_argument.insert(std::make_pair(index, WeakExpression{conglomerate_index}));
+        existing_conglomerate.insert(std::make_pair(conglomerate_index, WeakExpression{index}));
         return OwnedExpression{index};
       }
       auto index = next_writable_entry();
