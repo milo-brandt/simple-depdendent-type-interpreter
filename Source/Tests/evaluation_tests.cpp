@@ -351,7 +351,7 @@ TEST_CASE("EvaluationContext can deal with $4 = (axiom $0 $1) and $4 = (axiom $2
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
-TEST_CASE("EvaluationContext rejects $0 = (axiom $0) immediately.") {
+TEST_CASE("EvaluationContext rejects $0 = (axiom $0) either at assumption time or when reducing $0.") {
   Arena arena;
   {
     RuleCollector rules(arena);
@@ -363,10 +363,11 @@ TEST_CASE("EvaluationContext rejects $0 = (axiom $0) immediately.") {
         arena.argument(0)
       )
     );
-
     auto eval = evaluator.reduce(arena.argument(0));
-    REQUIRE(equal_err);
-    arena.drop(std::move(eval.get_value()));
+    REQUIRE((equal_err || eval.holds_error()));
+    if(auto* value = eval.get_if_value()) {
+      arena.drop(std::move(*value));
+    }
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
