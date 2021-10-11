@@ -363,8 +363,12 @@ TEST_CASE("EvaluationContext rejects $0 = (axiom $0) immediately.") {
         arena.argument(0)
       )
     );
+
+    auto eval = evaluator.reduce(arena.argument(0));
     REQUIRE(equal_err);
+    arena.drop(std::move(eval.get_value()));
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+//"EvaluationContext rejects \$0 = (axiom \$0) immediately."

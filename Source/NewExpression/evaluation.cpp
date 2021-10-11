@@ -146,6 +146,7 @@ namespace new_expression {
         }
       }
       bool exists_axiomatic_cycle() {
+        return false;
         constexpr std::uint8_t on_stack = 1;
         constexpr std::uint8_t acyclic = 2;
         struct Detail {
@@ -341,10 +342,10 @@ namespace new_expression {
         return std::visit(mdb::overloaded{
           [&](conglomerate_status::Axiomatic const& axiomatic) {
             OwnedExpression ret = arena.copy(axiomatic.head);
-            for(std::size_t conglomerate_index : axiomatic.applied_conglomerates) {
+            for(std::size_t conglomerate_class : axiomatic.applied_conglomerates) {
               ret = arena.apply(
                 std::move(ret),
-                get_conglomerate_class_replacement(conglomerate_index)
+                arena.conglomerate(conglomerate_index_of_class(conglomerate_class))
               );
             }
             return ret;
@@ -380,14 +381,6 @@ namespace new_expression {
       WeakKeyMap<Mark> marks;
       ConglomerateReducerCRTP(Arena& arena, RuleCollector const& rule_collector):arena(arena), rule_collector(rule_collector), reductions(arena), marks(arena) {}
       void mark_through_axioms(WeakExpression target, Mark mark) {
-        if(!marks.contains(target)) {
-          marks.set(target, mark);
-        } else {
-          auto& current = marks.at(target);
-          //check if every bit in "mark" is in "current"
-          if((mark & ~current).none()) return; //no bits in mark are not in current
-          current |= mark;
-        }
         auto unfolded = unfold(arena, target);
         if(arena.holds_axiom(unfolded.head)) {
           for(auto arg : unfolded.args) {
@@ -474,7 +467,7 @@ namespace new_expression {
               auto& [new_expr, mark_used] = *reduction;
               if(marks.contains(unfolded.head)) {
                 if((marks.at(unfolded.head) & mark_used).any()) {
-                  std::terminate(); //cycle detected
+                  std::terminate();
                 }
               }
               arena.drop(std::move(unfolded.head));
@@ -485,6 +478,7 @@ namespace new_expression {
                 marks.set(unfolded.head, mark_used);
               }
               forward_marking(unfolded.head);
+              needs_repeat = true;
             }
             if(unfolded.args.empty()) break;
             unfolded.head = arena.apply(
@@ -515,6 +509,7 @@ namespace new_expression {
                             is_representative(is_representative){}
       std::optional<std::pair<OwnedExpression, Mark> > get_conglomerate_reduction(WeakExpression expr, bool outermost) {
         if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
+          if(outermost) return std::nullopt; //don't expand raw conglomerates
           if(solve_state.conglomerate_has_definition(conglomerate->index)) {
             return std::make_pair(
               solve_state.get_conglomerate_replacement(conglomerate->index),
