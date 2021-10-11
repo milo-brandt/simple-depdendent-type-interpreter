@@ -230,18 +230,18 @@ TEST_CASE("EvaluationContext can deal with $0 = (axiom $1 $2) equality.") {
     auto ax = arena.axiom();
     auto expr = arena.apply(
       arena.apply(
-        arena.copy(ax),
-        arena.argument(0)
+        std::move(ax),
+        arena.argument(1)
       ),
-      arena.argument(1)
+      arena.argument(2)
     );
     auto equal_err = evaluator.assume_equal(
-      std::move(ax),
+      arena.argument(0),
       arena.copy(expr)
     );
     REQUIRE(!equal_err);
     auto result_1 = evaluator.reduce(arena.argument(0));
-    auto result_2 = evaluator.reduce(std::move(ax));
+    auto result_2 = evaluator.reduce(std::move(expr));
     REQUIRE(result_1.holds_success());
     REQUIRE(result_2.holds_success());
     REQUIRE(result_1.get_value() == result_2.get_value());
@@ -347,6 +347,23 @@ TEST_CASE("EvaluationContext can deal with $4 = (axiom $0 $1) and $4 = (axiom $2
       arena.drop(std::move(result_1.get_value()));
       arena.drop(std::move(result_2.get_value()));
     }
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("EvaluationContext rejects $0 = (axiom $0) immediately.") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+    auto equal_err = evaluator.assume_equal(
+      arena.argument(0),
+      arena.apply(
+        arena.axiom(),
+        arena.argument(0)
+      )
+    );
+    REQUIRE(equal_err);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());

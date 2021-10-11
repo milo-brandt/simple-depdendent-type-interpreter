@@ -25,6 +25,9 @@ namespace new_expression {
     template<class Base> //Base must provide Arena& arena and OwnedExpression reduce()
     struct ReducerCRTP {
       Base& me() { return *(Base*)this; }
+      OwnedExpression substitute_into_replacement(Arena& arena, WeakExpression substitution, std::span<WeakExpression> args) {
+        return substitute_into(arena, substitution, args);
+      }
       bool reduce_by_pattern(OwnedExpression& expr, RuleCollector const& collector) {
         auto& arena = me().arena;
         auto unfolded = unfold(arena, expr);
@@ -36,9 +39,7 @@ namespace new_expression {
               pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.end());
               std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
               for(auto const& match : rule.pattern_body.sub_matches) {
-                auto new_expr = me().reduce(
-                  substitute_into(arena, match.substitution, mdb::as_span(pattern_stack))
-                );
+                auto new_expr = me().reduce(substitute_into_replacement(arena, match.substitution, mdb::as_span(pattern_stack)));
                 auto match_unfold = unfold(arena, new_expr);
                 novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
                 if(match_unfold.head != match.expected_head) goto PATTERN_FAILED;
@@ -60,7 +61,7 @@ namespace new_expression {
               }
               //if we get here, the pattern succeeded.
               {
-                auto new_expr = substitute_into(arena, rule.replacement, mdb::as_span(pattern_stack));
+                auto new_expr = substitute_into_replacement(arena, rule.replacement, mdb::as_span(pattern_stack));
                 arena.drop(std::move(expr));
                 expr = std::move(new_expr);
                 destroy_from_arena(arena, novel_roots);
@@ -90,42 +91,6 @@ namespace new_expression {
         return std::move(expr);
       }
     };
-    /*
-    struct MergeWith {
-      std::uint64_t other_mark;
-    };
-    std::variant<OwnedExpression, MergeWith> reduce(Arena& arena, Table& table, OwnedExpression input, std::uint64_t row_simplifying, bool outer_level) {
-      //do normal reduction stuff...
-      for(std::size_t row_index = 0; row_index < table.rows.size(); ++row_index) {
-        auto& row = table.rows[row_index];
-        for(std::size_t reducer_index = 0; reducer_index < row.reducers.size(); ++reducer_index) {
-          auto& reducer = row.reducers[reducer_index];
-          if(input == reducer) {
-            if(outer_level) {
-              arena.drop(std::move(input));
-              //return row.conglomerate_index;
-            }
-            auto output = arena.copy(row.conglomerate_representative);
-            if(row_index >= row_simplifying) {
-              std::rotate( //rotate table so that the used term comes first
-                table.rows.begin() + row_simplifying,
-                table.rows.begin() + row_index,
-                table.rows.begin() + row_index + 1
-              );
-              std::swap(reducer, row.canonical_form); //the reducer is now the canonical form of its row
-
-            } else {
-
-            }
-          }
-        }
-      }
-      for(auto const& row : table) {
-        for(auto const& reducer : row.reducers) {
-
-        }
-      }
-    }*/
   }
   SimpleEvaluationContext::SimpleEvaluationContext(Arena& arena, RuleCollector& rule_collector):arena(&arena), rule_collector(&rule_collector) {}
   OwnedExpression SimpleEvaluationContext::reduce_head(OwnedExpression expr) {
@@ -146,7 +111,8 @@ namespace new_expression {
         std::uint64_t mark_index;
         OwnedExpression head;
         std::vector<std::size_t> applied_conglomerates;
-        static constexpr auto part_info = mdb::parts::simple<3>;
+        std::size_t conglomerate_index;
+        static constexpr auto part_info = mdb::parts::simple<4>;
       };
       using Any = std::variant<PureOpen, Axiomatic>;
     };
@@ -179,7 +145,40 @@ namespace new_expression {
           }
         }
       }
-      void combine_conglomerates(std::size_t target, std::size_t source) {
+      bool exists_axiomatic_cycle() {
+        constexpr std::uint8_t on_stack = 1;
+        constexpr std::uint8_t acyclic = 2;
+        struct Detail {
+          std::vector<ConglomerateInfo> const& conglomerate_class_info;
+          std::vector<std::uint8_t> node_info;
+          Detail(std::vector<ConglomerateInfo> const& conglomerate_class_info):
+            conglomerate_class_info(conglomerate_class_info),
+            node_info(conglomerate_class_info.size(), 0){}
+          bool has_cycle(std::size_t i) {
+            //this is essentially Tarjan's algorithm, except we only care whether a cycle exists.
+            if(node_info[i] == acyclic) return false;
+            if(node_info[i] == on_stack) return true;
+            node_info[i] = on_stack;
+            if(auto* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&conglomerate_class_info[i].status)) {
+              for(auto applied : axiomatic->applied_conglomerates) {
+                if(has_cycle(applied)) {
+                  return true;
+                }
+              }
+            }
+            node_info[i] = acyclic;
+            return false;
+          }
+        };
+        Detail detail{conglomerate_class_info};
+        for(std::size_t i = 0; i < conglomerate_class_info.size(); ++i) {
+          if(detail.has_cycle(i)) {
+            return true;
+          }
+        }
+        return false;
+      }
+      bool combine_conglomerates(std::size_t target, std::size_t source) {
         struct Detail {
           ConglomerateSolveState& me;
           std::vector<std::pair<std::size_t, std::size_t> > further_combines;
@@ -194,10 +193,8 @@ namespace new_expression {
             for(auto& waiting : source_class.reducers.waiting) {
               target_class.reducers.waiting.push_back(std::move(waiting));
             }
-            auto* source_axiomatic = std::get_if<conglomerate_status::Axiomatic>(&source_class.status);
-            auto* target_axiomatic = std::get_if<conglomerate_status::Axiomatic>(&target_class.status);
-            if(source_axiomatic) {
-              if(target_axiomatic) {
+            if(auto* source_axiomatic = std::get_if<conglomerate_status::Axiomatic>(&source_class.status)) {
+              if(auto* target_axiomatic = std::get_if<conglomerate_status::Axiomatic>(&target_class.status)) {
                 if(source_axiomatic->head != target_axiomatic->head) std::terminate();
                 if(source_axiomatic->applied_conglomerates.size() != target_axiomatic->applied_conglomerates.size()) std::terminate();
                 me.arena.drop(std::move(target_axiomatic->head)); //target will be destroyed
@@ -208,13 +205,7 @@ namespace new_expression {
                   );
                 }
               } else {
-                //no action needed - source already has axiomatic definition.
-              }
-            } else {
-              if(target_axiomatic) {
-                source_class.status = std::move(*target_axiomatic);
-              } else {
-                //no action needed - both are pure open
+                target_class.status = std::move(*source_axiomatic);
               }
             }
             me.conglomerate_class_info.erase(me.conglomerate_class_info.begin() + source);
@@ -241,6 +232,7 @@ namespace new_expression {
           detail.further_combines.pop_back();
           detail.combine(top_source, top_target);
         }
+        return !exists_axiomatic_cycle(); //succeeds so long as no cycle is created.
       }
       void rotate_classes(std::size_t original_index, std::size_t new_index) { //must have new_index > original_index. Rotates new -> original, sending original -> original + 1
         std::rotate(
@@ -285,7 +277,8 @@ namespace new_expression {
         conglomerate_class_info[target_class].status = conglomerate_status::Axiomatic{
           .mark_index = next_mark++,
           .head = std::move(head),
-          .applied_conglomerates = std::move(applied_conglomerates)
+          .applied_conglomerates = std::move(applied_conglomerates),
+          .conglomerate_index = std::get<0>(conglomerate_class_info[target_class].status).conglomerate_index
         };
       }
       bool has_computation(WeakExpression expr) { //if *any* pattern could possibly reduce expr.
@@ -302,8 +295,7 @@ namespace new_expression {
         }
         if(auto* conglomerate = arena.get_if_conglomerate(reducer)) {
           drop_reducer(target_class, target_reducer);
-          combine_conglomerates(target_class, conglomerate_to_class[conglomerate->index]);
-          return true;
+          return combine_conglomerates(target_class, conglomerate_to_class[conglomerate->index]);
         }
         auto unfolding = unfold(arena, reducer);
         if(arena.holds_axiom(unfolding.head)) {
@@ -329,6 +321,11 @@ namespace new_expression {
         } else {
           return true; //okay - still purely open
         }
+      }
+      std::size_t conglomerate_index_of_class(std::size_t class_index) {
+        return std::visit([](auto const& status) {
+          return status.conglomerate_index;
+        }, conglomerate_class_info[conglomerate_to_class[class_index]].status);
       }
       bool conglomerate_has_definition(std::size_t index) {
         return std::visit(mdb::overloaded{
@@ -360,16 +357,104 @@ namespace new_expression {
       OwnedExpression get_conglomerate_replacement(std::size_t index) {
         return get_conglomerate_class_replacement(conglomerate_to_class[index]);
       }
+      std::bitset<64> get_conglomerate_class_mark(std::size_t index) {
+        return std::visit(mdb::overloaded{
+          [&](conglomerate_status::Axiomatic const& axiomatic) {
+            return std::bitset<64>{1} << axiomatic.mark_index;
+          },
+          [&](conglomerate_status::PureOpen const& pure_open) {
+            return std::bitset<64>{};
+          }
+        }, conglomerate_class_info[index].status);
+      }
+      std::bitset<64> get_conglomerate_mark(std::size_t index) {
+        return get_conglomerate_class_mark(conglomerate_to_class[index]);
+      }
     };
     template<class Base>
     struct ConglomerateReducerCRTP : ReducerCRTP<ConglomerateReducerCRTP<Base> > {
+      using Mark = std::bitset<64>;
       Arena& arena;
       RuleCollector const& rule_collector;
       WeakKeyMap<OwnedExpression, PartDestroyer> reductions;
-      ConglomerateReducerCRTP(Arena& arena, RuleCollector const& rule_collector):arena(arena), rule_collector(rule_collector), reductions(arena) {}
+      WeakKeyMap<Mark> marks;
+      ConglomerateReducerCRTP(Arena& arena, RuleCollector const& rule_collector):arena(arena), rule_collector(rule_collector), reductions(arena), marks(arena) {}
+      void mark_through_axioms(WeakExpression target, Mark mark) {
+        if(!marks.contains(target)) {
+          marks.set(target, mark);
+        } else {
+          auto& current = marks.at(target);
+          //check if every bit in "mark" is in "current"
+          if((mark & ~current).none()) return; //no bits in mark are not in current
+          current |= mark;
+        }
+        auto unfolded = unfold(arena, target);
+        if(arena.holds_axiom(unfolded.head)) {
+          for(auto arg : unfolded.args) {
+            if(marks.contains(arg)) {
+              if((~marks.at(arg) & mark).none()) {
+                continue; //already has needed marks
+              } else {
+                marks.at(arg) |= mark;
+              }
+            } else {
+              marks.set(arg, mark);
+            }
+            mark_through_axioms(arg, mark);
+          }
+        }
+      }
+      void forward_marking(WeakExpression target) {
+        if(marks.contains(target)) {
+          mark_through_axioms(target, marks.at(target));
+        }
+      }
+      OwnedExpression substitute_into_replacement(Arena& arena, WeakExpression substitution, std::span<WeakExpression> args) {
+        struct Detail {
+          ConglomerateReducerCRTP& me;
+          std::span<WeakExpression const> args;
+          std::unordered_map<WeakExpression, WeakExpression, ExpressionHasher> memoized_results;
+          OwnedExpression substitute(WeakExpression target) {
+            if(memoized_results.contains(target)) return me.arena.copy(memoized_results.at(target));
+            auto ret = me.arena.visit(target, mdb::overloaded{
+              [&](Apply const& apply) {
+                auto lhs = substitute(apply.lhs);
+                auto rhs = substitute(apply.rhs);
+                me.forward_marking(rhs);
+                auto ret = me.arena.apply(std::move(lhs), std::move(rhs));
+                if(me.marks.contains(lhs)) { //forward marks from application
+                  if(me.marks.contains(ret)) {
+                    me.marks.at(ret) |= me.marks.at(lhs);
+                  } else {
+                    me.marks.set(ret, me.marks.at(lhs));
+                  }
+                }
+                return ret;
+              },
+              [&](Argument const& arg) {
+                if(args.size() <= arg.index) std::terminate(); //not enough args.
+                return me.arena.copy(args[arg.index]);
+              },
+              [&](Axiom const& axiom) {
+                return me.arena.copy(target);
+              },
+              [&](Declaration const& declaration) {
+                return me.arena.copy(target);
+              },
+              [&](auto const&) -> OwnedExpression {
+                std::terminate();
+              }
+            });
+            memoized_results.insert(std::make_pair(target, (WeakExpression)ret));
+            forward_marking(ret);
+            return ret;
+          }
+        };
+        return Detail{*this, args}.substitute(substitution);
+      }
       Base& me() { return *(Base*)this; }
       using ReducerCRTP<ConglomerateReducerCRTP<Base> >::reduce_by_pattern;
-      OwnedExpression reduce(OwnedExpression expr) {
+      OwnedExpression reduce(OwnedExpression expr, bool outermost = false) {
         if(reductions.contains(expr)) {
           auto ret = arena.copy(reductions.at(expr));
           arena.drop(std::move(expr));
@@ -385,9 +470,21 @@ namespace new_expression {
             arg = reduce(std::move(arg));
           }
           while(true) {
-            if(auto reduction = me().get_conglomerate_reduction(unfolded.head)) {
+            if(auto reduction = me().get_conglomerate_reduction(unfolded.head, outermost && unfolded.args.empty())) {
+              auto& [new_expr, mark_used] = *reduction;
+              if(marks.contains(unfolded.head)) {
+                if((marks.at(unfolded.head) & mark_used).any()) {
+                  std::terminate(); //cycle detected
+                }
+              }
               arena.drop(std::move(unfolded.head));
-              unfolded.head = std::move(*reduction);
+              unfolded.head = std::move(new_expr);
+              if(marks.contains(unfolded.head)) {
+                marks.at(unfolded.head) |= mark_used;
+              } else {
+                marks.set(unfolded.head, mark_used);
+              }
+              forward_marking(unfolded.head);
             }
             if(unfolded.args.empty()) break;
             unfolded.head = arena.apply(
@@ -403,6 +500,8 @@ namespace new_expression {
       }
     };
     struct RepresentativeReducer : ConglomerateReducerCRTP<RepresentativeReducer> {
+      //one slight issue: would like to make sure that if we have #0 -> #2, but #0 is an axiomatic
+      //conglomerate, would rather merge 0 and 2 instead of seeing #0 = axiom #3 #4 and exploding #2
       ConglomerateSolveState& solve_state;
       std::size_t target_class;
       std::size_t target_index;
@@ -414,10 +513,13 @@ namespace new_expression {
                             target_class(target_class),
                             target_index(target_index),
                             is_representative(is_representative){}
-      std::optional<OwnedExpression> get_conglomerate_reduction(WeakExpression expr) {
+      std::optional<std::pair<OwnedExpression, Mark> > get_conglomerate_reduction(WeakExpression expr, bool outermost) {
         if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
           if(solve_state.conglomerate_has_definition(conglomerate->index)) {
-            return solve_state.get_conglomerate_replacement(conglomerate->index);
+            return std::make_pair(
+              solve_state.get_conglomerate_replacement(conglomerate->index),
+              solve_state.get_conglomerate_mark(conglomerate->index)
+            );
           } else {
             return std::nullopt; //conglomerates can't be reducers
           }
@@ -441,7 +543,18 @@ namespace new_expression {
                   //not sure what happens here
                 }
               }
-              return solve_state.get_conglomerate_class_replacement(class_index);
+              if(outermost) {
+                //substitutions at root need to go to the raw conglomerate.
+                return std::make_pair(
+                  arena.conglomerate(solve_state.conglomerate_index_of_class(class_index)),
+                  Mark{}
+                );
+              } else {
+                return std::make_pair(
+                  solve_state.get_conglomerate_class_replacement(class_index),
+                  solve_state.get_conglomerate_class_mark(class_index)
+                );
+              }
             }
           }
         }
@@ -453,10 +566,13 @@ namespace new_expression {
       NormalConglomerateReducer(Arena& arena, RuleCollector const& rule_collector, ConglomerateSolveState& solve_state):
         ConglomerateReducerCRTP<NormalConglomerateReducer>(arena, rule_collector),
         solve_state(solve_state){}
-      std::optional<OwnedExpression> get_conglomerate_reduction(WeakExpression expr) {
+      std::optional<std::pair<OwnedExpression, Mark> > get_conglomerate_reduction(WeakExpression expr, bool) {
         if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
           if(solve_state.conglomerate_has_definition(conglomerate->index)) {
-            return solve_state.get_conglomerate_replacement(conglomerate->index);
+            return std::make_pair(
+              solve_state.get_conglomerate_replacement(conglomerate->index),
+              solve_state.get_conglomerate_mark(conglomerate->index)
+            );
           } else {
             return std::nullopt; //conglomerates can't be reducers
           }
@@ -466,7 +582,10 @@ namespace new_expression {
           for(std::size_t reducer_index = 0; reducer_index < class_info.reducers.active.size(); ++reducer_index) {
             auto& reducer = class_info.reducers.active[reducer_index];
             if(expr == reducer) {
-              return solve_state.get_conglomerate_class_replacement(class_index);
+              return std::make_pair(
+                solve_state.get_conglomerate_class_replacement(class_index),
+                solve_state.get_conglomerate_class_mark(class_index)
+              );
             }
           }
         }
@@ -505,12 +624,13 @@ namespace new_expression {
           }();
           auto reduced = RepresentativeReducer{
             arena, rule_collector, solve_state, class_index, reducer_index, is_representative
-          }.reduce(arena.copy(reducer));
+          }.reduce(arena.copy(reducer), true);
           if(reducer != reduced) {
             arena.drop(std::move(reducer));
             reducer = std::move(reduced);
             bool okay = solve_state.examine_updated_reducer(class_index, reducer_index);
-            if(!okay) std::terminate();
+            if(!okay)
+              return EvaluationError{};
             goto RESTART_CANONICALIZATION;
           } else {
             arena.drop(std::move(reduced));
@@ -523,34 +643,13 @@ namespace new_expression {
           class_info.reducers.active.push_back(arena.copy(reducer));
           auto reduced = RepresentativeReducer{
             arena, rule_collector, solve_state, class_index, reducer_index, false
-          }.reduce(std::move(reducer));
+          }.reduce(std::move(reducer), true);
           arena.drop(std::move(class_info.reducers.active.back()));
           class_info.reducers.active.back() = std::move(reduced);
           bool okay = solve_state.examine_updated_reducer(class_index, reducer_index);
-          if(!okay) std::terminate();
+          if(!okay)
+            return EvaluationError{};
           goto RESTART_CANONICALIZATION;
-        }
-        for(std::size_t reducer_index = 0; reducer_index < class_info.reducers.waiting.size(); ++reducer_index) {
-          auto& reducer = class_info.reducers.waiting[reducer_index];
-          bool is_representative = [&] {
-            if(auto* pure_open = std::get_if<conglomerate_status::PureOpen>(&class_info.status)) {
-              return pure_open->representative == reducer;
-            } else {
-              return false;
-            }
-          }();
-          auto reduced = RepresentativeReducer{
-            arena, rule_collector, solve_state, class_index, reducer_index, is_representative
-          }.reduce(arena.copy(reducer));
-          if(reducer != reduced) {
-            arena.drop(std::move(reducer));
-            reducer = std::move(reduced);
-            bool okay = solve_state.examine_updated_reducer(class_index, reducer_index);
-            if(!okay) std::terminate();
-            goto RESTART_CANONICALIZATION;
-          } else {
-            arena.drop(std::move(reduced));
-          }
         }
       }
       return std::nullopt;
