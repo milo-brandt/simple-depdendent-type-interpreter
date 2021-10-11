@@ -372,4 +372,70 @@ TEST_CASE("EvaluationContext rejects $0 = (axiom $0) either at assumption time o
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("EvaluationContext rejects a complicated circular case.") {
+  //Assume: $0 $1 = axiom $0.
+  //Declare f (axiom $x) $y = f ($x $y) $y.
+  //Try to evaluate f (axiom $0) $1 = f ($0 $1) $1 = f (axiom $0) $1
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+
+    auto f = arena.declaration();
+    auto ax = arena.axiom();
+
+    rules.register_declaration(f);
+    rules.add_rule(Rule{
+      .pattern = {
+        .head = arena.copy(f),
+        .body = {
+          .args_captured = 2,
+          .sub_matches = mdb::make_vector(PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(ax),
+            .args_captured = 1
+          })
+        }
+      },
+      .replacement = arena.apply(
+        arena.apply(
+          arena.copy(f),
+          arena.apply(
+            arena.argument(2),
+            arena.argument(1)
+          )
+        ),
+        arena.argument(1)
+      )
+    });
+
+    auto equal_err = evaluator.assume_equal(
+      arena.apply(
+        arena.argument(0),
+        arena.argument(1)
+      ),
+      arena.apply(
+        arena.copy(ax),
+        arena.argument(0)
+      )
+    );
+    auto bad = arena.apply(
+      arena.apply(
+        std::move(f),
+        arena.apply(
+          std::move(ax),
+          arena.argument(0)
+        )
+      ),
+      arena.argument(1)
+    );
+    auto eval = evaluator.reduce(std::move(bad));
+    REQUIRE((equal_err || eval.holds_error()));
+    if(auto* value = eval.get_if_value()) {
+      arena.drop(std::move(*value));
+    }
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
 //"EvaluationContext rejects \$0 = (axiom \$0) immediately."

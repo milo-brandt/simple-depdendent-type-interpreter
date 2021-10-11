@@ -44,7 +44,7 @@ namespace new_expression {
               pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.end());
               std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
               for(auto const& match : rule.pattern_body.sub_matches) {
-                auto new_expr = substitute_into_replacement(arena, match.substitution, mdb::as_span(pattern_stack));
+                auto new_expr = me().substitute_into_replacement(arena, match.substitution, mdb::as_span(pattern_stack));
                 bool okay = me().reduce_in_place(new_expr);
                 auto match_unfold = unfold(arena, new_expr);
                 novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
@@ -70,7 +70,7 @@ namespace new_expression {
               }
               //if we get here, the pattern succeeded.
               {
-                auto new_expr = substitute_into_replacement(arena, rule.replacement, mdb::as_span(pattern_stack));
+                auto new_expr = me().substitute_into_replacement(arena, rule.replacement, mdb::as_span(pattern_stack));
                 arena.drop(std::move(expr));
                 expr = std::move(new_expr);
                 destroy_from_arena(arena, novel_roots);
@@ -456,7 +456,7 @@ namespace new_expression {
               }
             });
             memoized_results.insert(std::make_pair(target, (WeakExpression)ret));
-            forward_marking(ret);
+            me.forward_marking(ret);
             return ret;
           }
         };
@@ -465,12 +465,12 @@ namespace new_expression {
       Base& me() { return *(Base*)this; }
       using ReducerCRTP<ConglomerateReducerCRTP<Base> >::reduce_by_pattern;
       bool reduce_in_place(OwnedExpression& expr, bool outermost = false) {
-        if(reductions.contains(expr)) {
+        /*if(reductions.contains(expr)) {
           auto ret = arena.copy(reductions.at(expr));
           arena.drop(std::move(expr));
           expr = std::move(ret);
           return true;
-        }
+        }*/
         WeakExpression input = expr;
         bool needs_repeat = true;
         while(needs_repeat) {
