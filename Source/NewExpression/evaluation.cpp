@@ -419,6 +419,26 @@ namespace new_expression {
           mark_through_axioms(target, marks.at(target));
         }
       }
+      void add_mark(WeakExpression expr, Mark mark) {
+        if(marks.contains(expr)) {
+          marks.at(expr) |= mark;
+        } else {
+          marks.set(expr, mark);
+        }
+      }
+      void propagate_marking(WeakExpression target) { //fix all marking data
+        arena.visit(target, mdb::overloaded{
+          [&](Apply const& apply) {
+            propagate_marking(apply.lhs);
+            propagate_marking(apply.rhs);
+            if(marks.contains(apply.lhs)) {
+              add_mark(target, marks.at(apply.lhs));
+            }
+          },
+          [&](auto const&) {}
+        });
+        forward_marking(target);
+      }
       OwnedExpression substitute_into_replacement(Arena& arena, WeakExpression substitution, std::span<WeakExpression> args) {
         struct Detail {
           ConglomerateReducerCRTP& me;
@@ -465,12 +485,12 @@ namespace new_expression {
       Base& me() { return *(Base*)this; }
       using ReducerCRTP<ConglomerateReducerCRTP<Base> >::reduce_by_pattern;
       bool reduce_in_place(OwnedExpression& expr, bool outermost = false) {
-        /*if(reductions.contains(expr)) {
+        if(reductions.contains(expr)) {
           auto ret = arena.copy(reductions.at(expr));
           arena.drop(std::move(expr));
           expr = std::move(ret);
           return true;
-        }*/
+        }
         WeakExpression input = expr;
         bool needs_repeat = true;
         while(needs_repeat) {
@@ -490,7 +510,8 @@ namespace new_expression {
               if(auto reduction = me().get_conglomerate_reduction(unfolded.head, outermost && unfolded.args.empty())) {
                 auto& [new_expr, mark_used] = *reduction;
                 if(marks.contains(unfolded.head)) {
-                  if((marks.at(unfolded.head) & mark_used).any()) {
+                  auto existing_mark = marks.at(unfolded.head);
+                  if((existing_mark & mark_used).any()) {
                     okay = false;
                   }
                 }
@@ -521,6 +542,7 @@ namespace new_expression {
         return true;
       }
       std::pair<OwnedExpression, bool> reduce_outer(OwnedExpression expr) {
+        me().prepare_marks_for(expr);
         auto okay = reduce_in_place(expr, true);
         return std::make_pair(std::move(expr), okay);
       }
@@ -587,6 +609,26 @@ namespace new_expression {
         }
         return std::nullopt;
       }
+      auto prepare_marks_for(WeakExpression expr) {
+        for(auto const& conglomerate_class : solve_state.conglomerate_class_info) {
+          if(auto const* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&conglomerate_class.status)) {
+            for(auto class_index : axiomatic->applied_conglomerates) {
+              auto cong = arena.conglomerate(solve_state.conglomerate_index_of_class(class_index));
+              if(marks.contains(cong)) {
+                marks.at(cong) |= solve_state.get_conglomerate_class_mark(class_index);
+              } else {
+                marks.set(cong, solve_state.get_conglomerate_class_mark(class_index));
+              }
+              arena.drop(std::move(cong));
+              /*
+                CLEAR ERROR: these conglomerates could get cleaned up, since they have no
+                references
+              */
+            }
+          }
+        }
+        propagate_marking(expr);
+      }
     };
     struct NormalConglomerateReducer : ConglomerateReducerCRTP<NormalConglomerateReducer> {
       ConglomerateSolveState& solve_state;
@@ -617,6 +659,28 @@ namespace new_expression {
           }
         }
         return std::nullopt;
+      }
+      void prepare_marks_for(WeakExpression expr) {
+        std::size_t outer_class_index = 0;
+        for(auto const& conglomerate_class : solve_state.conglomerate_class_info) {
+          if(auto const* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&conglomerate_class.status)) {
+            for(auto class_index : axiomatic->applied_conglomerates) {
+              auto cong = arena.conglomerate(solve_state.conglomerate_index_of_class(class_index));
+              if(marks.contains(cong)) {
+                marks.at(cong) |= solve_state.get_conglomerate_class_mark(outer_class_index);
+              } else {
+                marks.set(cong, solve_state.get_conglomerate_class_mark(outer_class_index));
+              }
+              arena.drop(std::move(cong));
+              /*
+                CLEAR ERROR: these conglomerates could get cleaned up, since they have no
+                references
+              */
+            }
+          }
+          ++outer_class_index;
+        }
+        propagate_marking(expr);
       }
     };
   }

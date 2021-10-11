@@ -419,20 +419,35 @@ TEST_CASE("EvaluationContext rejects a complicated circular case.") {
         arena.argument(0)
       )
     );
-    auto bad = arena.apply(
-      arena.apply(
-        std::move(f),
+    REQUIRE(!equal_err); //this should pass
+    SECTION("The expression f (ax $0) $1 is rejected") {
+      auto bad = arena.apply(
         arena.apply(
-          std::move(ax),
-          arena.argument(0)
-        )
-      ),
-      arena.argument(1)
-    );
-    auto eval = evaluator.reduce(std::move(bad));
-    REQUIRE((equal_err || eval.holds_error()));
-    if(auto* value = eval.get_if_value()) {
-      arena.drop(std::move(*value));
+          std::move(f),
+          arena.apply(
+            std::move(ax),
+            arena.argument(0)
+          )
+        ),
+        arena.argument(1)
+      );
+      auto eval = evaluator.reduce(std::move(bad));
+      REQUIRE(eval.holds_error());
+    }
+    SECTION("The expression f ($0 $1) $1 is rejected") {
+      auto bad = arena.apply(
+        arena.apply(
+          std::move(f),
+          arena.apply(
+            arena.argument(0),
+            arena.argument(1)
+          )
+        ),
+        arena.argument(1)
+      );
+      arena.drop(std::move(ax)); //didn't use
+      auto eval = evaluator.reduce(std::move(bad));
+      REQUIRE(eval.holds_error());
     }
   }
   arena.clear_orphaned_expressions();
