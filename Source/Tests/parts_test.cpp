@@ -112,3 +112,15 @@ TEST_CASE("The part_info member can be specified as apply_call") {
   });
   REQUIRE(sum == 17);
 }
+TEST_CASE("Variants are destructured to the active element") {
+  int sum = 0;
+  std::variant<int, bool> value{true};
+  mdb::parts::visit_children(value, [&sum]<class T>(T& v) {
+    if constexpr(std::is_same_v<T, int>) {
+      sum = v;
+    } else {
+      sum = (v ? 17 : 34);
+    }
+  });
+  REQUIRE(sum == 17);
+}

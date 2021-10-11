@@ -13,32 +13,19 @@ namespace new_expression {
     SimpleEvaluationContext(Arena&, RuleCollector&);
     OwnedExpression reduce_head(OwnedExpression);
   };
-  /*
+  struct EvaluationError{};
   class EvaluationContext {
-    using Marking = std::bitset<64>;
-    struct PointSimplification {
-      Marking associated_marks; //must crash if associated_marks & <source marking> has any bits
-      std::uint64_t source_arg_count;
-      OwnedExpression source;
-      OwnedExpression replacement;
-    };
-    struct ExtraDeclarationInfo {
-      std::vector<PointSimplification> extra_simplifications;
-    };
-    Arena* arena;
-    RuleCollector* rule_collector;
-    bool needs_canonicalization;
-    std::uint64_t next_conglomerate = 0;
-    WeakKeyMap<OwnedExpression, PartDestroyer> simplifications;
-    WeakKeyMap<OwnedExpression, Marking> markings;
-    std::vector<PointSimplification> point_simplifications;
-    struct Detail;
+    struct Impl;
+    std::unique_ptr<Impl> impl;
   public:
     EvaluationContext(Arena&, RuleCollector&);
-    mdb::Result<OwnedExpression, EvaluationError> reduce_head(OwnedExpression);
+    EvaluationContext(EvaluationContext&&);
+    EvaluationContext& operator=(EvaluationContext&&);
+    ~EvaluationContext();
+    mdb::Result<OwnedExpression, EvaluationError> reduce(OwnedExpression);
     std::optional<EvaluationError> assume_equal(OwnedExpression lhs, OwnedExpression rhs);
     std::optional<EvaluationError> canonicalize_context();
-  };*/
+  };
 }
 
 #endif

@@ -205,6 +205,7 @@ namespace new_expression {
   }
   void Arena::Impl::deref_entry(std::size_t index) {
     auto& entry = entries[index];
+    if(entry.reference_count == 0) std::terminate(); //!!! can't deref empty thing (debugging purposes only)
     if(--entry.reference_count == 0) {
       orphan_entries.insert(index);
     }
@@ -426,7 +427,7 @@ namespace new_expression {
         case 3: std::cout << "Data\n"; break;
         case 4: std::cout << "Argument " << entry.data.argument.index << "\n"; break;
         case 5: std::cout << "Conglomerate " << entry.data.conglomerate.index << "\n"; break;
-        case 6: std::cout << "Free List " << entry.data.free_list_entry.next_free_entry << "\n"; break; 
+        case 6: std::cout << "Free List " << entry.data.free_list_entry.next_free_entry << "\n"; break;
         default: std::terminate();
       }
     }

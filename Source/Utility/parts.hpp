@@ -1,5 +1,6 @@
 #include <type_traits>
 #include <tuple>
+#include <variant>
 
 namespace mdb {
   namespace parts {
@@ -23,6 +24,10 @@ namespace mdb {
         for(auto&& v : value) {
           callback(v);
         }
+      }
+      template<class... Ts, class Callback>
+      void visit_children_variant(std::variant<Ts...>& value, Callback&& callback) {
+        return std::visit(std::forward<Callback>(callback), value);
       }
       template<class T, class Callback, class ApplyCallback>
       void visit_children_by(T& value, Callback&& callback, ApplyCall<ApplyCallback> const& apply) {
@@ -63,8 +68,10 @@ namespace mdb {
       auto visit_children(T& value, Callback&& callback) {
         if constexpr(requires{ std::decay_t<T>::part_info; }) {
           detail::visit_children_by(value, callback, std::decay_t<T>::part_info); return std::bool_constant<true>{};
-        } else if constexpr(requires{ std::tuple_size<std::decay_t<T> >::value; }){
+        } else if constexpr(requires{ std::tuple_size<std::decay_t<T> >::value; }) {
           detail::visit_children_tuple(value, callback); return std::bool_constant<true>{};
+        } else if constexpr(requires{ std::variant_size<std::decay_t<T> >::value; }) {
+          detail::visit_children_variant(value, callback); return std::bool_constant<true>{};
         } else if constexpr(requires{ value.begin(); value.end(); }) {
           detail::visit_children_range(value, callback); return std::bool_constant<true>{};
         } else {
