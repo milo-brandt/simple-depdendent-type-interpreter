@@ -137,22 +137,17 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 equality.") {
     SECTION("Reducing $0 and $1 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(1));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
     SECTION("Reducing (axiom $0) and (axiom $1) gives the same value.") {
       auto func = arena.axiom();
-
       auto result_1 = evaluator.reduce(arena.apply(arena.copy(func), arena.argument(0)));
       auto result_2 = evaluator.reduce(arena.apply(std::move(func), arena.argument(1)));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
   }
   arena.clear_orphaned_expressions();
@@ -169,8 +164,7 @@ TEST_CASE("EvaluationContext can deal with $0 = $0 equality.") {
     REQUIRE(!equal_err);
     SECTION("Reducing $0 succeeds.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
-      REQUIRE(result_1.holds_success());
-      arena.drop(std::move(result_1.get_value()));
+      arena.drop(std::move(result_1));
     }
   }
   arena.clear_orphaned_expressions();
@@ -192,29 +186,23 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 and $1 = $2 equalities.") {
     SECTION("Reducing $0 and $1 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(1));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
     SECTION("Reducing $1 and $2 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(1));
       auto result_2 = evaluator.reduce(arena.argument(2));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
     SECTION("Reducing $0 and $2 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(2));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
   }
   arena.clear_orphaned_expressions();
@@ -242,11 +230,9 @@ TEST_CASE("EvaluationContext can deal with $0 = (axiom $1 $2) equality.") {
     REQUIRE(!equal_err);
     auto result_1 = evaluator.reduce(arena.argument(0));
     auto result_2 = evaluator.reduce(std::move(expr));
-    REQUIRE(result_1.holds_success());
-    REQUIRE(result_2.holds_success());
-    REQUIRE(result_1.get_value() == result_2.get_value());
-    arena.drop(std::move(result_1.get_value()));
-    arena.drop(std::move(result_2.get_value()));
+    REQUIRE(result_1 == result_2);
+    arena.drop(std::move(result_1));
+    arena.drop(std::move(result_2));
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -280,20 +266,16 @@ TEST_CASE("EvaluationContext can deal with (axiom $0 $1) = (axiom $2 $3) equalit
     SECTION("Reducing $0 and $2 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(2));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
     SECTION("Reducing $1 and $3 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(1));
       auto result_2 = evaluator.reduce(arena.argument(3));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
   }
   arena.clear_orphaned_expressions();
@@ -332,20 +314,16 @@ TEST_CASE("EvaluationContext can deal with $4 = (axiom $0 $1) and $4 = (axiom $2
     SECTION("Reducing $0 and $2 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(2));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
     SECTION("Reducing $1 and $3 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(1));
       auto result_2 = evaluator.reduce(arena.argument(3));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
   }
   arena.clear_orphaned_expressions();
@@ -416,11 +394,9 @@ TEST_CASE("EvaluationContext accepts $0 $1 = axiom $1.") {
       arena.argument(0),
       arena.argument(1)
     ));
-    REQUIRE(result_1.holds_success());
-    REQUIRE(result_2.holds_success());
-    REQUIRE(result_1.get_value() == result_2.get_value());
-    arena.drop(std::move(result_1.get_value()));
-    arena.drop(std::move(result_2.get_value()));
+    REQUIRE(result_1 == result_2);
+    arena.drop(std::move(result_1));
+    arena.drop(std::move(result_2));
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -446,11 +422,9 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
       SECTION("The equality $0 $1 = $1 implies itself.") {
         auto result_1 = evaluator.reduce(nest_expr(1));
         auto result_2 = evaluator.reduce(nest_expr(0));
-        REQUIRE(result_1.holds_success());
-        REQUIRE(result_2.holds_success());
-        REQUIRE(result_1.get_value() == result_2.get_value());
-        arena.drop(std::move(result_1.get_value()));
-        arena.drop(std::move(result_2.get_value()));
+        REQUIRE(result_1 == result_2);
+        arena.drop(std::move(result_1));
+        arena.drop(std::move(result_2));
       }
       SECTION("The equality $0 $1 = $1 implies higher iterations are also $1") {
         EvaluationContext evaluator(arena, rules);
@@ -458,11 +432,9 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
         for(std::size_t size = 2; size < 50; ++size) {
           auto result_1 = evaluator.reduce(nest_expr(size));
           auto result_2 = evaluator.reduce(nest_expr(0));
-          REQUIRE(result_1.holds_success());
-          REQUIRE(result_2.holds_success());
-          REQUIRE(result_1.get_value() == result_2.get_value());
-          arena.drop(std::move(result_1.get_value()));
-          arena.drop(std::move(result_2.get_value()));
+          REQUIRE(result_1 == result_2);
+          arena.drop(std::move(result_1));
+          arena.drop(std::move(result_2));
         }
       }
     }
@@ -475,11 +447,9 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
           for(std::size_t repeats = 1; repeats <= 5; ++repeats) {
             auto result_1 = evaluator.reduce(nest_expr(base + step * repeats));
             auto result_2 = evaluator.reduce(nest_expr(base));
-            REQUIRE(result_1.holds_success());
-            REQUIRE(result_2.holds_success());
-            REQUIRE(result_1.get_value() == result_2.get_value());
-            arena.drop(std::move(result_1.get_value()));
-            arena.drop(std::move(result_2.get_value()));
+            REQUIRE(result_1 == result_2);
+            arena.drop(std::move(result_1));
+            arena.drop(std::move(result_2));
           }
         }
       }
@@ -492,11 +462,9 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
       REQUIRE(!equal_err2);
       auto result_1 = evaluator.reduce(nest_expr(1));
       auto result_2 = evaluator.reduce(nest_expr(0));
-      REQUIRE(result_1.holds_success());
-      REQUIRE(result_2.holds_success());
-      REQUIRE(result_1.get_value() == result_2.get_value());
-      arena.drop(std::move(result_1.get_value()));
-      arena.drop(std::move(result_2.get_value()));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
     }
     SECTION("Various settings various pairs of iterates of $0 applied to $1 equal to $1 itself works properly.") {
       auto gcd = [](std::size_t x, std::size_t y) {
@@ -515,16 +483,14 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
           for(std::size_t z = 1; z < 50; ++z) {
             auto result_1 = evaluator.reduce(nest_expr(z));
             auto result_2 = evaluator.reduce(nest_expr(0));
-            REQUIRE(result_1.holds_success());
-            REQUIRE(result_2.holds_success());
             INFO("With iterates " << x << " and " << y << ", checking iterate " << z);
             if(z % divisor == 0) {
-              REQUIRE(result_1.get_value() == result_2.get_value());
+              REQUIRE(result_1 == result_2);
             } else {
-              REQUIRE(result_1.get_value() != result_2.get_value());
+              REQUIRE(result_1 != result_2);
             }
-            arena.drop(std::move(result_1.get_value()));
-            arena.drop(std::move(result_2.get_value()));
+            arena.drop(std::move(result_1));
+            arena.drop(std::move(result_2));
           }
         }
       }

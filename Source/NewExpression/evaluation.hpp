@@ -22,7 +22,7 @@ namespace new_expression {
     EvaluationContext(EvaluationContext&&);
     EvaluationContext& operator=(EvaluationContext&&);
     ~EvaluationContext();
-    mdb::Result<OwnedExpression, EvaluationError> reduce(OwnedExpression);
+    OwnedExpression reduce(OwnedExpression);
     std::optional<EvaluationError> assume_equal(OwnedExpression lhs, OwnedExpression rhs);
     std::optional<EvaluationError> canonicalize_context();
   };
