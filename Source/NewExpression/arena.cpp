@@ -73,6 +73,7 @@ namespace new_expression {
 
     std::size_t free_list_head = (std::size_t)-1;
     std::size_t next_writable_entry(); //returns entry with ref_count of 1, safe to overwrite union
+    void ref_entry(std::size_t index);
     void deref_entry(std::size_t index);
     void destroy_entry(std::size_t index);
     bool clear_orphans(); //returns true if space was cleared.
@@ -84,15 +85,13 @@ namespace new_expression {
       data_types.push_back(std::move(type));
     }
     OwnedExpression copy(OwnedExpression const& input) {
-      ++entries[input.index()].reference_count;
+      ref_entry(input.index());
       return OwnedExpression{
         input.index()
       };
     }
     OwnedExpression copy(WeakExpression const& input) {
-      if(++entries[input.index()].reference_count == 1) {
-        orphan_entries.erase(input.index());
-      }
+      ref_entry(input.index());
       return OwnedExpression{
         input.index()
       };
@@ -190,18 +189,31 @@ namespace new_expression {
     }
   };
   std::size_t Arena::Impl::next_writable_entry() {
-    if(free_list_head == -1) {
-      if(!clear_orphans()) {
-        auto index = entries.push_back(ArenaEntry{
-          .reference_count = 1
-        });
-        return index;
+    auto ret = [&] {
+      if(free_list_head == -1) {
+        if(!clear_orphans()) {
+          auto index = entries.push_back(ArenaEntry{
+            .discriminator = discriminator_free,
+            .reference_count = 1
+          });
+          return index;
+        }
       }
+      auto index = free_list_head;
+      free_list_head = entries[free_list_head].data.free_list_entry.next_free_entry;
+      ++entries[index].reference_count;
+      return index;
+    }();
+    if(entries[ret].reference_count != 1) std::terminate();
+    if(entries[ret].discriminator != discriminator_free) std::terminate();
+    return ret;
+  }
+  void Arena::Impl::ref_entry(std::size_t index) {
+    auto& entry = entries[index];
+    if(entry.discriminator >= discriminator_free) std::terminate();
+    if(++entry.reference_count == 1) {
+      orphan_entries.erase(index);
     }
-    auto index = free_list_head;
-    free_list_head = entries[free_list_head].data.free_list_entry.next_free_entry;
-    entries[free_list_head].reference_count = 1;
-    return index;
   }
   void Arena::Impl::deref_entry(std::size_t index) {
     auto& entry = entries[index];
@@ -212,6 +224,7 @@ namespace new_expression {
   }
   void Arena::Impl::destroy_entry(std::size_t index) {
    auto& entry = entries[index];
+   if(entry.reference_count > 0) std::terminate();
    switch(entry.discriminator) {
      case discriminator_apply:
        deref_entry(entry.data.apply.lhs.index());
