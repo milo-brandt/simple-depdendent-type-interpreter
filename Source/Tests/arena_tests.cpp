@@ -1,4 +1,5 @@
 #include "../NewExpression/arena.hpp"
+#include <random>
 #include <catch.hpp>
 
 using namespace new_expression;
@@ -85,6 +86,36 @@ TEST_CASE("Data in arenas can be recovered by getters.") {
     (arena.drop(std::move(std::get<1>(element))) , ...); //drop the example values
   }, cases);
 
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("Arena allocation survives fuzzing.") {
+  std::mt19937 random_gen{17}; //deterministic random number generator
+  std::uniform_int_distribution index_distribution{0, 15};
+  std::uniform_int_distribution maybe_index_distribution{0, 18};
+  Arena arena;
+  OwnedExpression expressions[16] = {
+    arena.axiom(), arena.axiom(), arena.axiom(), arena.axiom(),
+    arena.axiom(), arena.axiom(), arena.axiom(), arena.axiom(),
+    arena.axiom(), arena.axiom(), arena.axiom(), arena.axiom(),
+    arena.axiom(), arena.axiom(), arena.axiom(), arena.axiom()
+  };
+  auto get_index = [&](std::size_t i) {
+    if(i >= 16) return arena.axiom();
+    else return arena.copy(expressions[i]);
+  };
+  for(std::size_t i = 0; i < 100000; ++i) { //randomy choose indices i, j, and k and update expr[k] = apply(expr[i], expr[j]).
+    //With probability 1/17, puts i and/or j out of range, in which case a new axiom is used in place of expr[i].
+    auto lhs = maybe_index_distribution(random_gen);
+    auto rhs = maybe_index_distribution(random_gen);
+    auto target = index_distribution(random_gen);
+    auto new_value = arena.apply(get_index(lhs), get_index(rhs));
+    arena.drop(std::move(expressions[target]));
+    expressions[target] = std::move(new_value);
+  }
+  for(auto& expr : expressions) {
+    arena.drop(std::move(expr));
+  }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
