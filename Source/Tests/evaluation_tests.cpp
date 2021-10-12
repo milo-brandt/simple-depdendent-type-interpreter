@@ -499,3 +499,266 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("EvaluationContext rejects (\\x.x) = $1.") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+
+    auto f = arena.declaration();
+    rules.register_declaration(f);
+    rules.add_rule(Rule{
+      .pattern = {
+        .head = arena.copy(f),
+        .body = {
+          .args_captured = 1
+        }
+      },
+      .replacement = arena.argument(0)
+    });
+
+    auto equal_err = evaluator.assume_equal(
+      std::move(f),
+      arena.argument(1)
+    );
+    REQUIRE(equal_err);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("EvaluationContext rejects (\\x.axiom) = $1.") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+
+    auto f = arena.declaration();
+    rules.register_declaration(f);
+    rules.add_rule(Rule{
+      .pattern = {
+        .head = arena.copy(f),
+        .body = {
+          .args_captured = 1
+        }
+      },
+      .replacement = arena.axiom()
+    });
+
+    auto equal_err = evaluator.assume_equal(
+      std::move(f),
+      arena.argument(1)
+    );
+    REQUIRE(equal_err);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("EvaluationContext can assumptions regarding the double : Nat -> Nat function.") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+    auto doubler = arena.declaration();
+    auto zero = arena.axiom();
+    auto succ = arena.axiom();
+
+    rules.register_declaration(doubler);
+    rules.add_rule(Rule{ //doubler zero = zero
+      .pattern = {
+        .head = arena.copy(doubler),
+        .body = {
+          .args_captured = 1,
+          .sub_matches = mdb::make_vector(PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(zero),
+            .args_captured = 0
+          })
+        }
+      },
+      .replacement = arena.copy(zero)
+    });
+    rules.add_rule({ //doubler (succ n) = succ (succ n)
+      .pattern = {
+        .head = arena.copy(doubler),
+        .body = {
+          .args_captured = 1,
+          .sub_matches = mdb::make_vector(PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(succ),
+            .args_captured = 1
+          })
+        }
+      },
+      .replacement = arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(succ),
+          arena.apply(
+            arena.copy(doubler),
+            arena.argument(1)
+          )
+        )
+      )
+    });
+
+    SECTION("doubler zero evaluates to zero") { //double check for EvaluationContext
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.copy(zero)
+      ));
+      REQUIRE(result == zero);
+      destroy_from_arena(arena, result);
+    }
+    SECTION("doubler (doubler zero) evaluates to zero") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.apply(
+          arena.copy(doubler),
+          arena.copy(zero)
+        )
+      ));
+      REQUIRE(result == zero);
+      destroy_from_arena(arena, result);
+    }
+    SECTION("doubler (succ zero) evaluates to succ (succ (zero))") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.apply(
+          arena.copy(succ),
+          arena.copy(zero)
+        )
+      ));
+      auto expectation = arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(succ),
+          arena.copy(zero)
+        )
+      );
+      REQUIRE(result == expectation);
+      destroy_from_arena(arena, result, expectation);
+    }
+    SECTION("doubler (succ (succ zero)) evaluates to succ (succ (succ (succ zero)))") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.apply(
+          arena.copy(succ),
+          arena.apply(
+            arena.copy(succ),
+            arena.copy(zero)
+          )
+        )
+      ));
+      auto expectation = arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(succ),
+          arena.apply(
+            arena.copy(succ),
+            arena.apply(
+              arena.copy(succ),
+              arena.copy(zero)
+            )
+          )
+        )
+      );
+      REQUIRE(result == expectation);
+      destroy_from_arena(arena, result, expectation);
+    }
+    SECTION("The assumption doubler = $0 is rejected.") {
+      auto equal_err = evaluator.assume_equal(
+        arena.copy(doubler),
+        arena.argument(0)
+      );
+      REQUIRE(equal_err);
+    }
+    SECTION("The assumption doubler $0 = $0 is accepted.") {
+      auto equal_err = evaluator.assume_equal(
+        arena.apply(
+          arena.copy(doubler),
+          arena.argument(0)
+        ),
+        arena.argument(0)
+      );
+      REQUIRE(!equal_err);
+      auto result_1 = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.argument(0)
+      ));
+      auto result_2 = evaluator.reduce(arena.argument(0));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
+    }
+    SECTION("The assumption doubler $0 = zero is accepted.") {
+      auto equal_err = evaluator.assume_equal(
+        arena.apply(
+          arena.copy(doubler),
+          arena.argument(0)
+        ),
+        arena.copy(zero)
+      );
+      REQUIRE(!equal_err);
+      auto result_1 = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.argument(0)
+      ));
+      auto result_2 = evaluator.reduce(arena.copy(zero));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
+    }
+    SECTION("The assumption doubler $0 = succ $1 is accepted.") {
+      auto equal_err = evaluator.assume_equal(
+        arena.apply(
+          arena.copy(doubler),
+          arena.argument(0)
+        ),
+        arena.apply(
+          arena.copy(succ),
+          arena.argument(1)
+        )
+      );
+      REQUIRE(!equal_err);
+      auto result_1 = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.argument(0)
+      ));
+      auto result_2 = evaluator.reduce(arena.apply(
+        arena.copy(succ),
+        arena.argument(1)
+      ));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
+    }
+    SECTION("The assumption doubler $0 = succ zero is accepted.") {
+      auto equal_err = evaluator.assume_equal(
+        arena.apply(
+          arena.copy(doubler),
+          arena.argument(0)
+        ),
+        arena.apply(
+          arena.copy(succ),
+          arena.copy(zero)
+        )
+      );
+      REQUIRE(!equal_err);
+      auto result_1 = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.argument(0)
+      ));
+      auto result_2 = evaluator.reduce(arena.apply(
+        arena.copy(succ),
+        arena.copy(zero)
+      ));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
+    }
+
+    destroy_from_arena(arena, doubler, succ, zero);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}

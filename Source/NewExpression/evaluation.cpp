@@ -9,9 +9,6 @@ namespace new_expression {
     template<class Base> //Base must provide Arena& arena and OwnedExpression reduce()
     struct ReducerCRTP {
       Base& me() { return *(Base*)this; }
-      OwnedExpression substitute_into_replacement(Arena& arena, WeakExpression substitution, std::span<WeakExpression> args) {
-        return substitute_into(arena, substitution, args);
-      }
       bool reduce_by_pattern(OwnedExpression& expr, RuleCollector const& collector) {
         auto& arena = me().arena;
         auto unfolded = unfold(arena, expr);
@@ -20,10 +17,10 @@ namespace new_expression {
           for(auto const& rule : declaration_info.rules) {
             if(rule.pattern_body.args_captured <= unfolded.args.size()) {
               std::vector<WeakExpression> pattern_stack;
-              pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.end());
+              pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.begin() + rule.pattern_body.args_captured);
               std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
               for(auto const& match : rule.pattern_body.sub_matches) {
-                auto new_expr = me().substitute_into_replacement(arena, match.substitution, mdb::as_span(pattern_stack));
+                auto new_expr = substitute_into(arena, match.substitution, mdb::as_span(pattern_stack));
                 new_expr = me().reduce(std::move(new_expr));
                 auto match_unfold = unfold(arena, new_expr);
                 novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
@@ -47,7 +44,7 @@ namespace new_expression {
               }
               //if we get here, the pattern succeeded.
               {
-                auto new_expr = me().substitute_into_replacement(arena, rule.replacement, mdb::as_span(pattern_stack));
+                auto new_expr = substitute_into(arena, rule.replacement, mdb::as_span(pattern_stack));
                 arena.drop(std::move(expr));
                 expr = std::move(new_expr);
                 destroy_from_arena(arena, novel_roots);
@@ -114,9 +111,10 @@ namespace new_expression {
     };
     struct ConglomerateSolveState {
       Arena& arena;
+      RuleCollector const& rule_collector;
       std::vector<ConglomerateInfo> conglomerate_class_info;
       std::vector<std::size_t> conglomerate_to_class;
-      static constexpr auto part_info = mdb::parts::simple<3>;
+      static constexpr auto part_info = mdb::parts::simple<4>;
       template<class Updater>
       void update_class_indices(Updater&& update_class_index) {
         for(auto& i : conglomerate_to_class) {
@@ -295,9 +293,7 @@ namespace new_expression {
           .conglomerate_index = std::get<0>(conglomerate_class_info[target_class].status).conglomerate_index
         };
       }
-      bool has_computation(WeakExpression expr) { //if *any* pattern could possibly reduce expr.
-        return false;
-      }
+      bool has_computation(WeakExpression expr); //if *any* pattern could possibly reduce expr (possibly with more args)
       void drop_reducer(std::size_t target_class, std::size_t target_reducer) {
         arena.drop(std::move(conglomerate_class_info[target_class].reducers.active[target_reducer]));
         conglomerate_class_info[target_class].reducers.active.erase(conglomerate_class_info[target_class].reducers.active.begin() + target_reducer);
@@ -424,8 +420,6 @@ namespace new_expression {
       }
     };
     struct RepresentativeReducer : ConglomerateReducerCRTP<RepresentativeReducer> {
-      //one slight issue: would like to make sure that if we have #0 -> #2, but #0 is an axiomatic
-      //conglomerate, would rather merge 0 and 2 instead of seeing #0 = axiom #3 #4 and exploding #2
       ConglomerateSolveState& solve_state;
       std::size_t target_class;
       std::size_t target_index;
@@ -502,12 +496,160 @@ namespace new_expression {
         return std::nullopt;
       }
     };
+    struct IndeterminateDetector { //holy code duplication, batman!
+      Arena& arena;
+      RuleCollector const& collector;
+      ConglomerateSolveState& solve_state;
+      OwnedExpression indeterminate_head; //special declaration
+      WeakKeyMap<OwnedExpression, PartDestroyer> reductions;
+      IndeterminateDetector(Arena& arena, RuleCollector const& collector, ConglomerateSolveState& solve_state)
+        :arena(arena),
+        collector(collector),
+        solve_state(solve_state),
+        indeterminate_head(arena.declaration()),
+        reductions(arena){}
+      ~IndeterminateDetector() {
+        arena.drop(std::move(indeterminate_head));
+      }
+      OwnedExpression reduce(OwnedExpression, bool);
+      bool reduce_by_pattern(OwnedExpression& expr, bool consider_extra_args = false) { // return true if it should be called again.
+        auto unfolded = unfold(arena, expr);
+        if(unfolded.head == indeterminate_head) {
+          arena.drop(std::move(expr));
+          expr = arena.copy(indeterminate_head);
+          return false;
+        } else if(arena.holds_declaration(unfolded.head)) {
+          auto const& declaration_info = collector.declaration_info(unfolded.head);
+          for(auto const& rule : declaration_info.rules) {
+            if(consider_extra_args || rule.pattern_body.args_captured <= unfolded.args.size()) {
+              bool is_indeterminate = false;
+              std::vector<WeakExpression> pattern_stack;
+              if(rule.pattern_body.args_captured <= unfolded.args.size()) {
+                pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.begin() + rule.pattern_body.args_captured);
+              } else {
+                is_indeterminate = true; //considered indeterminate *even if* it's a constant lambda that doesn't touch the extra stuff
+                pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.end());
+                for(std::size_t i = unfolded.args.size(); i < rule.pattern_body.args_captured; ++i) {
+                  pattern_stack.push_back(indeterminate_head);
+                }
+              }
+              std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
+              for(auto const& match : rule.pattern_body.sub_matches) {
+                auto new_expr = substitute_into(arena, match.substitution, mdb::as_span(pattern_stack));
+                new_expr = reduce(std::move(new_expr), false);
+                auto match_unfold = unfold(arena, new_expr);
+                novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
+                if(new_expr == indeterminate_head) {
+                  is_indeterminate = true;
+                  for(std::size_t i = 0; i < match.args_captured; ++i) {
+                    pattern_stack.push_back(indeterminate_head);
+                  }
+                } else {
+                  if(match_unfold.head != match.expected_head) goto PATTERN_FAILED;
+                  if(match_unfold.args.size() != match.args_captured) goto PATTERN_FAILED;
+                  pattern_stack.insert(pattern_stack.end(), match_unfold.args.begin(), match_unfold.args.end());
+                }
+              }
+              for(auto const& data_check : rule.pattern_body.data_checks) {
+                auto new_expr = arena.copy(pattern_stack[data_check.capture_index]);
+                new_expr = reduce(std::move(new_expr), false);
+                pattern_stack[data_check.capture_index] = new_expr;
+                bool success = [&] {
+                  if(auto* data = arena.get_if_data(new_expr)) {
+                    return data->type_index == data_check.expected_type;
+                  } else {
+                    return is_indeterminate = new_expr == indeterminate_head;
+                  }
+                }();
+                novel_roots.push_back(std::move(new_expr));
+                if(!success) goto PATTERN_FAILED;
+              }
+              //if we get here, the pattern succeeded.
+              if(is_indeterminate) {
+                arena.drop(std::move(expr));
+                destroy_from_arena(arena, novel_roots);
+                expr = arena.copy(indeterminate_head);
+                return false;
+              } else {
+                auto new_expr = substitute_into(arena, rule.replacement, mdb::as_span(pattern_stack));
+                arena.drop(std::move(expr));
+                expr = std::move(new_expr);
+                destroy_from_arena(arena, novel_roots);
+                return true;
+              }
+            PATTERN_FAILED:
+              destroy_from_arena(arena, novel_roots);
+            }
+          }
+        }
+        return false;
+      }
+      std::optional<OwnedExpression> get_conglomerate_reduction(WeakExpression expr) {
+        if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
+          if(solve_state.conglomerate_has_definition(conglomerate->index)) {
+            return solve_state.get_conglomerate_replacement(conglomerate->index);
+          } else {
+            return std::nullopt; //conglomerates can't be reducers
+          }
+        }
+        for(std::size_t class_index = 0; class_index < solve_state.conglomerate_class_info.size(); ++class_index) {
+          auto& class_info = solve_state.conglomerate_class_info[class_index];
+          for(std::size_t reducer_index = 0; reducer_index < class_info.reducers.active.size(); ++reducer_index) {
+            auto& reducer = class_info.reducers.active[reducer_index];
+            if(expr == reducer) {
+              return solve_state.get_conglomerate_class_replacement(class_index);
+            }
+          }
+        }
+        return std::nullopt;
+      }
+    };
+    OwnedExpression IndeterminateDetector::reduce(OwnedExpression expr, bool outer) {
+      if(reductions.contains(expr)) {
+        auto ret = arena.copy(reductions.at(expr));
+        arena.drop(std::move(expr));
+        return ret;
+      }
+      WeakExpression input = expr;
+      bool needs_repeat = true;
+      while(needs_repeat) {
+        needs_repeat = false;
+        while(reduce_by_pattern(expr, outer));
+        auto unfolded = unfold_owned(arena, std::move(expr));
+        for(auto& arg : unfolded.args) {
+          arg = reduce(std::move(arg), false);
+        }
+        while(true) {
+          if(auto reduction = get_conglomerate_reduction(unfolded.head)) {
+            arena.drop(std::move(unfolded.head));
+            unfolded.head = std::move(*reduction);
+            needs_repeat = true;
+          }
+          if(unfolded.args.empty()) break;
+          unfolded.head = arena.apply(
+            std::move(unfolded.head),
+            std::move(unfolded.args.front())
+          );
+          unfolded.args.erase(unfolded.args.begin());
+        }
+        expr = std::move(unfolded.head);
+      }
+      reductions.set(input, arena.copy(expr));
+      return std::move(expr);
+    }
+    bool ConglomerateSolveState::has_computation(WeakExpression expr) {
+      IndeterminateDetector detector{arena, rule_collector, *this};
+      auto out = detector.reduce(arena.copy(expr), true);
+      auto ret = out == detector.indeterminate_head;
+      arena.drop(std::move(out));
+      return ret;
+    }
   }
   struct EvaluationContext::Impl {
     Arena& arena;
     RuleCollector const& rule_collector;
     ConglomerateSolveState solve_state;
-    Impl(Arena& arena, RuleCollector const& rule_collector):arena(arena), rule_collector(rule_collector), solve_state{.arena = arena} {}
+    Impl(Arena& arena, RuleCollector const& rule_collector):arena(arena), rule_collector(rule_collector), solve_state{.arena = arena, .rule_collector = rule_collector} {}
     ~Impl() {
       destroy_from_arena(arena, solve_state);
     }
