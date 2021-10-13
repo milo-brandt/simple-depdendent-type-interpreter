@@ -23,11 +23,13 @@ struct SimpleContext {
       .is_definable_indeterminate = [this](new_expression::WeakExpression expr) {
         return indeterminate_indices.contains(expr.index());
       },
-      .is_lambda_like = [this](new_expression::WeakExpression) {
-        return false;
+      .is_lambda_like = [this](new_expression::WeakExpression expr) {
+        return evaluation_context.is_lambda_like(expr);
       },
       .is_head_closed = [this](new_expression::WeakExpression expr) {
-        return arena.holds_axiom(unfold(arena, expr).head);
+        auto head = unfold(arena, expr).head;
+        return arena.holds_axiom(head) || arena.holds_argument(head);
+        //note: arguments might not be entirely closed with assumptions - should check in real code
       },
       .make_definition = [this](solver::IndeterminateDefinition definition) {
         if(!indeterminate_indices.contains(definition.head.index()))
@@ -207,6 +209,77 @@ TEST_CASE("var_1 $0 = var_2 $1 and var_2 $0 = axiom succeeds") {
     REQUIRE(solver_2.solved());
 
     destroy_from_arena(arena, var_1, var_2, axiom);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("f = g where f $0 = $0 and g $0 = $0 succeeds.") {
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+
+    auto f = arena.declaration();
+    context.rule_collector.register_declaration(f);
+    context.rule_collector.add_rule({ //f x = x
+      .pattern = lambda_pattern(arena.copy(f), 1),
+      .replacement = arena.argument(0)
+    });
+    auto g = arena.declaration();
+    context.rule_collector.register_declaration(g);
+    context.rule_collector.add_rule({ //f x = x
+      .pattern = lambda_pattern(arena.copy(g), 1),
+      .replacement = arena.argument(0)
+    });
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.copy(f),
+        .rhs = arena.copy(g),
+        .depth = 0
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.solved());
+
+    destroy_from_arena(arena, f, g);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("$0 = $1 fails.") {
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.argument(0),
+        .rhs = arena.argument(1),
+        .depth = 2
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.failed());
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("axiom_1 = axiom_2 fails.") {
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.axiom(),
+        .rhs = arena.axiom(),
+        .depth = 2
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.failed());
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
