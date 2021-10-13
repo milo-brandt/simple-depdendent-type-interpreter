@@ -113,6 +113,10 @@ namespace new_expression {
     Arena& operator=(Arena&&);
     ~Arena();
     [[nodiscard]] OwnedExpression apply(OwnedExpression, OwnedExpression);
+    template<class... Ts>
+    [[nodiscard]] OwnedExpression apply(OwnedExpression head, OwnedExpression arg1, OwnedExpression arg2, Ts&&... ts) {
+      return apply(apply(std::move(head), std::move(arg1)), std::move(arg2), std::forward<Ts>(ts)...);
+    }
     [[nodiscard]] OwnedExpression axiom();
     [[nodiscard]] OwnedExpression declaration();
     [[nodiscard]] OwnedExpression argument(std::uint64_t index);

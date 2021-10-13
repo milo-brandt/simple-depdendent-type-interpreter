@@ -62,6 +62,62 @@ namespace mdb {
         auto&& [a, b, c, d, e] = value;
         callback(a); callback(b); callback(c); callback(d); callback(e);
       }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<6>) {
+        auto&& [a, b, c, d, e, f] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<7>) {
+        auto&& [a, b, c, d, e, f, g] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<8>) {
+        auto&& [a, b, c, d, e, f, g, h] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<9>) {
+        auto&& [a, b, c, d, e, f, g, h, i] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<10>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<11>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j, k] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j); callback(k);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<12>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j, k, l] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j); callback(k); callback(l);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<13>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j, k, l, m] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j); callback(k); callback(l); callback(m);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<14>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j, k, l, m, n] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j); callback(k); callback(l); callback(m); callback(n);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<15>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j); callback(k); callback(l); callback(m); callback(n); callback(o);
+      }
+      template<class T, class Callback>
+      void visit_children_by(T& value, Callback&& callback, Simple<16>) {
+        auto&& [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p] = value;
+        callback(a); callback(b); callback(c); callback(d); callback(e); callback(f); callback(g); callback(h); callback(i); callback(j); callback(k); callback(l); callback(m); callback(n); callback(o); callback(p);
+      }
+
       template<class T>
       static constexpr bool destructures_into_two = requires{ [](T& value) { auto&& [x] = value; }; };
       template<class T, class Callback>

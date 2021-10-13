@@ -17,6 +17,12 @@ namespace new_expression {
     auto operator()(WeakExpression const& expr) const noexcept { return hash(expr.index()); }
     auto operator()(UniqueExpression const& expr) const noexcept { return hash(expr.get().index()); }
     auto operator()(OwnedExpression const& expr) const noexcept { return hash(expr.index()); }
+    using is_transparent = int;
+  };
+  struct ExpressionComparer {
+    template<class S, class T>
+    bool operator()(S const& lhs, T const& rhs) const { return lhs.index() == rhs.index(); }
+    using is_transparent = int;
   };
   struct TrivialOnArenaDestructor {};
   template<class T, class OnArenaDestructor = TrivialOnArenaDestructor>

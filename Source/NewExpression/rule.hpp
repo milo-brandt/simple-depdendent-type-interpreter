@@ -28,6 +28,12 @@ namespace new_expression {
     PatternBody body;
     static constexpr auto part_info = mdb::parts::simple<2>;
   };
+  inline new_expression::Pattern lambda_pattern(OwnedExpression head, std::size_t args) {
+    return {
+      .head = std::move(head),
+      .body = { .args_captured = args }
+    };
+  }
   struct Rule {
     Pattern pattern;
     OwnedExpression replacement;
