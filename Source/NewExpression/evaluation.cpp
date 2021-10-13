@@ -495,6 +495,33 @@ namespace new_expression {
         }
         return std::nullopt;
       }
+      bool is_lambda_like(WeakExpression expr) {
+        auto unfolded = unfold(arena, expr);
+        std::size_t max_args = 0;
+        if(arena.holds_declaration(unfolded.head)) {
+          auto const& declaration_info = rule_collector.declaration_info(unfolded.head);
+          for(auto const& rule : declaration_info.rules) {
+            if(rule.pattern_body.args_captured > max_args) {
+              max_args = rule.pattern_body.args_captured;
+            }
+          }
+        }
+        if(max_args > unfolded.args.size()) {
+          auto owned = arena.copy(expr);
+          auto blank_axiom = arena.axiom();
+          for(std::size_t i = 0; i < max_args - unfolded.args.size(); ++i) {
+            owned = arena.apply(
+              std::move(owned),
+              arena.copy(blank_axiom)
+            );
+          }
+          auto ret = reduce_by_pattern(owned, rule_collector);
+          destroy_from_arena(arena, owned, blank_axiom);
+          return ret;
+        } else {
+          return false;
+        }
+      }
     };
     struct IndeterminateDetector { //holy code duplication, batman!
       Arena& arena;
@@ -658,6 +685,11 @@ namespace new_expression {
         arena, rule_collector, solve_state
       }.reduce_outer(std::move(expr));
     }
+    bool is_lambda_like(WeakExpression expr) {
+      return NormalConglomerateReducer{
+        arena, rule_collector, solve_state
+      }.is_lambda_like(expr);
+    }
     void request_assume_equal(OwnedExpression lhs, OwnedExpression rhs) {
       solve_state.create_conglomerate(mdb::make_vector(std::move(lhs), std::move(rhs)));
     }
@@ -712,8 +744,11 @@ namespace new_expression {
   EvaluationContext& EvaluationContext::operator=(EvaluationContext&&) = default;
   EvaluationContext::~EvaluationContext() = default;
 
-OwnedExpression EvaluationContext::reduce(OwnedExpression expr) {
+  OwnedExpression EvaluationContext::reduce(OwnedExpression expr) {
     return impl->reduce(std::move(expr));
+  }
+  bool EvaluationContext::is_lambda_like(WeakExpression expr) {
+    return impl->is_lambda_like(expr);
   }
   std::optional<EvaluationError> EvaluationContext::assume_equal(OwnedExpression lhs, OwnedExpression rhs) {
     impl->request_assume_equal(std::move(lhs), std::move(rhs));

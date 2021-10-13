@@ -600,7 +600,9 @@ TEST_CASE("EvaluationContext can assumptions regarding the double : Nat -> Nat f
         )
       )
     });
-
+    SECTION("doubler is not lambda like") {
+      REQUIRE(!evaluator.is_lambda_like(doubler));
+    }
     SECTION("doubler zero evaluates to zero") { //double check for EvaluationContext
       auto result = evaluator.reduce(arena.apply(
         arena.copy(doubler),
@@ -758,6 +760,86 @@ TEST_CASE("EvaluationContext can assumptions regarding the double : Nat -> Nat f
     }
 
     destroy_from_arena(arena, doubler, succ, zero);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("Evaluation contexts can correctly identify lambda like expressions around add : Nat -> Nat -> Nat") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+
+    auto add = arena.declaration();
+    auto zero = arena.axiom();
+    auto succ = arena.axiom();
+
+    rules.register_declaration(add);
+    rules.add_rule(Rule{ //add zero x = x
+      .pattern = {
+        .head = arena.copy(add),
+        .body = {
+          .args_captured = 2,
+          .sub_matches = mdb::make_vector(PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(zero),
+            .args_captured = 0
+          })
+        }
+      },
+      .replacement = arena.argument(1)
+    });
+    rules.add_rule({ //add (succ x) y = succ (add x y)
+      .pattern = {
+        .head = arena.copy(add),
+        .body = {
+          .args_captured = 2,
+          .sub_matches = mdb::make_vector(PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(succ),
+            .args_captured = 1
+          })
+        }
+      },
+      .replacement = arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(add),
+          arena.argument(2),
+          arena.argument(1)
+        )
+      )
+    });
+
+    SECTION("add is not considered lambda like") {
+      REQUIRE(!evaluator.is_lambda_like(add));
+    }
+    SECTION("zero is not considered lambda like") {
+      REQUIRE(!evaluator.is_lambda_like(zero));
+    }
+    SECTION("succ is not considered lambda like") {
+      REQUIRE(!evaluator.is_lambda_like(succ));
+    }
+    SECTION("add zero is considered lambda like") {
+      auto expr = arena.apply(
+        arena.copy(add),
+        arena.copy(zero)
+      );
+      REQUIRE(evaluator.is_lambda_like(expr));
+      arena.drop(std::move(expr));
+    }
+    SECTION("add (succ zero) is considered lambda like") {
+      auto expr = arena.apply(
+        arena.copy(add),
+        arena.apply(
+          arena.copy(succ),
+          arena.copy(zero)
+        )
+      );
+      REQUIRE(evaluator.is_lambda_like(expr));
+      arena.drop(std::move(expr));
+    }
+    destroy_from_arena(arena, add, succ, zero);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
