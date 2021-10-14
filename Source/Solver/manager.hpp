@@ -38,6 +38,7 @@ namespace solver {
     mdb::Future<bool> register_rule(Rule);
     void run();
     void close();
+    bool solved(); //returns true if nothing is waiting
     evaluator::EvaluatorInterface get_evaluator_interface(mdb::function<new_expression::TypedValue(std::uint64_t)> embed);
   };
 }

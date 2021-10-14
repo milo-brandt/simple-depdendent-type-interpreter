@@ -13,7 +13,6 @@ namespace solver::evaluator {
     std::vector<TypedValue> locals;
 
     TypedValue make_variable_typed(OwnedExpression type, Stack& local_context) {
-      interface.arena.drop(std::move(type));
       //auto true_type = local_context.instance_of_type_family(interface.arena.copy(type));
       auto var = interface.arena.declaration();
       interface.register_declaration(var);
@@ -56,7 +55,7 @@ namespace solver::evaluator {
         [&](instruction_archive::Apply const& apply) -> ExpressionResult {
           auto lhs = evaluate(apply.lhs, local_context);
           auto rhs = evaluate(apply.rhs, local_context);
-          auto [lhs_value, lhs_domain, lhs_codomain, rhs_value] = [&]() -> std::tuple<OwnedExpression, OwnedExpression, OwnedExpression, OwnedExpression> {
+          auto [lhs_value, lhs_codomain, rhs_value] = [&]() -> std::tuple<OwnedExpression, OwnedExpression, OwnedExpression> {
             //this function should consume lhs and rhs.
             lhs.type = interface.reduce(std::move(lhs.type));
             auto lhs_unfolded = unfold(interface.arena, lhs.type);
@@ -64,7 +63,6 @@ namespace solver::evaluator {
               new_expression::RAIIDestroyer destroyer{interface.arena, lhs.type};
               return std::make_tuple(
                 std::move(lhs.value),
-                interface.arena.copy(lhs_unfolded.args[0]),
                 interface.arena.copy(lhs_unfolded.args[1]),
                 cast(
                   std::move(rhs),
@@ -106,12 +104,10 @@ namespace solver::evaluator {
             });
             return std::make_tuple(
               std::move(func),
-              std::move(domain),
               std::move(codomain),
               std::move(arg)
             );
           } ();
-          interface.arena.drop(std::move(lhs_domain));
           return TypedValue{
             .value = interface.arena.apply(std::move(lhs_value), interface.arena.copy(rhs_value)),
             .type = interface.arena.apply(std::move(lhs_codomain), std::move(rhs_value))

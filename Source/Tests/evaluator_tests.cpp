@@ -36,6 +36,7 @@ TEST_CASE("The evaluator can handle simple programs") {
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(simple_embed)
       );
+      REQUIRE(manager.solved());
       REQUIRE(ret.value == nat);
       REQUIRE(ret.type == context.primitives.type);
       destroy_from_arena(arena, ret);
@@ -73,11 +74,30 @@ TEST_CASE("The evaluator can handle simple programs") {
       ret.type = manager.reduce(std::move(ret.type));
       expected_type = manager.reduce(std::move(expected_type));
 
+      REQUIRE(manager.solved());
       REQUIRE(ret.value == expected_value);
       REQUIRE(ret.type == expected_type);
       destroy_from_arena(arena, ret, expected_value, expected_type);
     }
-
+    SECTION("An ill-typed application is not solved") {
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {},
+          .value = Apply{
+            Embed{0},
+            Embed{0}
+          }
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+      REQUIRE(!manager.solved());
+      manager.close();
+      destroy_from_arena(arena, ret);
+    }
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());

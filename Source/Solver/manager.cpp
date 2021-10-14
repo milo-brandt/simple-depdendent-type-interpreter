@@ -245,6 +245,9 @@ namespace solver {
     void register_definable_indeterminate(new_expression::OwnedExpression expr) {
       definable_indeterminates.insert(std::move(expr));
     }
+    bool solved() {
+      return active_solvers.empty();
+    }
   };
   Manager::Manager(BasicContext& context):impl(new Impl{
     .arena = context.arena,
@@ -270,4 +273,6 @@ namespace solver {
   OwnedExpression Manager::reduce(OwnedExpression expr) {
     return impl->evaluation.reduce(std::move(expr));
   }
+  bool Manager::solved() { return impl->solved(); }
+
 }

@@ -37,6 +37,7 @@ TEST_CASE("var_1 = axiom is resolved by manager.") {
     manager.run();
     REQUIRE(result.is_ready());
     REQUIRE(std::move(result).take() == solver::EquationResult::solved);
+    REQUIRE(manager.solved());
 
     auto r1 = manager.reduce(arena.copy(var_1));
     REQUIRE(r1 == axiom);
@@ -86,6 +87,7 @@ TEST_CASE("A simple cast is resolved by the manager.") {
     manager.run();
     REQUIRE(result.is_ready());
     REQUIRE(std::move(result).take() == solver::EquationResult::solved);
+    REQUIRE(manager.solved());
 
     auto r1 = manager.reduce(arena.copy(var_1));
     REQUIRE(r1 == axiom_2);
@@ -156,6 +158,7 @@ TEST_CASE("A simple function cast is resolved by the manager.") {
     manager.run();
     REQUIRE(result.is_ready());
     REQUIRE(std::move(result).take() == solver::EquationResult::solved);
+    REQUIRE(manager.solved());
 
     auto r1 = manager.reduce(arena.copy(var_1));
     REQUIRE(r1 == context.primitives.type);
