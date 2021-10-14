@@ -24,30 +24,11 @@ namespace solver {
     struct EquationSolver {
       Solver solver;
       std::optional<mdb::Promise<EquationResult> > result;
-      SegmentResult run() {
-        auto made_progress = solver.try_to_make_progress();
-        if(result) {
-          if(solver.solved()) {
-            result->set_value(EquationResult::solved);
-            result = std::nullopt;
-            return {
-              .made_progress = true,
-              .done = true
-            };
-          } else if(solver.failed()) {
-            result->set_value(EquationResult::failed);
-            result = std::nullopt;
-            return {
-              .made_progress = true,
-              .done = false
-            };
-          }
-        }
-        return {
-          .made_progress = made_progress,
-          .done = false
-        };
-      }
+    };
+    struct RuleBuilder {
+      new_expression::OwnedExpression pattern;
+      new_expression::OwnedExpression replacement;
+      std::optional<mdb::Promise<bool> > result;
     };
   }
   struct Manager::Impl {
@@ -56,7 +37,63 @@ namespace solver {
     new_expression::EvaluationContext evaluation;
     new_expression::TypeTheoryPrimitives& primitives;
     std::vector<EquationSolver> active_solvers;
+    std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeySet definable_indeterminates;
+    SegmentResult run(EquationSolver& eq) {
+      auto made_progress = eq.solver.try_to_make_progress();
+      if(eq.result) {
+        if(eq.solver.solved()) {
+          eq.result->set_value(EquationResult::solved);
+          eq.result = std::nullopt;
+          return {
+            .made_progress = true,
+            .done = true
+          };
+        } else if(eq.solver.failed()) {
+          eq.result->set_value(EquationResult::failed);
+          eq.result = std::nullopt;
+          return {
+            .made_progress = true,
+            .done = false
+          };
+        }
+      }
+      return {
+        .made_progress = made_progress,
+        .done = false
+      };
+    }
+    SegmentResult run(RuleBuilder& rule) {
+      //just handle lambdas for now.
+      rule.pattern = evaluation.reduce(std::move(rule.pattern));
+      auto unfolded = unfold(arena, rule.pattern);
+      if(arena.holds_declaration(unfolded.head)) {
+        for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
+          if(auto* arg = arena.get_if_argument(unfolded.args[i])) {
+            if(arg->index != i) {
+              return {
+                .made_progress = false,
+                .done = false
+              };
+            }
+          }
+        }
+        rule_collector.add_rule({
+          .pattern = new_expression::lambda_pattern(arena.copy(unfolded.head), unfolded.args.size()),
+          .replacement = std::move(rule.replacement)
+        });
+        destroy_from_arena(arena, rule.pattern);
+        rule.result->set_value(true);
+        return {
+          .made_progress = true,
+          .done = true
+        };
+      }
+      return {
+        .made_progress = false,
+        .done = false
+      };
+    }
     SolverInterface get_solver_interface() {
       return {
         .arena = arena,
@@ -170,24 +207,30 @@ namespace solver {
       return std::move(future);
     }
     mdb::Future<bool> register_rule(Rule rule) {
-      std::terminate();
-      /*return register_equation({
+      auto [promise, future] = mdb::create_promise_future_pair<bool>();
+      register_equation({
         .lhs = std::move(rule.pattern_type),
         .rhs = std::move(rule.replacement_type),
         .depth = rule.stack.depth()
-      }).then([
+      }).listen([
         this,
         pattern = std::move(rule.pattern),
         replacement = std::move(rule.replacement),
-        depth = rule.stack.depth()
+        depth = rule.stack.depth(),
+        promise = std::move(promise)
       ](EquationResult result) mutable {
         if(result == EquationResult::solved) {
-
+          active_rule_builders.push_back({
+            .pattern = std::move(pattern),
+            .replacement = std::move(replacement),
+            .result = std::move(promise)
+          });
         } else {
           destroy_from_arena(arena, pattern, replacement);
-          return false;
+          promise.set_value(false);
         }
-      });*/
+      });
+      return std::move(future);
     }
     void run() {
       bool progress_made = true;
@@ -198,7 +241,10 @@ namespace solver {
           return r.done;
         };
         mdb::erase_from_active_queue(active_solvers, [&](auto& eq) {
-          return extract_done(eq.run());
+          return extract_done(run(eq));
+        });
+        mdb::erase_from_active_queue(active_rule_builders, [&](auto& rule) {
+          return extract_done(run(rule));
         });
       }
     }
@@ -206,6 +252,12 @@ namespace solver {
       mdb::erase_from_active_queue(active_solvers, [&](auto& eq) {
         if(eq.result) {
           eq.result->set_value(EquationResult::stalled);
+        }
+        return true;
+      });
+      mdb::erase_from_active_queue(active_rule_builders, [&](auto& eq) {
+        if(eq.result) {
+          eq.result->set_value(false);
         }
         return true;
       });

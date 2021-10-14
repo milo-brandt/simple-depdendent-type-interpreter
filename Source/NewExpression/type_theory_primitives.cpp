@@ -106,7 +106,7 @@ namespace new_expression {
     rules.add_rule({ //arrow_codomain
       .pattern = lambda_pattern(arena.copy(arrow_codomain), 1),
       .replacement = arena.apply(
-        arena.copy(constant),
+        arena.copy(arrow),
         arena.apply(
           arena.copy(type_family),
           arena.argument(0)

@@ -179,3 +179,41 @@ TEST_CASE("A simple function cast is resolved by the manager.") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("A lambda function can be defined through the manager.") {
+  new_expression::Arena arena;
+  {
+    solver::BasicContext context{arena};
+    solver::Manager manager{context};
+
+    auto nat = arena.axiom();
+    auto zero = arena.axiom();
+    auto f = arena.declaration();
+    context.rule_collector.register_declaration(f);
+    auto stack = get_empty_stack_for(context).extend(
+      arena.copy(nat)
+    ); //a context with one variable $0 : Nat.
+    auto result = manager.register_rule({ //rule f $0 = $0
+      .stack = stack,
+      .pattern_type = arena.copy(nat),
+      .pattern = arena.apply(
+        arena.copy(f),
+        arena.argument(0)
+      ),
+      .replacement_type = arena.copy(nat),
+      .replacement = arena.argument(0)
+    });
+    REQUIRE(!result.is_ready());
+    manager.run();
+    REQUIRE(result.is_ready());
+    REQUIRE(std::move(result).take());
+
+    auto r1 = manager.reduce(arena.apply(
+      arena.copy(f),
+      arena.copy(zero)
+    ));
+    REQUIRE(r1 == zero);
+    destroy_from_arena(arena, nat, zero, f, r1);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}

@@ -291,6 +291,129 @@ TEST_CASE("The evaluator can handle simple programs") {
       REQUIRE(ret.type == nat);
       destroy_from_arena(arena, ret, expected_value);
     }
+    SECTION("A simple type family defined by a lambda function is interpreted correctly.") {
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {
+            Declare{ //codomain
+              .type = TypeFamilyOver{
+                Embed{2}
+              }
+            },
+            ForAll {
+              .type = Embed{2},
+              .commands = {
+                Rule {
+                  .pattern = Apply{
+                    Local{0},
+                    Local{1}
+                  },
+                  .replacement = Embed{2}
+                }
+              }
+            }
+          },
+          .value = Local{0}
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+
+      REQUIRE(manager.solved());
+      ret.value = manager.reduce(std::move(ret.value));
+      ret.type = manager.reduce(std::move(ret.type));
+      auto unfolded = unfold(arena, ret.type);
+      REQUIRE(unfolded.head == context.primitives.arrow);
+      REQUIRE(unfolded.args.size() == 2);
+      REQUIRE(unfolded.args[0] == nat);
+      auto application = manager.reduce(arena.apply(
+        arena.copy(ret.value),
+        arena.axiom()
+      ));
+      REQUIRE(application == nat);
+      auto inner_application_type = manager.reduce(arena.apply(
+        arena.copy(unfolded.args[1]),
+        arena.axiom()
+      ));
+      REQUIRE(inner_application_type == context.primitives.type);
+      destroy_from_arena(arena, ret, application, inner_application_type);
+    }
+    SECTION("The identity function Nat -> Nat can be defined through the evaluator.") {
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {
+            Declare{ //codomain
+              .type = TypeFamilyOver{
+                Embed{2}
+              }
+            },
+            ForAll {
+              .type = Embed{2},
+              .commands = {
+                Rule {
+                  .pattern = Apply{
+                    Local{0},
+                    Local{1}
+                  },
+                  .replacement = Embed{2}
+                }
+              }
+            },
+            Declare{ //id
+              .type = Apply{
+                Apply{
+                  PrimitiveExpression{compiler::instruction::Primitive::arrow},
+                  Embed{2}
+                },
+                Local{0}
+              }
+            },
+            ForAll {
+              .type = Embed{2},
+              .commands = {
+                Rule {
+                  .pattern = Apply{
+                    Local{1},
+                    Local{2}
+                  },
+                  .replacement = Local{2}
+                }
+              }
+            }
+          },
+          .value = Local{1}
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+
+      REQUIRE(manager.solved());
+
+      ret.value = manager.reduce(std::move(ret.value));
+      ret.type = manager.reduce(std::move(ret.type));
+      auto unfolded = unfold(arena, ret.type);
+      REQUIRE(unfolded.head == context.primitives.arrow);
+      REQUIRE(unfolded.args.size() == 2);
+      REQUIRE(unfolded.args[0] == nat);
+      auto zero = arena.axiom();
+      auto application = manager.reduce(arena.apply(
+        arena.copy(ret.value),
+        arena.copy(zero)
+      ));
+      REQUIRE(application == zero);
+      auto inner_application_type = manager.reduce(arena.apply(
+        arena.copy(unfolded.args[1]),
+        arena.axiom()
+      ));
+      REQUIRE(inner_application_type == nat);
+      destroy_from_arena(arena, ret, zero, application, inner_application_type);
+    }
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
