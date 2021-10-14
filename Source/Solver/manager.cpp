@@ -221,6 +221,9 @@ namespace solver {
         .register_declaration = [this](WeakExpression expr) {
           rule_collector.register_declaration(expr);
         },
+        .register_definable_indeterminate = [this](OwnedExpression expr) {
+          definable_indeterminates.insert(std::move(expr));
+        },
         .add_rule = [this](new_expression::Rule rule) {
           rule_collector.add_rule(std::move(rule));
         },

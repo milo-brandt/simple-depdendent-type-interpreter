@@ -16,6 +16,7 @@ namespace solver::evaluator {
     new_expression::WeakExpression type_family;
     new_expression::WeakExpression id;
     std::function<void(new_expression::WeakExpression)> register_declaration;
+    std::function<void(new_expression::OwnedExpression)> register_definable_indeterminate;
     std::function<void(new_expression::Rule)> add_rule;
     mdb::function<new_expression::OwnedExpression(new_expression::OwnedExpression)> reduce;
     mdb::function<void(Cast)> cast;

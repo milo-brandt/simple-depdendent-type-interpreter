@@ -2,6 +2,19 @@
 #include "../Solver/evaluator.hpp"
 #include <catch.hpp>
 
+template<std::size_t size>
+auto make_embeder(new_expression::Arena& arena, new_expression::WeakExpression (&embeds)[size][2]) {
+  return [&arena, &embeds](std::uint64_t index) {
+    if(index < size) {
+      return new_expression::TypedValue{
+        arena.copy(embeds[index][0]),
+        arena.copy(embeds[index][1])
+      };
+    } else {
+      std::terminate();
+    }
+  };
+}
 TEST_CASE("The evaluator can handle simple programs") {
   new_expression::Arena arena;
   {
@@ -14,16 +27,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       {context.primitives.arrow, context.primitives.arrow_type},
       {nat, context.primitives.type}
     };
-    auto simple_embed = [&](std::uint64_t index) {
-      if(index < std::extent_v<decltype(embeds)>) {
-        return new_expression::TypedValue{
-          arena.copy(embeds[index][0]),
-          arena.copy(embeds[index][1])
-        };
-      } else {
-        std::terminate();
-      }
-    };
+    auto simple_embed = make_embeder(arena, embeds);
     SECTION("Embedding a value gives the expected answer") {
       auto program_archive = archive([]() -> compiler::instruction::output::Program {
         using namespace compiler::instruction::output;
@@ -97,6 +101,94 @@ TEST_CASE("The evaluator can handle simple programs") {
       REQUIRE(!manager.solved());
       manager.close();
       destroy_from_arena(arena, ret);
+    }
+    SECTION("A simple hole can be deduced.") {
+      //Given f : (n : Nat) -> Nonneg n -> Nat
+      //and x : T zero
+      // can compile
+      //block {
+      //  let hole : Nat = _;
+      //  f hole x
+      //}
+      auto zero = arena.axiom();
+      auto nonneg = arena.axiom();
+      auto f = arena.axiom();
+      auto x = arena.axiom();
+      auto nonneg_type = arena.apply(
+        arena.copy(context.primitives.type_family),
+        arena.copy(nat)
+      );
+      auto f_codomain = arena.declaration();
+      context.rule_collector.register_declaration(f_codomain);
+      context.rule_collector.add_rule({
+        .pattern = lambda_pattern(arena.copy(f_codomain), 1),
+        .replacement = arena.apply(
+          arena.copy(context.primitives.arrow),
+          arena.apply(
+            arena.copy(nonneg),
+            arena.argument(0)
+          ),
+          arena.apply(
+            arena.copy(context.primitives.constant),
+            arena.copy(context.primitives.type),
+            arena.copy(nat),
+            arena.apply(
+              arena.copy(nonneg),
+              arena.argument(0)
+            )
+          )
+        )
+      });
+      auto f_type = arena.apply(
+        arena.copy(context.primitives.arrow),
+        arena.copy(nat),
+        std::move(f_codomain)
+      );
+      auto x_type = arena.apply(
+        arena.copy(nonneg),
+        arena.copy(zero)
+      );
+      new_expression::RAIIDestroyer section_destroyer{arena,
+        zero, nonneg, f, x, nonneg_type, f_type, x_type
+      };
+      new_expression::WeakExpression embeds[][2] = {
+        {nat, context.primitives.type},
+        {f, f_type},
+        {x, x_type}
+      };
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {
+            DeclareHole{
+              .type = Embed{0}
+            }
+          },
+          .value = Apply{
+            Apply{
+              Embed{1},
+              Local{0}
+            },
+            Embed{2}
+          }
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(make_embeder(arena, embeds))
+      );
+      auto expected_value = arena.apply(
+        arena.copy(f),
+        arena.copy(zero),
+        arena.copy(x)
+      );
+      ret.value = manager.reduce(std::move(ret.value));
+      ret.type = manager.reduce(std::move(ret.type));
+
+      REQUIRE(manager.solved());
+      REQUIRE(ret.value == expected_value);
+      REQUIRE(ret.type == nat);
+      destroy_from_arena(arena, ret, expected_value);
     }
   }
   arena.clear_orphaned_expressions();

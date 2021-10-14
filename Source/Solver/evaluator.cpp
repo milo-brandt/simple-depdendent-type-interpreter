@@ -12,14 +12,17 @@ namespace solver::evaluator {
     EvaluatorInterface interface;
     std::vector<TypedValue> locals;
 
-    TypedValue make_variable_typed(OwnedExpression type, Stack& local_context) {
+    TypedValue make_variable_typed(OwnedExpression type, Stack& local_context, bool definable) {
       //auto true_type = local_context.instance_of_type_family(interface.arena.copy(type));
       auto var = interface.arena.declaration();
       interface.register_declaration(var);
+      if(definable) {
+        interface.register_definable_indeterminate(interface.arena.copy(var));
+      }
       return {.value = local_context.apply_args(std::move(var)), .type = std::move(type)};
     }
-    OwnedExpression make_variable(OwnedExpression type, Stack& local_context) {
-      auto typed = make_variable_typed(std::move(type), local_context);
+    OwnedExpression make_variable(OwnedExpression type, Stack& local_context, bool definable) {
+      auto typed = make_variable_typed(std::move(type), local_context, definable);
       interface.arena.drop(std::move(typed.type));
       return std::move(typed.value);
     }
@@ -30,7 +33,7 @@ namespace solver::evaluator {
         interface.arena.drop(std::move(new_type));
         return std::move(input);
       }
-      auto cast_var = make_variable(interface.arena.copy(new_type), local_context);
+      auto cast_var = make_variable(interface.arena.copy(new_type), local_context, false);
       auto var = new_expression::unfold(interface.arena, cast_var).head;
       interface.cast({
         .stack = local_context,
@@ -73,22 +76,24 @@ namespace solver::evaluator {
             }
             auto domain = make_variable(
               interface.arena.copy(interface.type),
-              local_context
+              local_context,
+              true
             );
             auto codomain = make_variable(
               interface.arena.apply(
                 interface.arena.copy(interface.type_family),
                 interface.arena.copy(domain)
               ),
-              local_context
+              local_context,
+              true
             );
             auto expected_function_type = interface.arena.apply(
               interface.arena.copy(interface.arrow),
               interface.arena.copy(domain),
               interface.arena.copy(codomain)
             );
-            auto func = make_variable(interface.arena.copy(expected_function_type), local_context);
-            auto arg = make_variable(interface.arena.copy(domain), local_context);
+            auto func = make_variable(interface.arena.copy(expected_function_type), local_context, false);
+            auto arg = make_variable(interface.arena.copy(domain), local_context, false);
             auto func_var = unfold(interface.arena, func).head;
             auto arg_var = unfold(interface.arena, arg).head;
             interface.function_cast({
@@ -152,7 +157,7 @@ namespace solver::evaluator {
         }
       });
     }
-    void create_declaration(instruction_archive::Expression const& type, Stack& local_context) {
+    void create_declaration(instruction_archive::Expression const& type, Stack& local_context, bool definable) {
       auto type_eval = evaluate(type, local_context);
       auto value = make_variable_typed(
         cast(
@@ -160,20 +165,21 @@ namespace solver::evaluator {
           interface.arena.copy(interface.type),
           local_context
         ),
-        local_context
+        local_context,
+        definable
       );
       locals.push_back(std::move(value));
     }
     void evaluate(instruction_archive::Command const& command, Stack& local_context) {
       return command.visit(mdb::overloaded{
         [&](instruction_archive::DeclareHole const& hole) {
-          return create_declaration(hole.type, local_context);
+          return create_declaration(hole.type, local_context, true);
         },
         [&](instruction_archive::Declare const& declare) {
-          return create_declaration(declare.type, local_context);
+          return create_declaration(declare.type, local_context, false);
         },
         [&](instruction_archive::Axiom const& axiom) {
-          return create_declaration(axiom.type, local_context);
+          return create_declaration(axiom.type, local_context, false);
         },
         [&](instruction_archive::Rule const& rule) {
           auto pattern = evaluate(rule.pattern, local_context);
@@ -244,6 +250,9 @@ namespace solver::evaluator {
     };
     for(auto const& command : root.commands) {
       detail.evaluate(command, local_context);
+    }
+    for(auto& local : detail.locals) {
+      destroy_from_arena(detail.interface.arena, local);
     }
     return detail.evaluate(root.value, local_context);
   }

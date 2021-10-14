@@ -15,3 +15,4 @@ Makefile
 Web/resources/codemirror.css
 Web/resources/codemirror.js
 Test/**
+notes.txt
