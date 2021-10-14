@@ -111,6 +111,7 @@ namespace solver::evaluator {
               std::move(arg)
             );
           } ();
+          interface.arena.drop(std::move(lhs_domain));
           return TypedValue{
             .value = interface.arena.apply(std::move(lhs_value), interface.arena.copy(rhs_value)),
             .type = interface.arena.apply(std::move(lhs_codomain), std::move(rhs_value))
@@ -233,7 +234,7 @@ namespace solver::evaluator {
       });
     }
   };
-  TypedValue evaluate_tree(compiler::instruction::output::archive_part::ProgramRoot const& root, EvaluatorInterface interface) {
+  TypedValue evaluate(compiler::instruction::output::archive_part::ProgramRoot const& root, EvaluatorInterface interface) {
     auto local_context = Stack::empty({
       .type = interface.type,
       .arrow = interface.arrow,
