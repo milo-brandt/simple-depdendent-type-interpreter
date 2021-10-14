@@ -844,3 +844,47 @@ TEST_CASE("Evaluation contexts can correctly identify lambda like expressions ar
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("Evaluation contexts work properly with rules not consuming every argument") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+
+    auto f = arena.declaration();
+    auto g = arena.declaration();
+    auto zero = arena.axiom();
+
+    rules.register_declaration(f);
+    rules.register_declaration(g);
+    rules.add_rule(Rule{ //f = g
+      .pattern = {
+        .head = arena.copy(f),
+        .body = {
+          .args_captured = 0
+        }
+      },
+      .replacement = arena.copy(g)
+    });
+    rules.add_rule({ //g x = x
+      .pattern = {
+        .head = arena.copy(g),
+        .body = {
+          .args_captured = 1
+        }
+      },
+      .replacement = arena.argument(0)
+    });
+
+    auto r1 = evaluator.reduce(arena.copy(f));
+    REQUIRE(r1 == g);
+    auto r2 = evaluator.reduce(arena.apply(
+      arena.copy(f),
+      arena.copy(zero)
+    ));
+    REQUIRE(r2 == zero);
+
+    destroy_from_arena(arena, f, g, zero, r1, r2);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}

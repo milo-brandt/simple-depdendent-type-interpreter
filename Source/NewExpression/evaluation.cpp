@@ -45,6 +45,12 @@ namespace new_expression {
               //if we get here, the pattern succeeded.
               {
                 auto new_expr = substitute_into(arena, rule.replacement, mdb::as_span(pattern_stack));
+                for(std::size_t i = rule.pattern_body.args_captured; i < unfolded.args.size(); ++i) {
+                  new_expr = me().arena.apply(
+                    std::move(new_expr),
+                    me().arena.copy(unfolded.args[i])
+                  );
+                }
                 arena.drop(std::move(expr));
                 expr = std::move(new_expr);
                 destroy_from_arena(arena, novel_roots);
