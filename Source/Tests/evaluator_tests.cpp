@@ -1,5 +1,6 @@
 #include "../Solver/manager.hpp"
 #include "../Solver/evaluator.hpp"
+#include "../NewExpression/arena_utility.hpp"
 #include <catch.hpp>
 
 template<std::size_t size>
@@ -29,11 +30,12 @@ TEST_CASE("The evaluator can handle simple programs") {
     };
     auto simple_embed = make_embeder(arena, embeds);
     SECTION("Embedding a value gives the expected answer") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+      auto embed_index = (std::uint64_t)GENERATE(0, 1, 2);
+      auto program_archive = archive([&]() -> compiler::instruction::output::Program {
         using namespace compiler::instruction::output;
         return ProgramRoot{
           .commands = {},
-          .value = Embed{2}
+          .value = Embed{embed_index}
         };
       }());
       auto ret = solver::evaluator::evaluate(
@@ -41,8 +43,36 @@ TEST_CASE("The evaluator can handle simple programs") {
         manager.get_evaluator_interface(simple_embed)
       );
       REQUIRE(manager.solved());
-      REQUIRE(ret.value == nat);
-      REQUIRE(ret.type == context.primitives.type);
+      REQUIRE(ret.value == embeds[embed_index][0]);
+      REQUIRE(ret.type == embeds[embed_index][1]);
+      destroy_from_arena(arena, ret);
+    }
+    SECTION("Embedding primitives gives the expected values") {
+      struct Case{
+        compiler::instruction::Primitive primitive;
+        new_expression::WeakExpression value;
+        new_expression::WeakExpression type;
+      };
+      auto case_index = GENERATE(0, 1);
+      Case cases[] = {
+        {compiler::instruction::Primitive::type, context.primitives.type, context.primitives.type},
+        {compiler::instruction::Primitive::arrow, context.primitives.arrow, context.primitives.arrow_type}
+      };
+      auto const& active_case = cases[case_index];
+      auto program_archive = archive([&]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {},
+          .value = PrimitiveExpression{active_case.primitive}
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+      REQUIRE(manager.solved());
+      REQUIRE(ret.value == active_case.value);
+      REQUIRE(ret.type == active_case.type);
       destroy_from_arena(arena, ret);
     }
     SECTION("A simple application is correctly interpreted") {
@@ -82,6 +112,33 @@ TEST_CASE("The evaluator can handle simple programs") {
       REQUIRE(ret.value == expected_value);
       REQUIRE(ret.type == expected_type);
       destroy_from_arena(arena, ret, expected_value, expected_type);
+    }
+    SECTION("The TypeFamily element is correctly interpreted") {
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {},
+          .value = TypeFamilyOver{
+            Embed{2}
+          }
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+      REQUIRE(ret.type == context.primitives.type);
+      ret.value = manager.reduce(std::move(ret.value));
+      auto unfolded = unfold(arena, ret.value);
+      REQUIRE(unfolded.head == context.primitives.arrow);
+      REQUIRE(unfolded.args.size() == 2);
+      REQUIRE(unfolded.args[0] == nat);
+      auto inner_application = manager.reduce(arena.apply(
+        arena.copy(unfolded.args[1]),
+        arena.axiom()
+      ));
+      REQUIRE(inner_application == context.primitives.type);
+      destroy_from_arena(arena, ret, inner_application);
     }
     SECTION("A declaration can be created") {
       auto program_archive = archive([]() -> compiler::instruction::output::Program {
