@@ -83,6 +83,50 @@ TEST_CASE("The evaluator can handle simple programs") {
       REQUIRE(ret.type == expected_type);
       destroy_from_arena(arena, ret, expected_value, expected_type);
     }
+    SECTION("A declaration can be created") {
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {
+            Declare{
+              .type = Embed{2}
+            }
+          },
+          .value = Local{0}
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+
+      REQUIRE(manager.solved());
+      REQUIRE(arena.holds_declaration(ret.value));
+      REQUIRE(ret.type == nat);
+      destroy_from_arena(arena, ret);
+    }
+    SECTION("An axiom can be created") {
+      auto program_archive = archive([]() -> compiler::instruction::output::Program {
+        using namespace compiler::instruction::output;
+        return ProgramRoot{
+          .commands = {
+            Axiom{
+              .type = Embed{2}
+            }
+          },
+          .value = Local{0}
+        };
+      }());
+      auto ret = solver::evaluator::evaluate(
+        program_archive.root().get_program_root(),
+        manager.get_evaluator_interface(simple_embed)
+      );
+
+      REQUIRE(manager.solved());
+      REQUIRE(arena.holds_axiom(ret.value));
+      REQUIRE(ret.type == nat);
+      destroy_from_arena(arena, ret);
+    }
     SECTION("An ill-typed application is not solved") {
       auto program_archive = archive([]() -> compiler::instruction::output::Program {
         using namespace compiler::instruction::output;

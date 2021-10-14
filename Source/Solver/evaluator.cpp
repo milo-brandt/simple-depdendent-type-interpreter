@@ -8,21 +8,34 @@ namespace solver::evaluator {
   using Stack = stack::Stack;
   namespace instruction_archive = compiler::instruction::output::archive_part;
   using Expression = expression::tree::Expression;
+  enum class VariableKind {
+    axiom,
+    declaration,
+    indeterminate
+  };
   struct ExpressionEvaluateDetail {
     EvaluatorInterface interface;
     std::vector<TypedValue> locals;
 
-    TypedValue make_variable_typed(OwnedExpression type, Stack& local_context, bool definable) {
+    template<VariableKind kind>
+    TypedValue make_variable_typed(OwnedExpression type, Stack& local_context) {
       //auto true_type = local_context.instance_of_type_family(interface.arena.copy(type));
-      auto var = interface.arena.declaration();
+      auto var = [&] {
+        if constexpr(kind == VariableKind::axiom) {
+          return interface.arena.axiom();
+        } else {
+          return interface.arena.declaration();
+        }
+      }();
       interface.register_declaration(var);
-      if(definable) {
+      if constexpr(kind == VariableKind::indeterminate) {
         interface.register_definable_indeterminate(interface.arena.copy(var));
       }
       return {.value = local_context.apply_args(std::move(var)), .type = std::move(type)};
     }
-    OwnedExpression make_variable(OwnedExpression type, Stack& local_context, bool definable) {
-      auto typed = make_variable_typed(std::move(type), local_context, definable);
+    template<VariableKind kind>
+    OwnedExpression make_variable(OwnedExpression type, Stack& local_context) {
+      auto typed = make_variable_typed<kind>(std::move(type), local_context);
       interface.arena.drop(std::move(typed.type));
       return std::move(typed.value);
     }
@@ -33,7 +46,7 @@ namespace solver::evaluator {
         interface.arena.drop(std::move(new_type));
         return std::move(input);
       }
-      auto cast_var = make_variable(interface.arena.copy(new_type), local_context, false);
+      auto cast_var = make_variable<VariableKind::declaration>(interface.arena.copy(new_type), local_context);
       auto var = new_expression::unfold(interface.arena, cast_var).head;
       interface.cast({
         .stack = local_context,
@@ -74,26 +87,24 @@ namespace solver::evaluator {
                 )
               );
             }
-            auto domain = make_variable(
+            auto domain = make_variable<VariableKind::indeterminate>(
               interface.arena.copy(interface.type),
-              local_context,
-              true
+              local_context
             );
-            auto codomain = make_variable(
+            auto codomain = make_variable<VariableKind::indeterminate>(
               interface.arena.apply(
                 interface.arena.copy(interface.type_family),
                 interface.arena.copy(domain)
               ),
-              local_context,
-              true
+              local_context
             );
             auto expected_function_type = interface.arena.apply(
               interface.arena.copy(interface.arrow),
               interface.arena.copy(domain),
               interface.arena.copy(codomain)
             );
-            auto func = make_variable(interface.arena.copy(expected_function_type), local_context, false);
-            auto arg = make_variable(interface.arena.copy(domain), local_context, false);
+            auto func = make_variable<VariableKind::declaration>(interface.arena.copy(expected_function_type), local_context);
+            auto arg = make_variable<VariableKind::declaration>(interface.arena.copy(domain), local_context);
             auto func_var = unfold(interface.arena, func).head;
             auto arg_var = unfold(interface.arena, arg).head;
             interface.function_cast({
@@ -157,29 +168,29 @@ namespace solver::evaluator {
         }
       });
     }
-    void create_declaration(instruction_archive::Expression const& type, Stack& local_context, bool definable) {
+    template<VariableKind kind>
+    void create_declaration(instruction_archive::Expression const& type, Stack& local_context) {
       auto type_eval = evaluate(type, local_context);
-      auto value = make_variable_typed(
+      auto value = make_variable_typed<kind>(
         cast(
           std::move(type_eval),
           interface.arena.copy(interface.type),
           local_context
         ),
-        local_context,
-        definable
+        local_context
       );
       locals.push_back(std::move(value));
     }
     void evaluate(instruction_archive::Command const& command, Stack& local_context) {
       return command.visit(mdb::overloaded{
         [&](instruction_archive::DeclareHole const& hole) {
-          return create_declaration(hole.type, local_context, true);
+          return create_declaration<VariableKind::indeterminate>(hole.type, local_context);
         },
         [&](instruction_archive::Declare const& declare) {
-          return create_declaration(declare.type, local_context, false);
+          return create_declaration<VariableKind::declaration>(declare.type, local_context);
         },
         [&](instruction_archive::Axiom const& axiom) {
-          return create_declaration(axiom.type, local_context, false);
+          return create_declaration<VariableKind::axiom>(axiom.type, local_context);
         },
         [&](instruction_archive::Rule const& rule) {
           auto pattern = evaluate(rule.pattern, local_context);
