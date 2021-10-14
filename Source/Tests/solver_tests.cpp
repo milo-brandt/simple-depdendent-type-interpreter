@@ -214,6 +214,7 @@ TEST_CASE("var_1 $0 = var_2 $1 and var_2 $0 = axiom succeeds") {
   REQUIRE(arena.empty());
 }
 TEST_CASE("f = g where f $0 = $0 and g $0 = $0 succeeds.") {
+  //this tests deepening
   new_expression::Arena arena;
   {
     SimpleContext context{arena};
@@ -280,6 +281,74 @@ TEST_CASE("axiom_1 = axiom_2 fails.") {
     };
     while(solver.try_to_make_progress());
     REQUIRE(solver.failed());
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("axiom_1 var_1 = axiom_1 axiom_2 succeeds.") {
+  //this tests symmetric explosion
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+
+    auto var_1 = arena.declaration();
+    context.rule_collector.register_declaration(var_1);
+    context.indeterminate_indices.insert(var_1.index());
+    auto axiom_1 = arena.axiom();
+    auto axiom_2 = arena.axiom();
+
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.apply(
+          arena.copy(axiom_1),
+          arena.copy(var_1)
+        ),
+        .rhs = arena.apply(
+          arena.copy(axiom_1),
+          arena.copy(axiom_2)
+        ),
+        .depth = 0
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.solved());
+    auto r1 = context.evaluation_context.reduce(arena.copy(var_1));
+    REQUIRE(r1 == axiom_2);
+    destroy_from_arena(arena, var_1, axiom_1, axiom_2, r1);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("f var_1 = f var_1 succeeds even for undefined declaration f.") {
+  //this tests judgemental equality
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+
+    auto f = arena.declaration();
+    context.rule_collector.register_declaration(f);
+    auto var_1 = arena.declaration();
+    context.rule_collector.register_declaration(var_1);
+    context.indeterminate_indices.insert(var_1.index());
+
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.apply(
+          arena.copy(f),
+          arena.copy(var_1)
+        ),
+        .rhs = arena.apply(
+          arena.copy(f),
+          arena.copy(var_1)
+        ),
+        .depth = 0
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.solved());
+    destroy_from_arena(arena, f, var_1);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
