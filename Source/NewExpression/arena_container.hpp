@@ -3,6 +3,7 @@
 
 #include "arena.hpp"
 #include <unordered_map>
+#include <unordered_set>
 
 /*
   This file defines utilities for holding expressions.
@@ -90,6 +91,48 @@ namespace new_expression {
     }
     ~WeakKeyMap() {
       clear_map();
+    }
+  };
+  class OwnedKeySet {
+    Arena* arena;
+    std::unordered_set<WeakExpression, ExpressionHasher> inner;
+  public:
+    OwnedKeySet(Arena& arena):arena(&arena) {}
+    OwnedKeySet(OwnedKeySet&& o):arena(o.arena),inner(std::move(o.inner)) { o.inner.clear(); }
+    OwnedKeySet& operator=(OwnedKeySet&& o) {
+      if(this == &o) return *this;
+      arena = o.arena;
+      inner = std::move(o.inner);
+      o.inner.clear();
+      return *this;
+    }
+    bool insert(OwnedExpression expr) {
+      WeakExpression weak = expr;
+      if(inner.contains(weak)) {
+        arena->drop(std::move(expr));
+        return false;
+      } else {
+        inner.insert(weak);
+        //maintain reference expr (until erased)
+        return true;
+      }
+    }
+    bool contains(WeakExpression expr) {
+      return inner.contains(expr);
+    }
+    bool erase(WeakExpression expr) {
+      if(inner.contains(expr)) {
+        arena->deref_weak(expr);
+        inner.erase(expr);
+        return true;
+      } else {
+        return false;
+      }
+    }
+    ~OwnedKeySet() {
+      for(auto key : inner) {
+        arena->deref_weak(key);
+      }
     }
   };
 }

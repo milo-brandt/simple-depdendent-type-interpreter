@@ -106,3 +106,31 @@ TEST_CASE("WeakKeyMap calls on_arena_destructor at appropriate times.") {
   REQUIRE(!map.contains(rhs_weak));
   REQUIRE(!map.contains(apply_weak));
 }
+TEST_CASE("OwnedKeySet models appropriate lifetime of elements.") {
+  Arena arena;
+  OwnedKeySet set(arena);
+  auto lhs = arena.axiom();
+  auto rhs = arena.axiom();
+  auto apply = arena.apply(std::move(lhs), std::move(rhs));
+
+  WeakExpression lhs_weak = lhs;
+  WeakExpression rhs_weak = rhs;
+  WeakExpression apply_weak = apply;
+
+  REQUIRE(set.insert(std::move(apply)));
+  REQUIRE(set.contains(apply_weak));
+
+  arena.clear_orphaned_expressions();
+
+  REQUIRE(set.contains(apply_weak));
+  //ensure that nothing was actually deleted.
+  REQUIRE(arena.holds_apply(apply_weak));
+  REQUIRE(arena.holds_axiom(lhs_weak));
+  REQUIRE(arena.holds_axiom(rhs_weak));
+
+  REQUIRE(set.erase(apply_weak));
+  REQUIRE(!set.contains(apply_weak));
+
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
