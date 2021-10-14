@@ -131,6 +131,7 @@ namespace new_expression {
     OwnedExpression copy(OwnedExpression&&) = delete; //issue error for calling this on rvalues
     [[nodiscard]] OwnedExpression copy(WeakExpression const&);
     void drop(OwnedExpression&&);
+    void deref_weak(WeakExpression); //only if you know what you're doing
     template<class Factory>
     auto create_data_type(Factory&& factory) {
       auto new_type = factory(*this, next_type_index());

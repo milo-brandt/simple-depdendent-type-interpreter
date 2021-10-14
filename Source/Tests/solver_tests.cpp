@@ -18,7 +18,7 @@ struct SimpleContext {
         return evaluation_context.reduce(std::move(expr));
       },
       .term_depends_on = [this](new_expression::WeakExpression lhs, new_expression::WeakExpression rhs) {
-        return lhs != rhs;
+        return lhs == rhs;
       },
       .is_definable_indeterminate = [this](new_expression::WeakExpression expr) {
         return indeterminate_indices.contains(expr.index());
@@ -73,6 +73,36 @@ TEST_CASE("var_1 = axiom is resolved") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("var_1 = declaration is resolved") {
+  //this is mostly to check .term_depends_on behavior
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+    auto var_1 = arena.declaration();
+    context.rule_collector.register_declaration(var_1);
+    context.indeterminate_indices.insert(var_1.index());
+    auto declaration = arena.declaration();
+    context.rule_collector.register_declaration(declaration);
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.copy(var_1),
+        .rhs = arena.copy(declaration),
+        .depth = 0
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.solved());
+
+    auto r1 = context.evaluation_context.reduce(arena.copy(var_1));
+    REQUIRE(r1 == declaration);
+
+    destroy_from_arena(arena, var_1, declaration, r1);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+
 TEST_CASE("axiom = var_1 is resolved") {
   new_expression::Arena arena;
   {

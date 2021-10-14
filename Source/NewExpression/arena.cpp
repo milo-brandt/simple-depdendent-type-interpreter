@@ -429,6 +429,7 @@ namespace new_expression {
   void Arena::clear_orphaned_expressions() { return impl->clear_orphaned_expressions(); }
   bool Arena::empty() const { return impl->empty(); }
   void Arena::drop(OwnedExpression&& expr) { return impl->drop(std::move(expr)); }
+  void Arena::deref_weak(WeakExpression expr) { impl->deref_entry(expr.index()); }
   void Arena::debug_dump() const {
     std::size_t index = 0;
     for(auto& entry : impl->entries) {
