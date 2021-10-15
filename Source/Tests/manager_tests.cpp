@@ -8,6 +8,7 @@ stack::Stack get_empty_stack_for(solver::BasicContext& context) {
     .arrow = context.primitives.arrow,
     .id = context.primitives.id,
     .arena = context.arena,
+    .rule_collector = context.rule_collector,
     .register_declaration = [&context](new_expression::WeakExpression expr) {
       context.rule_collector.register_declaration(expr);
     },
@@ -31,7 +32,7 @@ TEST_CASE("var_1 = axiom is resolved by manager.") {
     auto result = manager.register_equation({
       .lhs = arena.copy(var_1),
       .rhs = arena.copy(axiom),
-      .depth = 0
+      .stack = get_empty_stack_for(context)
     });
     REQUIRE(!result.is_ready());
     manager.run();

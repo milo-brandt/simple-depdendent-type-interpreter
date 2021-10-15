@@ -137,7 +137,7 @@ namespace solver {
       return register_equation({
         .lhs = std::move(cast.source_type),
         .rhs = std::move(cast.target_type),
-        .depth = cast.stack.depth()
+        .stack = cast.stack
       }).then([
         this,
         depth = cast.stack.depth(),
@@ -160,7 +160,7 @@ namespace solver {
       register_equation({
         .lhs = std::move(cast.function_type),
         .rhs = std::move(cast.expected_function_type),
-        .depth = cast.stack.depth()
+        .stack = cast.stack
       }).listen([
         this,
         function_variable = std::move(cast.function_variable),
@@ -169,28 +169,28 @@ namespace solver {
         argument_value = std::move(cast.argument_value),
         argument_type = std::move(cast.argument_type),
         expected_argument_type = std::move(cast.expected_argument_type),
-        depth = cast.stack.depth(),
+        stack = std::move(cast.stack),
         promise = std::move(promise)
       ](EquationResult result) mutable {
         if(result == EquationResult::solved) {
           rule_collector.add_rule({
-            .pattern = new_expression::lambda_pattern(std::move(function_variable), depth),
+            .pattern = new_expression::lambda_pattern(std::move(function_variable), stack.depth()),
             .replacement = std::move(function_value)
           });
           register_equation({
             .lhs = std::move(argument_type),
             .rhs = std::move(expected_argument_type),
-            .depth = depth
+            .stack = stack
           }).listen([
             this,
             argument_variable = std::move(argument_variable),
             argument_value = std::move(argument_value),
-            depth,
+            stack = std::move(stack),
             promise = std::move(promise)
           ](EquationResult result) mutable {
             if(result == EquationResult::solved) {
               rule_collector.add_rule({
-                .pattern = new_expression::lambda_pattern(std::move(argument_variable), depth),
+                .pattern = new_expression::lambda_pattern(std::move(argument_variable), stack.depth()),
                 .replacement = std::move(argument_value)
               });
             } else {
@@ -211,7 +211,7 @@ namespace solver {
       register_equation({
         .lhs = std::move(rule.pattern_type),
         .rhs = std::move(rule.replacement_type),
-        .depth = rule.stack.depth()
+        .stack = rule.stack
       }).listen([
         this,
         pattern = std::move(rule.pattern),
@@ -265,6 +265,7 @@ namespace solver {
     evaluator::EvaluatorInterface get_evaluator_interface(mdb::function<new_expression::TypedValue(std::uint64_t)> embed) {
       return {
         .arena = arena,
+        .rule_collector = rule_collector,
         .type = primitives.type,
         .arrow = primitives.arrow,
         .arrow_type = primitives.arrow_type,

@@ -10,6 +10,7 @@ namespace solver {
   using OwnedExpression = new_expression::OwnedExpression;
   using WeakExpression = new_expression::WeakExpression;
   using Arena = new_expression::Arena;
+  using Stack = stack::Stack;
   namespace {
     struct EquationInfo {
       Equation equation;
@@ -197,13 +198,13 @@ namespace solver {
           .equation = {
             .lhs = interface.arena.apply(
               interface.arena.copy(eq.equation.lhs),
-              interface.arena.argument(eq.equation.depth)
+              interface.arena.argument(eq.equation.stack.depth())
             ),
             .rhs = interface.arena.apply(
               interface.arena.copy(eq.equation.rhs),
-              interface.arena.argument(eq.equation.depth)
+              interface.arena.argument(eq.equation.stack.depth())
             ),
-            .depth = eq.equation.depth + 1
+            .stack = eq.equation.stack.extend(interface.arena.axiom()) //placeholder
           }
         });
         return AttemptResult::handled;
@@ -216,13 +217,13 @@ namespace solver {
           .equation = {
             .lhs = interface.arena.apply(
               interface.arena.copy(eq.equation.lhs),
-              interface.arena.argument(eq.equation.depth)
+              interface.arena.argument(eq.equation.stack.depth())
             ),
             .rhs = interface.arena.apply(
               interface.arena.copy(eq.equation.rhs),
-              interface.arena.argument(eq.equation.depth)
+              interface.arena.argument(eq.equation.stack.depth())
             ),
-            .depth = eq.equation.depth + 1
+            .stack = eq.equation.stack.extend(interface.arena.axiom()) //placeholder
           }
         });
         return AttemptResult::handled;
@@ -240,7 +241,7 @@ namespace solver {
               .equation = {
                 .lhs = interface.arena.copy(unfold_lhs.args[i]),
                 .rhs = interface.arena.copy(unfold_rhs.args[i]),
-                .depth = eq.equation.depth
+                .stack = eq.equation.stack
               }
             });
           }

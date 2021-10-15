@@ -253,6 +253,7 @@ namespace solver::evaluator {
       .arrow = interface.arrow,
       .id = interface.id,
       .arena = interface.arena,
+      .rule_collector = interface.rule_collector,
       .register_declaration = interface.register_declaration,
       .add_rule = interface.add_rule
     });

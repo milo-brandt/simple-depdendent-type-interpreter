@@ -10,6 +10,7 @@
 namespace solver::evaluator {
   struct EvaluatorInterface {
     new_expression::Arena& arena;
+    new_expression::RuleCollector& rule_collector;
     new_expression::WeakExpression type;
     new_expression::WeakExpression arrow;
     new_expression::WeakExpression arrow_type;

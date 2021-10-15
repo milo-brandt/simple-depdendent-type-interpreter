@@ -2,6 +2,24 @@
 #include "../NewExpression/arena_utility.hpp"
 #include <catch.hpp>
 
+stack::Stack get_empty_stack_for(new_expression::Arena& arena, new_expression::RuleCollector& rule_collector) {
+  auto placeholder = arena.axiom();
+  arena.drop(std::move(placeholder));
+  return stack::Stack::empty({
+    .type = placeholder, //ugly hack
+    .arrow = placeholder,
+    .id = placeholder,
+    .arena = arena,
+    .rule_collector = rule_collector,
+    .register_declaration = [&rule_collector](new_expression::WeakExpression expr) {
+      rule_collector.register_declaration(expr);
+    },
+    .add_rule = [&rule_collector](new_expression::Rule rule) {
+      rule_collector.add_rule(std::move(rule));
+    }
+  });
+}
+
 struct SimpleContext {
   new_expression::Arena& arena;
   new_expression::RuleCollector rule_collector;
@@ -59,7 +77,7 @@ TEST_CASE("var_1 = axiom is resolved") {
       {
         .lhs = arena.copy(var_1),
         .rhs = arena.copy(axiom),
-        .depth = 0
+        .stack = get_empty_stack_for(arena, context.rule_collector)
       }
     };
     while(solver.try_to_make_progress());
@@ -88,7 +106,7 @@ TEST_CASE("var_1 = declaration is resolved") {
       {
         .lhs = arena.copy(var_1),
         .rhs = arena.copy(declaration),
-        .depth = 0
+        .stack = get_empty_stack_for(arena, context.rule_collector)
       }
     };
     while(solver.try_to_make_progress());
@@ -116,7 +134,7 @@ TEST_CASE("axiom = var_1 is resolved") {
       {
         .lhs = arena.copy(axiom),
         .rhs = arena.copy(var_1),
-        .depth = 0
+        .stack = get_empty_stack_for(arena, context.rule_collector)
       }
     };
     while(solver.try_to_make_progress());
@@ -147,7 +165,7 @@ TEST_CASE("var_1 $0 = axiom is resolved") {
           arena.argument(0)
         ),
         .rhs = arena.copy(axiom),
-        .depth = 1
+        .stack = get_empty_stack_for(arena, context.rule_collector).extend(arena.axiom())
       }
     };
     while(solver.try_to_make_progress());
@@ -185,7 +203,7 @@ TEST_CASE("var_1 $0 = var_2 $1 stalls") {
           arena.copy(var_2),
           arena.argument(1)
         ),
-        .depth = 2
+        .stack = get_empty_stack_for(arena, context.rule_collector).extend(arena.axiom()).extend(arena.axiom())
       }
     };
     while(solver.try_to_make_progress());
@@ -220,7 +238,7 @@ TEST_CASE("var_1 $0 = var_2 $1 and var_2 $0 = axiom succeeds") {
           arena.copy(var_2),
           arena.argument(1)
         ),
-        .depth = 2
+        .stack = get_empty_stack_for(arena, context.rule_collector).extend(arena.axiom()).extend(arena.axiom())
       }
     };
     Solver solver_2{
@@ -231,7 +249,7 @@ TEST_CASE("var_1 $0 = var_2 $1 and var_2 $0 = axiom succeeds") {
           arena.argument(0)
         ),
         .rhs = arena.copy(axiom),
-        .depth = 1
+        .stack = get_empty_stack_for(arena, context.rule_collector).extend(arena.axiom())
       }
     };
     while(solver.try_to_make_progress() || solver_2.try_to_make_progress());
@@ -266,7 +284,7 @@ TEST_CASE("f = g where f $0 = $0 and g $0 = $0 succeeds.") {
       {
         .lhs = arena.copy(f),
         .rhs = arena.copy(g),
-        .depth = 0
+        .stack = get_empty_stack_for(arena, context.rule_collector)
       }
     };
     while(solver.try_to_make_progress());
@@ -287,7 +305,7 @@ TEST_CASE("$0 = $1 fails.") {
       {
         .lhs = arena.argument(0),
         .rhs = arena.argument(1),
-        .depth = 2
+        .stack = get_empty_stack_for(arena, context.rule_collector).extend(arena.axiom()).extend(arena.axiom())
       }
     };
     while(solver.try_to_make_progress());
@@ -306,7 +324,7 @@ TEST_CASE("axiom_1 = axiom_2 fails.") {
       {
         .lhs = arena.axiom(),
         .rhs = arena.axiom(),
-        .depth = 2
+        .stack = get_empty_stack_for(arena, context.rule_collector).extend(arena.axiom()).extend(arena.axiom())
       }
     };
     while(solver.try_to_make_progress());
@@ -338,7 +356,7 @@ TEST_CASE("axiom_1 var_1 = axiom_1 axiom_2 succeeds.") {
           arena.copy(axiom_1),
           arena.copy(axiom_2)
         ),
-        .depth = 0
+        .stack = get_empty_stack_for(arena, context.rule_collector)
       }
     };
     while(solver.try_to_make_progress());
@@ -373,7 +391,7 @@ TEST_CASE("f var_1 = f var_1 succeeds even for undefined declaration f.") {
           arena.copy(f),
           arena.copy(var_1)
         ),
-        .depth = 0
+        .stack = get_empty_stack_for(arena, context.rule_collector)
       }
     };
     while(solver.try_to_make_progress());

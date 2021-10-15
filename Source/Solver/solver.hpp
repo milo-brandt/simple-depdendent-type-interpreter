@@ -6,6 +6,7 @@
 #include "../NewExpression/evaluation.hpp"
 #include "../Utility/function.hpp"
 #include "../Utility/event.hpp"
+#include "stack.hpp"
 
 /*
 Solving algorithm: repeatedly loop over all equations (as long as progress is being made), and apply the following steps.
@@ -75,7 +76,7 @@ namespace solver {
   struct Equation {
     new_expression::OwnedExpression lhs;
     new_expression::OwnedExpression rhs;
-    std::size_t depth;
+    stack::Stack stack;
     static constexpr auto part_info = mdb::parts::simple<3>;
   };
   struct IndeterminateDefinition {

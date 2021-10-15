@@ -2,6 +2,7 @@
 #define NEW_STACK_HPP
 
 #include "../NewExpression/evaluation.hpp"
+#include "../NewExpression/typed_value.hpp"
 #include <functional>
 
 namespace stack {
@@ -10,6 +11,7 @@ namespace stack {
     new_expression::WeakExpression arrow; //\S:Type.\T:S -> Type.(x : S) -> T x;
     new_expression::WeakExpression id; //\T:Type.\x:T.x
     new_expression::Arena& arena;
+    new_expression::RuleCollector& rule_collector;
     std::function<void(new_expression::WeakExpression)> register_declaration;
     std::function<void(new_expression::Rule)> add_rule;
   };
@@ -24,6 +26,8 @@ namespace stack {
     new_expression::OwnedExpression type_of_arg(std::uint64_t) const; //e.g. 1 returns IsPrime $0
     new_expression::OwnedExpression apply_args(new_expression::OwnedExpression) const; //apply args up to depth
     new_expression::OwnedExpression type_of(new_expression::WeakExpression expression) const;
+    new_expression::OwnedExpression reduce(new_expression::OwnedExpression) const;
+    Stack extend_by_assumption(new_expression::TypedValue, new_expression::TypedValue) const;
     Stack extend(new_expression::OwnedExpression type_family) const; //e.g. takes F $0 $1 to the context (x : Nat) -> (y : IsPrime x) -> (f : F x y) -> ...
     static Stack empty(StackInterface context);
   };

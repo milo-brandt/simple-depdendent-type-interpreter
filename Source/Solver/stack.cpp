@@ -3,21 +3,24 @@
 namespace stack {
   using OwnedExpression = new_expression::OwnedExpression;
   using WeakExpression = new_expression::WeakExpression;
+  using TypedValue = new_expression::TypedValue;
   using Arena = new_expression::Arena;
+  using EvaluationContext = new_expression::EvaluationContext;
   struct Stack::Impl {
     struct ParentInfo {
       std::shared_ptr<Impl> parent;
-      OwnedExpression extension_family;
+      std::optional<OwnedExpression> extension_family; //left blank for assumptions
     };
     StackInterface interface;
     std::optional<ParentInfo> parent;
     std::uint64_t depth;
     OwnedExpression fam;
     OwnedExpression var;
-    Impl(StackInterface interface, std::optional<ParentInfo> parent, std::uint64_t depth, OwnedExpression fam, OwnedExpression var):interface(interface), parent(std::move(parent)),depth(depth),fam(std::move(fam)),var(std::move(var)){}
+    std::shared_ptr<EvaluationContext> evaluation;
+    Impl(StackInterface interface, std::optional<ParentInfo> parent, std::uint64_t depth, OwnedExpression fam, OwnedExpression var, std::shared_ptr<EvaluationContext> evaluation):interface(interface), parent(std::move(parent)),depth(depth),fam(std::move(fam)),var(std::move(var)),evaluation(std::move(evaluation)) {}
     ~Impl() {
-      if(parent) {
-        interface.arena.drop(std::move(parent->extension_family));
+      if(parent && parent->extension_family) {
+        interface.arena.drop(std::move(*parent->extension_family));
       }
       destroy_from_arena(interface.arena, fam, var);
     }
@@ -77,7 +80,8 @@ namespace stack {
       std::nullopt,
       0,
       std::move(type), //Type
-      std::move(id_type) //\T:Type.T
+      std::move(id_type), //\T:Type.T
+      std::make_shared<EvaluationContext>(arena, context.rule_collector)
     )};
   }
   Stack Stack::extend(OwnedExpression extension_family) const {
@@ -149,8 +153,32 @@ namespace stack {
       },
       impl->depth + 1,
       std::move(new_fam),
-      std::move(var_p)
+      std::move(var_p),
+      impl->evaluation
     )};
+  }
+  Stack Stack::extend_by_assumption(TypedValue lhs, TypedValue rhs) const {
+    auto new_evaluation = std::make_shared<EvaluationContext>(*impl->evaluation);
+    new_evaluation->assume_equal(std::move(lhs.type), std::move(rhs.type));
+    new_evaluation->assume_equal(std::move(lhs.value), std::move(rhs.value));
+    return Stack{std::make_shared<Impl>(
+      impl->interface,
+      Impl::ParentInfo{
+        .parent = impl,
+        .extension_family = std::nullopt
+      },
+      impl->depth,
+      impl->interface.arena.copy(impl->fam),
+      impl->interface.arena.copy(impl->var),
+      impl->evaluation
+    )};
+  }
+  OwnedExpression Stack::reduce(OwnedExpression expr) const {
+    if(auto err = impl->evaluation->canonicalize_context()) {
+      return std::move(expr); //er
+    } else {
+      return impl->evaluation->reduce(std::move(expr));
+    }
   }
   OwnedExpression Stack::type_of(WeakExpression expression) const {
     std::terminate();
