@@ -19,7 +19,9 @@ namespace new_expression {
     std::unique_ptr<Impl> impl;
   public:
     EvaluationContext(Arena&, RuleCollector&);
+    EvaluationContext(EvaluationContext const&);
     EvaluationContext(EvaluationContext&&);
+    EvaluationContext& operator=(EvaluationContext const&);
     EvaluationContext& operator=(EvaluationContext&&);
     ~EvaluationContext();
     OwnedExpression reduce(OwnedExpression);

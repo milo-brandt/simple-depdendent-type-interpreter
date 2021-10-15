@@ -124,3 +124,19 @@ TEST_CASE("Variants are destructured to the active element") {
   });
   REQUIRE(sum == 17);
 }
+TEST_CASE("map_children can be used to copy vector of unique_ptrs") {
+  std::vector<std::unique_ptr<int> > vec;
+  vec.push_back(std::make_unique<int>(5));
+  vec.push_back(std::make_unique<int>(6));
+  vec.push_back(std::make_unique<int>(7));
+
+  std::vector<std::unique_ptr<int> > const& vec_ref = vec;
+  auto vec_cpy = mdb::parts::map_children([](std::unique_ptr<int> const& ptr) {
+    return std::make_unique<int>(*ptr * *ptr);
+  }, vec_ref);
+
+  REQUIRE(vec_cpy.size() == 3);
+  REQUIRE(*vec_cpy[0] == 25);
+  REQUIRE(*vec_cpy[1] == 36);
+  REQUIRE(*vec_cpy[2] == 49);
+}

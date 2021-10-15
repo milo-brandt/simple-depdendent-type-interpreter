@@ -25,6 +25,18 @@ namespace new_expression {
     destroy_from_arena(arena, v2);
     (destroy_from_arena(arena, vn) , ...);
   }
+  template<class T>
+  T copy_on_arena(Arena& arena, T const& value) {
+    if constexpr(std::is_same_v<std::decay_t<T>, OwnedExpression>) {
+      return arena.copy(value);
+    } else if constexpr(mdb::parts::visitable<T>) {
+      return mdb::parts::map_children([&arena](auto const& child) {
+        return copy_on_arena(arena, child);
+      }, value);
+    } else {
+      return value;
+    }
+  }
   struct PartDestroyer {
     template<class T>
     void operator()(Arena& arena, T& value) {

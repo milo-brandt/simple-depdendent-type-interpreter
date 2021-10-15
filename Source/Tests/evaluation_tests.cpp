@@ -149,6 +149,14 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 equality.") {
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
+    SECTION("The copy operator for EvaluationContext works") {
+      auto evaluator_2 = evaluator;
+      auto result_1 = evaluator_2.reduce(arena.argument(0));
+      auto result_2 = evaluator_2.reduce(arena.argument(1));
+      REQUIRE(result_1 == result_2);
+      arena.drop(std::move(result_1));
+      arena.drop(std::move(result_2));
+    }
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());

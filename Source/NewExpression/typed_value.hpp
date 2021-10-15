@@ -10,13 +10,6 @@ namespace new_expression {
     OwnedExpression type;
     static constexpr auto part_info = mdb::parts::simple<2>;
   };
-  TypedValue copy_on_arena(Arena& arena, TypedValue&& input) = delete;
-  inline TypedValue copy_on_arena(Arena& arena, TypedValue const& input) {
-    return {
-      .value = arena.copy(input.value),
-      .type = arena.copy(input.type)
-    };
-  }
 }
 
 #endif

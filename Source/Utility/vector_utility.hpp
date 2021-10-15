@@ -22,6 +22,24 @@ namespace mdb {
     (ret.push_back(std::move(values)) , ...);
     return ret;
   }
+  template<class F, class T, class R = std::invoke_result_t<F, T const&> >
+  std::vector<R> map(F&& function, std::vector<T> const& vec) {
+    std::vector<R> ret;
+    ret.reserve(vec.size());
+    for(auto& entry : vec) {
+      ret.push_back(function(entry));
+    }
+    return ret;
+  }
+  template<class F, class T, class R = std::invoke_result_t<F, T&&> >
+  std::vector<R> map(F&& function, std::vector<T>&& vec) {
+    std::vector<R> ret;
+    ret.reserve(vec.size());
+    for(auto& entry : vec) {
+      ret.push_back(function(std::move(entry)));
+    }
+    return ret;
+  }
   template<class T, class Predicate>
   void erase_if(std::vector<T>& vec, Predicate&& predicate) {
     auto erase_start = std::remove_if(vec.begin(), vec.end(), std::forward<Predicate>(predicate));

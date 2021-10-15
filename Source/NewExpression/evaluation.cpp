@@ -683,6 +683,12 @@ namespace new_expression {
     RuleCollector const& rule_collector;
     ConglomerateSolveState solve_state;
     Impl(Arena& arena, RuleCollector const& rule_collector):arena(arena), rule_collector(rule_collector), solve_state{.arena = arena, .rule_collector = rule_collector} {}
+    Impl(Impl const& other):arena(other.arena), rule_collector(other.rule_collector), solve_state{
+      .arena = other.solve_state.arena,
+      .rule_collector = other.solve_state.rule_collector,
+      .conglomerate_class_info = copy_on_arena(other.arena, other.solve_state.conglomerate_class_info),
+      .conglomerate_to_class = other.solve_state.conglomerate_to_class
+    } {}
     ~Impl() {
       destroy_from_arena(arena, solve_state);
     }
@@ -746,7 +752,16 @@ namespace new_expression {
     }
   };
   EvaluationContext::EvaluationContext(Arena& arena, RuleCollector& rule_collector):impl(std::make_unique<Impl>(arena, rule_collector)) {}
+  EvaluationContext::EvaluationContext(EvaluationContext const& other):impl(std::make_unique<Impl>(*other.impl)) {}
   EvaluationContext::EvaluationContext(EvaluationContext&&) = default;
+  EvaluationContext& EvaluationContext::operator=(EvaluationContext const& other) {
+    if(other.impl) {
+      impl = std::make_unique<Impl>(*other.impl);
+    } else {
+      impl = nullptr;
+    }
+    return *this;
+  }
   EvaluationContext& EvaluationContext::operator=(EvaluationContext&&) = default;
   EvaluationContext::~EvaluationContext() = default;
 
