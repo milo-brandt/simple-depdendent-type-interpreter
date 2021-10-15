@@ -170,7 +170,7 @@ namespace stack {
       impl->depth,
       impl->interface.arena.copy(impl->fam),
       impl->interface.arena.copy(impl->var),
-      impl->evaluation
+      std::move(new_evaluation)
     )};
   }
   OwnedExpression Stack::reduce(OwnedExpression expr) const {

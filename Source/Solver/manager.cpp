@@ -97,9 +97,6 @@ namespace solver {
     SolverInterface get_solver_interface() {
       return {
         .arena = arena,
-        .reduce = [this](OwnedExpression in) {
-          return evaluation.reduce(std::move(in));
-        },
         .term_depends_on = [this](WeakExpression base, WeakExpression possible_dependency) {
           return base == possible_dependency;
         },

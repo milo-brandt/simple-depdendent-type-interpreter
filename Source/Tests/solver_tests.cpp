@@ -32,9 +32,6 @@ struct SimpleContext {
   solver::SolverInterface interface() {
     return {
       .arena = arena,
-      .reduce = [this](new_expression::OwnedExpression expr) {
-        return evaluation_context.reduce(std::move(expr));
-      },
       .term_depends_on = [this](new_expression::WeakExpression lhs, new_expression::WeakExpression rhs) {
         return lhs == rhs;
       },
@@ -397,6 +394,52 @@ TEST_CASE("f var_1 = f var_1 succeeds even for undefined declaration f.") {
     while(solver.try_to_make_progress());
     REQUIRE(solver.solved());
     destroy_from_arena(arena, f, var_1);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("axiom_1 var_1 = $0 succeeds in a stack where $0 = axiom_1 axiom_2.") {
+  //this tests symmetric explosion
+  new_expression::Arena arena;
+  {
+    SimpleContext context{arena};
+
+    auto var_1 = arena.declaration();
+    context.rule_collector.register_declaration(var_1);
+    context.indeterminate_indices.insert(var_1.index());
+    auto axiom_1 = arena.axiom();
+    auto axiom_2 = arena.axiom();
+    auto dummy_type = arena.axiom();
+
+    auto stack = get_empty_stack_for(arena, context.rule_collector)
+      .extend(arena.copy(dummy_type))
+      .extend_by_assumption(new_expression::TypedValue{
+        .value = arena.argument(0),
+        .type = arena.copy(dummy_type)
+      }, new_expression::TypedValue{
+        .value = arena.apply(
+          arena.copy(axiom_1),
+          arena.copy(axiom_2)
+        ),
+        .type = arena.copy(dummy_type)
+      });
+
+    Solver solver{
+      context.interface(),
+      {
+        .lhs = arena.apply(
+          arena.copy(axiom_1),
+          arena.copy(var_1)
+        ),
+        .rhs = arena.argument(0),
+        .stack = std::move(stack)
+      }
+    };
+    while(solver.try_to_make_progress());
+    REQUIRE(solver.solved());
+    auto r1 = context.evaluation_context.reduce(arena.copy(var_1));
+    REQUIRE(r1 == axiom_2);
+    destroy_from_arena(arena, var_1, axiom_1, axiom_2, dummy_type, r1);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());

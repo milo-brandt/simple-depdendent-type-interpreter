@@ -236,12 +236,13 @@ namespace solver {
         auto unfold_lhs = unfold(interface.arena, eq.equation.lhs);
         auto unfold_rhs = unfold(interface.arena, eq.equation.rhs);
         if(unfold_lhs.head == unfold_rhs.head && unfold_lhs.args.size() == unfold_rhs.args.size()) {
+          auto stack = eq.equation.stack; //move this out of the way, in case pushing to the vector moves stuff
           for(std::uint64_t i = 0; i < unfold_lhs.args.size(); ++i) {
             equations.push_back({
               .equation = {
                 .lhs = interface.arena.copy(unfold_lhs.args[i]),
                 .rhs = interface.arena.copy(unfold_rhs.args[i]),
-                .stack = eq.equation.stack
+                .stack = stack
               }
             });
           }
@@ -262,8 +263,8 @@ namespace solver {
     bool examine_equation(std::uint64_t index) {
       auto& eq = equations[index];
       if(eq.handled || eq.failed) std::terminate(); //precondition
-      eq.equation.lhs = interface.reduce(std::move(eq.equation.lhs));
-      eq.equation.rhs = interface.reduce(std::move(eq.equation.rhs));
+      eq.equation.lhs = eq.equation.stack.reduce(std::move(eq.equation.lhs));
+      eq.equation.rhs = eq.equation.stack.reduce(std::move(eq.equation.rhs));
 
       AttemptResult ret = AttemptResult::nothing;
       std::apply([&](auto... tests) {

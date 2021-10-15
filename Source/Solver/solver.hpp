@@ -89,7 +89,6 @@ namespace solver {
   };
   struct SolverInterface {
     new_expression::Arena& arena;
-    mdb::function<new_expression::OwnedExpression(new_expression::OwnedExpression)> reduce;
     mdb::function<bool(new_expression::WeakExpression, new_expression::WeakExpression)> term_depends_on;
     mdb::function<bool(new_expression::WeakExpression)> is_definable_indeterminate;
     mdb::function<bool(new_expression::WeakExpression)> is_lambda_like;
