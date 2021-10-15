@@ -306,9 +306,6 @@ namespace new_expression {
       }
       bool examine_updated_reducer(std::size_t target_class, std::size_t target_reducer) { //must be in "active" row - but presumably ignored in reduction. must also be reduced
         WeakExpression reducer = conglomerate_class_info[target_class].reducers.active[target_reducer];
-        if(has_computation(reducer)) {
-          return false; //no good - can't deal with expressions with computations
-        }
         if(auto* conglomerate = arena.get_if_conglomerate(reducer)) {
           drop_reducer(target_class, target_reducer);
           return combine_conglomerates(target_class, conglomerate_to_class[conglomerate->index]);
@@ -339,6 +336,8 @@ namespace new_expression {
           auto& base_status = std::get<conglomerate_status::PureOpen>(conglomerate_class_info[base_index].status); //only pure opens can appear as conglomerates
           base_status.application_conglomerates.push_back(target_class);
           return !exists_axiomatic_cycle();
+        } else if(has_computation(reducer)) {
+          return false; //no good - can't deal with expressions with computations
         } else {
           return true; //okay - still purely open
         }
