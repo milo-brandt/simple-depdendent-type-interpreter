@@ -11,7 +11,7 @@
 	class {{ kind.name }};
 {%- endfor %}
 {%- endmacro %}
-{%- macro kind_prototype(kind) -%}
+{%- macro kind_prototype(kind, has_copy) -%}
 	{{ visitor_requirement(kind, kind.name + "Visitor", reference.ref) }}
 	{{ visitor_requirement(kind, kind.name + "ConstVisitor", reference.cref) }}
 	{{ visitor_requirement(kind, kind.name + "MoveVisitor", reference.rref) }}
@@ -22,9 +22,9 @@
 		{%- for component in kind.components %}
 		{{ kind.name }}({{ component.name }} arg);
 		{%- endfor %}
-		{{ kind.name }}({{ kind.name }} const&);
+		{{ kind.name }}({{ kind.name }} const&){% if not has_copy %} = delete{% endif %};
 		{{ kind.name }}({{ kind.name }}&&) noexcept;
-		{{ kind.name }}& operator=({{ kind.name}} const&);
+		{{ kind.name }}& operator=({{ kind.name}} const&){% if not has_copy %} = delete{% endif %};
 		{{ kind.name }}& operator=({{ kind.name}}&&) noexcept;
 		~{{ kind.name }}();
 		{%- for component in kind.components %}
@@ -42,7 +42,7 @@
 {%- endmacro %}
 {%- macro tree_kind_prototypes(tree) -%}
 {%- for kind in tree.kinds %}
-	{{ kind_prototype(kind) }}
+	{{ kind_prototype(kind, tree.copyable) }}
 {%- endfor %}
 {%- endmacro %}
 {%- macro tree_component_declarations(tree) -%}
@@ -83,11 +83,13 @@
 		}
 	}
 {%- endmacro %}
-{%- macro kind_move_and_assignment(kind) -%}
+{%- macro kind_move_and_assignment(kind, has_copy) -%}
 	{{ kind.name }}::{{ kind.name }}({{ kind.name }}&& other) noexcept:index(other.index), data(other.data) { other.data = nullptr; }
+	{%- if has_copy %}
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }} const& other) {
 		return *this = {{ kind.name }}{other};
 	}
+	{%- endif %}
 	{{ kind.name }}& {{ kind.name }}::operator=({{ kind.name }}&& other) noexcept {
 		std::swap(index, other.index);
 		std::swap(data, other.data);
@@ -104,18 +106,20 @@
 	bool {{ kind.name }}::holds_{{component.name|underscore}}() const { return index == {{loop.index0}}; }
 	{%- endfor %}
 {%- endmacro %}
-{%- macro kind_definition(kind) -%}
+{%- macro kind_definition(kind, has_copy) -%}
 {%- call in_extension("cpp") %}
 	{{ kind_constructors(kind) }}
+	{% if has_copy %}
 	{{ kind_copy_constructor(kind) }}
-	{{ kind_move_and_assignment(kind) }}
+	{%- endif %}
+	{{ kind_move_and_assignment(kind, has_copy) }}
 	{{ kind_destructor(kind) }}
 	{{ kind_getters(kind) }}
 {%- endcall %}
 {%- endmacro %}
 {%- macro tree_kind_definitions(tree) -%}
 	{%- for kind in tree.kinds %}
-	{{ kind_definition(kind) }}
+	{{ kind_definition(kind, tree.copyable) }}
 	{%- endfor %}
 {%- endmacro %}
 {#

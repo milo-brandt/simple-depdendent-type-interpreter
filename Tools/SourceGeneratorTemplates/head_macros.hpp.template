@@ -7,16 +7,16 @@ The contents of this file are generated from:
   Generator: {{ file_info.generator_file }}
 */
 
-#include "../Utility/indirect.hpp"
-#include "../Utility/overloaded.hpp"
-#include <variant>
-#include <type_traits>
-#include <vector>
-#include <optional>
-#include <cstdint>
-#include <iostream>
-#include <string>
-#include <span>
-#include <memory>
+{{ source_include("Source/Utility/indirect.hpp") }}
+{{ source_include("Source/Utility/overloaded.hpp") }}
+{{ absolute_include("variant") }}
+{{ absolute_include("type_traits") }}
+{{ absolute_include("vector") }}
+{{ absolute_include("optional") }}
+{{ absolute_include("cstdint") }}
+{{ absolute_include("iostream") }}
+{{ absolute_include("string") }}
+{{ absolute_include("span") }}
+{{ absolute_include("memory") }}
 
 {%- endmacro %}

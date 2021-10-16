@@ -476,11 +476,15 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
           if(old_head != indexes) std::terminate();
         }
         {%- for kind in tree.kinds %}
+        {%- if tree.copyable %}
         archive_part::{{ kind.name }}* write_{{ kind.name|underscore }}_to_cref({{tree.namespace}}::{{ kind.name }} const&);
+        {%- endif %}
         archive_part::{{ kind.name }}* write_{{ kind.name|underscore }}_to_rref({{tree.namespace}}::{{ kind.name }}&&);
         {%- endfor %}
         {%- for component in tree.components %}
+        {%- if tree.copyable %}
         archive_part::{{ component.name }}* write_{{ component.name|underscore }}_to_cref({{tree.namespace}}::{{ component.name }} const&);
+        {%- endif %}
         archive_part::{{ component.name }}* write_{{ component.name|underscore }}_to_rref({{tree.namespace}}::{{ component.name }}&&);
         {%- endfor %}
         void finish() { //add null termination
@@ -498,7 +502,7 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
         }
       }
     }
-    {%- for ref in [reference.cref, reference.rref] %}
+    {%- macro allocate_and_fill_definition(ref) %}
     {%- for kind in tree.kinds %}
     static std::pair<std::size_t, void*> allocate_and_fill_{{ kind.name | underscore }}_{{ref.name}}({{kind.name}}{{ref.suffix}} target) {
       SizeData sizer;
@@ -511,7 +515,11 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
       return std::make_pair(sizer.count, ret);
     }
     {%- endfor %}
-    {%- endfor %}
+    {%- endmacro %}
+    {%- if tree.copyable %}
+    {{ allocate_and_fill_definition(reference.cref) }}
+    {%- endif %}
+    {{ allocate_and_fill_definition(reference.rref) }}
   };
   {%- for kind in tree.kinds %}
   void Detail::SizeData::add_{{ kind.name|underscore }}_to_size({{tree.namespace}}::{{ kind.name }} const& term) {
@@ -552,7 +560,9 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
   }
   {%- endmacro %}
   {%- for kind in tree.kinds %}
+  {%- if tree.copyable %}
   {{ define_kind_writer(kind, "cref", reference.cref) }}
+  {%- endif %}
   {{ define_kind_writer(kind, "rref", reference.rref) }}
   {%- endfor %}
   {%- macro define_component_writer(component, suffix, ref) %}
