@@ -25,7 +25,6 @@ namespace stack {
     new_expression::OwnedExpression instance_of_type_family(new_expression::OwnedExpression) const; //Takes F $0 $1 to (x : Nat) -> (y : IsPrime x) -> F x y, for instance.
     new_expression::OwnedExpression type_of_arg(std::uint64_t) const; //e.g. 1 returns IsPrime $0
     new_expression::OwnedExpression apply_args(new_expression::OwnedExpression) const; //apply args up to depth
-    new_expression::OwnedExpression type_of(new_expression::WeakExpression expression) const;
     new_expression::OwnedExpression reduce(new_expression::OwnedExpression) const;
     Stack extend_by_assumption(new_expression::TypedValue, new_expression::TypedValue) const;
     Stack extend(new_expression::OwnedExpression type_family) const; //e.g. takes F $0 $1 to the context (x : Nat) -> (y : IsPrime x) -> (f : F x y) -> ...

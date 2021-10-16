@@ -1,4 +1,6 @@
 #include "stack.hpp"
+#include "../Utility/overloaded.hpp"
+#include "../NewExpression/arena_utility.hpp"
 
 namespace stack {
   using OwnedExpression = new_expression::OwnedExpression;
@@ -55,19 +57,15 @@ namespace stack {
     );
   }
   OwnedExpression Stack::type_of_arg(std::uint64_t i) const {
-    std::terminate();
-    /*
     if(i >= impl->depth) std::terminate();
     Impl* ptr = impl.get();
-    while(i != ptr->depth - 1) {
+    while(i != ptr->depth - 1 || !ptr->parent->extension_family) {
       if(!ptr->parent || !ptr->parent->parent) std::terminate();
       ptr = ptr->parent->parent.get();
     }
     if(!ptr->parent) std::terminate();
-    return ptr->parent->extension_family;
-    */
+    return ptr->interface.arena.copy(*ptr->parent->extension_family);
   }
-
   Stack Stack::empty(StackInterface context) {
     auto& arena = context.arena;
     auto type = arena.copy(context.type);
@@ -179,30 +177,5 @@ namespace stack {
     } else {
       return impl->evaluation->reduce(std::move(expr));
     }
-  }
-  OwnedExpression Stack::type_of(WeakExpression expression) const {
-    std::terminate();
-    /*return expression.visit(mdb::overloaded{
-      [&](tree::Apply apply) -> tree::Expression {
-        auto lhs_type = type_of(context, apply.lhs);
-        if(auto func_data = context.get_domain_and_codomain(std::move(lhs_type))) {
-          return tree::Apply{std::move(func_data->codomain), std::move(apply.rhs)};
-        } else {
-          std::terminate();
-        }
-      },
-      [&](tree::External external) -> tree::Expression {
-        return context.external_info.at(external.external_index).type;
-      },
-      [&](tree::Arg arg) -> tree::Expression {
-        return type_of_arg(arg.arg_index);
-      },
-      [&](tree::Data data) -> tree::Expression {
-        return data.data.type_of();
-      },
-      [&](tree::Conglomerate) -> tree::Expression {
-        std::terminate(); //we don't know how to deal with that yet.
-      }
-    });*/
   }
 }
