@@ -123,4 +123,19 @@ namespace new_expression {
       )
     });
   }
+  std::array<std::pair<WeakExpression, OwnedExpression>, 11> TypeTheoryPrimitives::get_types_of_primitives(Arena& arena) {
+    return {
+      std::pair<WeakExpression, OwnedExpression>{type, arena.copy(type)},
+      {arrow, arena.copy(arrow_type)},
+      {type_family, arena.apply(arena.copy(type_family), arena.copy(type))},
+      {constant, arena.apply(arena.copy(arrow), arena.copy(type), arena.copy(constant_codomain_1))},
+      {constant_codomain_1, arena.apply(arena.copy(type_family), arena.copy(type))},
+      {constant_codomain_2, arena.apply(arena.copy(arrow), arena.copy(type), arena.copy(type_family))},
+      {constant_codomain_3, arena.apply(arena.copy(arrow), arena.copy(type), arena.copy(constant_codomain_4))},
+      {constant_codomain_4, arena.apply(arena.copy(type_family), arena.copy(type))},
+      {id, arena.apply(arena.copy(arrow), arena.copy(type), arena.copy(id_codomain))},
+      {id_codomain, arena.apply(arena.copy(type_family), arena.copy(type))},
+      {arrow_codomain, arena.apply(arena.copy(type_family), arena.copy(type))}
+    };
+  }
 }

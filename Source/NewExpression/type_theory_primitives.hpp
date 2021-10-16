@@ -18,6 +18,7 @@ namespace new_expression {
     OwnedExpression id_codomain;
     OwnedExpression arrow_codomain;
     OwnedExpression arrow_type;
+    std::array<std::pair<WeakExpression, OwnedExpression>, 11> get_types_of_primitives(Arena& arena);
     TypeTheoryPrimitives(Arena& arena, RuleCollector& rules);
     static constexpr auto part_info = mdb::parts::simple<12>;
   };
