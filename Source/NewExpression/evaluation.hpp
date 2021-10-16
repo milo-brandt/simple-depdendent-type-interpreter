@@ -25,6 +25,7 @@ namespace new_expression {
     EvaluationContext& operator=(EvaluationContext&&);
     ~EvaluationContext();
     OwnedExpression reduce(OwnedExpression);
+    OwnedExpression eliminate_conglomerates(OwnedExpression); //an equivalent expression without conglomerates
     bool is_lambda_like(WeakExpression); //should only be used on things that have already been reduced.
     std::optional<EvaluationError> assume_equal(OwnedExpression lhs, OwnedExpression rhs);
     std::optional<EvaluationError> canonicalize_context();

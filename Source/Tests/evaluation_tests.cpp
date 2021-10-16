@@ -1,8 +1,24 @@
 #include "../NewExpression/evaluation.hpp"
 #include "../Utility/vector_utility.hpp"
+#include "../Utility/overloaded.hpp"
 #include <catch.hpp>
 
 using namespace new_expression;
+
+bool is_free_from_conglomerates(Arena& arena, WeakExpression expr) {
+  return arena.visit(expr, mdb::overloaded{
+    [&](Apply const& apply) {
+      return is_free_from_conglomerates(arena, apply.lhs)
+          && is_free_from_conglomerates(arena, apply.rhs);
+    },
+    [&](Conglomerate const&) {
+       return false;
+    },
+    [&](auto const&) {
+      return true;
+    }
+  });
+}
 
 TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function.") {
   Arena arena; //doubler
@@ -138,6 +154,10 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 equality.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(1));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
@@ -146,6 +166,10 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 equality.") {
       auto result_1 = evaluator.reduce(arena.apply(arena.copy(func), arena.argument(0)));
       auto result_2 = evaluator.reduce(arena.apply(std::move(func), arena.argument(1)));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
@@ -153,6 +177,10 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 equality.") {
       auto evaluator_2 = evaluator;
       auto result_1 = evaluator_2.reduce(arena.argument(0));
       auto result_2 = evaluator_2.reduce(arena.argument(1));
+      REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
       REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
@@ -195,6 +223,10 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 and $1 = $2 equalities.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(1));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
@@ -202,12 +234,20 @@ TEST_CASE("EvaluationContext can deal with $0 = $1 and $1 = $2 equalities.") {
       auto result_1 = evaluator.reduce(arena.argument(1));
       auto result_2 = evaluator.reduce(arena.argument(2));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
     SECTION("Reducing $0 and $2 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(2));
+      REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
       REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
@@ -238,6 +278,10 @@ TEST_CASE("EvaluationContext can deal with $0 = (axiom $1 $2) equality.") {
     REQUIRE(!equal_err);
     auto result_1 = evaluator.reduce(arena.argument(0));
     auto result_2 = evaluator.reduce(std::move(expr));
+    REQUIRE(result_1 == result_2);
+    result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+    REQUIRE(is_free_from_conglomerates(arena, result_1));
+    result_1 = evaluator.reduce(std::move(result_1));
     REQUIRE(result_1 == result_2);
     arena.drop(std::move(result_1));
     arena.drop(std::move(result_2));
@@ -275,12 +319,20 @@ TEST_CASE("EvaluationContext can deal with (axiom $0 $1) = (axiom $2 $3) equalit
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(2));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
     SECTION("Reducing $1 and $3 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(1));
       auto result_2 = evaluator.reduce(arena.argument(3));
+      REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
       REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
@@ -323,12 +375,20 @@ TEST_CASE("EvaluationContext can deal with $4 = (axiom $0 $1) and $4 = (axiom $2
       auto result_1 = evaluator.reduce(arena.argument(0));
       auto result_2 = evaluator.reduce(arena.argument(2));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
     SECTION("Reducing $1 and $3 gives the same value.") {
       auto result_1 = evaluator.reduce(arena.argument(1));
       auto result_2 = evaluator.reduce(arena.argument(3));
+      REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
       REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
@@ -337,7 +397,7 @@ TEST_CASE("EvaluationContext can deal with $4 = (axiom $0 $1) and $4 = (axiom $2
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
-TEST_CASE("EvaluationContext rejects $0 = (axiom $0) either at assumption time or when reducing $0.") {
+TEST_CASE("EvaluationContext rejects $0 = (axiom $0).") {
   Arena arena;
   {
     RuleCollector rules(arena);
@@ -403,13 +463,17 @@ TEST_CASE("EvaluationContext accepts $0 $1 = axiom $1.") {
       arena.argument(1)
     ));
     REQUIRE(result_1 == result_2);
+    result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+    REQUIRE(is_free_from_conglomerates(arena, result_1));
+    result_1 = evaluator.reduce(std::move(result_1));
+    REQUIRE(result_1 == result_2);
     arena.drop(std::move(result_1));
     arena.drop(std::move(result_2));
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
-TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
+TEST_CASE("EvaluationContext can deal with pairs of equal declarations of nested fucntions.") {
   Arena arena;
   {
     RuleCollector rules(arena);
@@ -431,6 +495,10 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
         auto result_1 = evaluator.reduce(nest_expr(1));
         auto result_2 = evaluator.reduce(nest_expr(0));
         REQUIRE(result_1 == result_2);
+        result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+        REQUIRE(is_free_from_conglomerates(arena, result_1));
+        result_1 = evaluator.reduce(std::move(result_1));
+        REQUIRE(result_1 == result_2);
         arena.drop(std::move(result_1));
         arena.drop(std::move(result_2));
       }
@@ -440,6 +508,10 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
         for(std::size_t size = 2; size < 50; ++size) {
           auto result_1 = evaluator.reduce(nest_expr(size));
           auto result_2 = evaluator.reduce(nest_expr(0));
+          REQUIRE(result_1 == result_2);
+          result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+          REQUIRE(is_free_from_conglomerates(arena, result_1));
+          result_1 = evaluator.reduce(std::move(result_1));
           REQUIRE(result_1 == result_2);
           arena.drop(std::move(result_1));
           arena.drop(std::move(result_2));
@@ -456,6 +528,10 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
             auto result_1 = evaluator.reduce(nest_expr(base + step * repeats));
             auto result_2 = evaluator.reduce(nest_expr(base));
             REQUIRE(result_1 == result_2);
+            result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+            REQUIRE(is_free_from_conglomerates(arena, result_1));
+            result_1 = evaluator.reduce(std::move(result_1));
+            REQUIRE(result_1 == result_2);
             arena.drop(std::move(result_1));
             arena.drop(std::move(result_2));
           }
@@ -471,6 +547,10 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
       auto result_1 = evaluator.reduce(nest_expr(1));
       auto result_2 = evaluator.reduce(nest_expr(0));
       REQUIRE(result_1 == result_2);
+      result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+      REQUIRE(is_free_from_conglomerates(arena, result_1));
+      result_1 = evaluator.reduce(std::move(result_1));
+      REQUIRE(result_1 == result_2);
       arena.drop(std::move(result_1));
       arena.drop(std::move(result_2));
     }
@@ -483,7 +563,7 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
         return y;
       };
       for(std::size_t x = 1; x < 20; ++x) {
-        for(std::size_t y = x + 1; y <= 20; ++y) {
+        for(std::size_t y = 1; y <= 20; ++y) {
           auto divisor = gcd(x, y);
           EvaluationContext evaluator(arena, rules);
           auto equal_err = evaluator.assume_equal(nest_expr(x), nest_expr(0));
@@ -494,8 +574,21 @@ TEST_CASE("EvaluationContext can deal with pairs of equal declarations.") {
             INFO("With iterates " << x << " and " << y << ", checking iterate " << z);
             if(z % divisor == 0) {
               REQUIRE(result_1 == result_2);
+              result_1 = evaluator.eliminate_conglomerates(std::move(result_1));
+              REQUIRE(is_free_from_conglomerates(arena, result_1));
+              result_1 = evaluator.reduce(std::move(result_1));
+              REQUIRE(result_1 == result_2);
             } else {
               REQUIRE(result_1 != result_2);
+              auto free_1 = evaluator.eliminate_conglomerates(arena.copy(result_1));
+              REQUIRE(is_free_from_conglomerates(arena, free_1));
+              free_1 = evaluator.reduce(std::move(free_1));
+              REQUIRE(free_1 == result_1);
+              auto free_2 = evaluator.eliminate_conglomerates(arena.copy(result_2));
+              REQUIRE(is_free_from_conglomerates(arena, free_2));
+              free_2 = evaluator.reduce(std::move(free_2));
+              REQUIRE(free_2 == result_2);
+              destroy_from_arena(arena, free_1, free_2);
             }
             arena.drop(std::move(result_1));
             arena.drop(std::move(result_2));
