@@ -27,6 +27,7 @@ namespace solver::evaluator {
           return interface.arena.declaration();
         }
       }();
+      interface.register_type(var, local_context.instance_of_type_family(interface.arena.copy(type)));
       interface.register_declaration(var);
       if constexpr(kind == VariableKind::indeterminate) {
         interface.register_definable_indeterminate(interface.arena.copy(var));
@@ -252,8 +253,11 @@ namespace solver::evaluator {
       .type = interface.type,
       .arrow = interface.arrow,
       .id = interface.id,
+      .constant = interface.constant,
+      .type_family = interface.type_family,
       .arena = interface.arena,
       .rule_collector = interface.rule_collector,
+      .register_type = interface.register_type,
       .register_declaration = interface.register_declaration,
       .add_rule = interface.add_rule
     });

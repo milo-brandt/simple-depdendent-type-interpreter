@@ -7,8 +7,13 @@ stack::Stack get_empty_stack_for(solver::BasicContext& context) {
     .type = context.primitives.type,
     .arrow = context.primitives.arrow,
     .id = context.primitives.id,
+    .constant = context.primitives.constant,
+    .type_family = context.primitives.type_family,
     .arena = context.arena,
     .rule_collector = context.rule_collector,
+    .register_type = [&context](new_expression::WeakExpression, new_expression::OwnedExpression t) {
+      context.arena.drop(std::move(t));
+    },
     .register_declaration = [&context](new_expression::WeakExpression expr) {
       context.rule_collector.register_declaration(expr);
     },

@@ -46,6 +46,7 @@ namespace stack {
   }
   OwnedExpression Stack::instance_of_type_family(OwnedExpression expr) const {
     auto v = impl->interface.arena.declaration();
+    impl->interface.register_type(v, impl->interface.arena.copy(impl->fam));
     impl->interface.register_declaration(v);
     impl->interface.add_rule({
       .pattern = lambda_pattern(impl->interface.arena.copy(v), depth()),
@@ -85,6 +86,10 @@ namespace stack {
   Stack Stack::extend(OwnedExpression extension_family) const {
     auto& arena = impl->interface.arena;
     auto extension_ext = arena.declaration();
+    impl->interface.register_type(
+      extension_ext,
+      arena.copy(impl->fam)
+    );
     impl->interface.register_declaration(extension_ext);
     impl->interface.add_rule({
       .pattern = lambda_pattern(arena.copy(extension_ext), impl->depth),
@@ -100,9 +105,39 @@ namespace stack {
     auto var_p = arena.declaration();
     impl->interface.register_declaration(var_p);
 
+
     auto new_fam = arena.apply(
       arena.copy(impl->var),
       arena.copy(family_over)
+    );
+
+    impl->interface.register_type(
+      inner_constant_family,
+      arena.copy(new_fam)
+    );
+    impl->interface.register_type(
+      family_over,
+      arena.copy(impl->fam)
+    );
+    impl->interface.register_type(
+      as_fibration,
+      arena.apply(
+        arena.copy(impl->interface.arrow),
+        arena.copy(new_fam),
+        arena.apply(
+          arena.copy(impl->interface.constant),
+          arena.copy(impl->interface.type),
+          arena.copy(impl->fam),
+          arena.copy(new_fam)
+        )
+      )
+    );
+    impl->interface.register_type(
+      var_p,
+      arena.apply(
+        arena.copy(impl->interface.type_family),
+        arena.copy(new_fam)
+      )
     );
     auto apply_args = [&](OwnedExpression head, std::uint64_t arg_start, std::uint64_t arg_count) {
       for(std::uint64_t i = 0; i < arg_count; ++i) {

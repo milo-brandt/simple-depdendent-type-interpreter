@@ -16,6 +16,8 @@ namespace solver::evaluator {
     new_expression::WeakExpression arrow_type;
     new_expression::WeakExpression type_family;
     new_expression::WeakExpression id;
+    new_expression::WeakExpression constant;
+    std::function<void(new_expression::WeakExpression, new_expression::OwnedExpression)> register_type;
     std::function<void(new_expression::WeakExpression)> register_declaration;
     std::function<void(new_expression::OwnedExpression)> register_definable_indeterminate;
     std::function<void(new_expression::Rule)> add_rule;

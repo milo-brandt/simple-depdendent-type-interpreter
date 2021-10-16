@@ -11,7 +11,13 @@ namespace solver {
   BasicContext::BasicContext(new_expression::Arena& arena):
     arena(arena),
     rule_collector(arena),
-    primitives(arena, rule_collector){}
+    primitives(arena, rule_collector),
+    primitive_types(arena)
+  {
+    for(auto& pair : primitives.get_types_of_primitives(arena)) {
+      primitive_types.set(pair.first, std::move(pair.second));
+    }
+  }
   BasicContext::~BasicContext() {
     destroy_from_arena(arena, primitives);
   }
@@ -36,6 +42,7 @@ namespace solver {
     RuleCollector& rule_collector;
     new_expression::EvaluationContext evaluation;
     new_expression::TypeTheoryPrimitives& primitives;
+    new_expression::WeakKeyMap<new_expression::OwnedExpression, new_expression::PartDestroyer>& primitive_types;
     std::vector<EquationSolver> active_solvers;
     std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeySet definable_indeterminates;
@@ -268,6 +275,10 @@ namespace solver {
         .arrow_type = primitives.arrow_type,
         .type_family = primitives.type_family,
         .id = primitives.id,
+        .constant = primitives.constant,
+        .register_type = [this](WeakExpression primitive, OwnedExpression type) {
+          primitive_types.set(primitive, std::move(type));
+        },
         .register_declaration = [this](WeakExpression expr) {
           rule_collector.register_declaration(expr);
         },
@@ -307,6 +318,7 @@ namespace solver {
     .rule_collector = context.rule_collector,
     .evaluation{context.arena, context.rule_collector},
     .primitives = context.primitives,
+    .primitive_types{context.primitive_types},
     .definable_indeterminates{context.arena}
   }){}
   Manager::Manager(Manager&&) = default;

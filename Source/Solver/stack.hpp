@@ -10,8 +10,11 @@ namespace stack {
     new_expression::WeakExpression type; //Type
     new_expression::WeakExpression arrow; //\S:Type.\T:S -> Type.(x : S) -> T x;
     new_expression::WeakExpression id; //\T:Type.\x:T.x
+    new_expression::WeakExpression constant; //\T:Type.\x:T.\S:Type.\y:S.x
+    new_expression::WeakExpression type_family; //\T:Type.T -> Type
     new_expression::Arena& arena;
     new_expression::RuleCollector& rule_collector;
+    std::function<void(new_expression::WeakExpression, new_expression::OwnedExpression)> register_type;
     std::function<void(new_expression::WeakExpression)> register_declaration;
     std::function<void(new_expression::Rule)> add_rule;
   };

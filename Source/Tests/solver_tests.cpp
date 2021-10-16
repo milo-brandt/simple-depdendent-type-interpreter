@@ -9,8 +9,13 @@ stack::Stack get_empty_stack_for(new_expression::Arena& arena, new_expression::R
     .type = placeholder, //ugly hack
     .arrow = placeholder,
     .id = placeholder,
+    .constant = placeholder,
+    .type_family = placeholder,
     .arena = arena,
     .rule_collector = rule_collector,
+    .register_type = [&arena](new_expression::WeakExpression, new_expression::OwnedExpression t) {
+      arena.drop(std::move(t));
+    },
     .register_declaration = [&rule_collector](new_expression::WeakExpression expr) {
       rule_collector.register_declaration(expr);
     },
