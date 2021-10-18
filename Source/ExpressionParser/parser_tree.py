@@ -164,9 +164,7 @@ resolution = shape.generate_instance(namespace = "expression_parser::resolved", 
             ("is_local", "bool"),
             ("var_index", "std::uint64_t")
         ],
-        "PatternHole": [
-            ("var_index", "std::uint64_t") # guarunteed to be local
-        ]
+        "PatternHole": []
     },
     "Command": {
         "Declare": [],

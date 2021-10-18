@@ -80,30 +80,6 @@ namespace compiler::new_instruction {
       located_output::Expression compile(resolved_archive::Expression const& expression);
       void compile(resolved_archive::Command const& command);
     };
-    located_output::Expression InstructionContext::compile(resolved_archive::Pattern const& pattern) {
-      return pattern.visit(mdb::overloaded{
-        [&](resolved_archive::PatternApply const& apply) -> located_output::Expression {
-          return located_output::Apply{
-            .lhs = compile(apply.lhs),
-            .rhs = compile(apply.rhs),
-            .source = {ExplanationKind::pattern_apply, apply.index()}
-          };
-        },
-        [&](resolved_archive::PatternIdentifier const& id) -> located_output::Expression {
-          if(id.is_local) {
-            return resolved_local(id.var_index, {ExplanationKind::pattern_id, id.index()});
-          } else {
-            return located_output::Embed{
-              .embed_index = id.var_index,
-              .source = {ExplanationKind::pattern_embed, id.index()}
-            };
-          }
-        },
-        [&](resolved_archive::PatternHole const& hole) -> located_output::Expression {
-          return resolved_local(hole.var_index, {ExplanationKind::pattern_hole, hole.index()});
-        }
-      });
-    }
     located_output::Expression InstructionContext::compile(resolved_archive::Expression const& expression) {
       return expression.visit(mdb::overloaded{
         [&](resolved_archive::Apply const& apply) -> located_output::Expression {
@@ -277,31 +253,57 @@ namespace compiler::new_instruction {
           });
         },
         [&](resolved_archive::Rule const& rule) {
-          std::terminate();
-          /*struct Detail {
+          struct Detail {
             InstructionContext& me;
-            std::size_t base_stack_size;
-            std::size_t count_captures(resolved_archive::Pattern const& pattern) {
+            std::size_t local_base;
+            located_output::Pattern get_pattern(resolved_archive::Pattern const& pattern) {
               return pattern.visit(mdb::overloaded{
-                [&](resolved_archive::PatternApply const& apply) {
-                  return 1 + count_captures(apply.lhs) + count_captures(apply.rhs);
+                [&](resolved_archive::PatternApply const& apply) -> located_output::Pattern {
+                  return located_output::PatternApply{
+                    .lhs = get_pattern(apply.lhs),
+                    .rhs = get_pattern(apply.rhs),
+                    .source = {ExplanationKind::unknown, pattern.index()}
+                  };
                 },
-                [&](resolved_archive::PatternIdentifier const& id) -> std::size_t {
-                  if(id.is_local && id.var_index >= base_stack_size) {
-                    return 0; //direct capture
-                  } else if(id.is_local) {
+                [&](resolved_archive::PatternIdentifier const& id) -> located_output::Pattern {
+                  if(id.is_local) {
+                    if(id.var_index >= local_base) {
+                      return located_output::PatternCapture{
+                        .capture_index = id.var_index - local_base,
+                        .source = {ExplanationKind::unknown, pattern.index()}
+                      };
+                    } else {
+                      return located_output::PatternLocal{
+                        .local_index = me.locals_stack[id.var_index],
+                        .source = {ExplanationKind::unknown, pattern.index()}
+                      };
+                    }
                   } else {
-                    return 1; //match
+                    return located_output::PatternEmbed{
+                      .embed_index = id.var_index,
+                      .source = {ExplanationKind::unknown, pattern.index()}
+                    };
                   }
                 },
-                [&](resolved_archive::PatternHole const&) -> std::size_t {
-                  return 0;
+                [&](resolved_archive::PatternHole const& hole) -> located_output::Pattern {
+                  return located_output::PatternHole{
+                    .source = {ExplanationKind::unknown, pattern.index()}
+                  };
                 }
               });
             }
           };
-          auto capture_count = Detail{}.count_captures(rule.pattern);
-            */
+          Detail detail{*this, locals_stack.size()};
+          auto [replacement_commands, replacement] = sub_frame(rule.args_in_pattern, {ExplanationKind::unknown, rule.index()}, [&](std::size_t arg_index) {
+            return compile(rule.replacement);
+          });
+          commands.push_back(located_output::Rule{
+            .primary_pattern = detail.get_pattern(rule.pattern),
+            .commands = std::move(replacement_commands),
+            .replacement = std::move(replacement),
+            .capture_count = rule.args_in_pattern,
+            .source = {ExplanationKind::unknown, rule.index()}
+          });
         },
         [&](resolved_archive::Axiom const& axiom) {
           local_result_of(located_output::Axiom{
