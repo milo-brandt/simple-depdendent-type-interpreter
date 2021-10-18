@@ -52,7 +52,7 @@ namespace compiler::new_instruction {
         }, result_explanation);
       }
       template<class Callback>
-      auto sub_frame(std::size_t inner_arg_ct, Explanation explanation, Callback&& callback) {
+      auto sub_frame(std::size_t inner_arg_ct, Callback&& callback) {
         std::vector<located_output::Command> old_commands;
         std::swap(commands, old_commands);
         auto old_stack_size = output_stack_size;
@@ -122,25 +122,25 @@ namespace compiler::new_instruction {
             .type = std::move(lambda_type),
             .source = {ExplanationKind::lambda_declaration, lambda.index()}
           }, {ExplanationKind::lambda_declaration_local, lambda.index()});
-          auto [body_commands, body] = sub_frame(1, {ExplanationKind::unknown, lambda.index()}, [&](std::size_t arg_index) {
+          auto [body_commands, body] = sub_frame(1, [&](std::size_t arg_index) {
             return compile(lambda.body);
           });
           commands.push_back(located_output::Rule{
             .primary_pattern = located_output::PatternApply{
               .lhs = located_output::PatternLocal{
                 .local_index = ret.local_index,
-                .source = {ExplanationKind::unknown, lambda.index()}
+                .source = {ExplanationKind::lambda_pat_head, lambda.index()}
               },
               .rhs = located_output::PatternCapture{
                 .capture_index = 0,
-                .source = {ExplanationKind::unknown, lambda.index()}
+                .source = {ExplanationKind::lambda_pat_arg, lambda.index()}
               },
-              .source = {ExplanationKind::unknown, lambda.index()}
+              .source = {ExplanationKind::lambda_pat_apply, lambda.index()}
             },
             .commands = std::move(body_commands),
             .replacement = std::move(body),
             .capture_count = 1,
-            .source = {ExplanationKind::unknown, lambda.index()}
+            .source = {ExplanationKind::lambda_rule, lambda.index()}
           });
           return ret;
         },
@@ -172,25 +172,25 @@ namespace compiler::new_instruction {
             },
             .source = {ExplanationKind::arrow_codomain_type, arrow.index()}
           }, {ExplanationKind::arrow_codomain, arrow.index()});
-          auto [body_commands, body] = sub_frame(1, {ExplanationKind::unknown, arrow.index()}, [&](std::size_t arg_index) {
+          auto [body_commands, body] = sub_frame(1, [&](std::size_t arg_index) {
             return compile(arrow.codomain);
           });
           commands.push_back(located_output::Rule{
             .primary_pattern = located_output::PatternApply{
               .lhs = located_output::PatternLocal{
                 .local_index = codomain.local_index,
-                .source = {ExplanationKind::unknown, arrow.index()}
+                .source = {ExplanationKind::arrow_pattern_head, arrow.index()}
               },
               .rhs = located_output::PatternCapture{
                 .capture_index = 0,
-                .source = {ExplanationKind::unknown, arrow.index()}
+                .source = {ExplanationKind::arrow_pattern_arg, arrow.index()}
               },
-              .source = {ExplanationKind::unknown, arrow.index()}
+              .source = {ExplanationKind::arrow_pattern_apply, arrow.index()}
             },
             .commands = std::move(body_commands),
             .replacement = std::move(body),
             .capture_count = 1,
-            .source = {ExplanationKind::unknown, arrow.index()}
+            .source = {ExplanationKind::arrow_rule, arrow.index()}
           });
           return this->arrow(domain, codomain,
             {ExplanationKind::arrow_arrow, arrow.index()},
@@ -262,7 +262,7 @@ namespace compiler::new_instruction {
                   return located_output::PatternApply{
                     .lhs = get_pattern(apply.lhs),
                     .rhs = get_pattern(apply.rhs),
-                    .source = {ExplanationKind::unknown, pattern.index()}
+                    .source = {ExplanationKind::pattern_apply, pattern.index()}
                   };
                 },
                 [&](resolved_archive::PatternIdentifier const& id) -> located_output::Pattern {
@@ -270,31 +270,31 @@ namespace compiler::new_instruction {
                     if(id.var_index >= local_base) {
                       return located_output::PatternCapture{
                         .capture_index = id.var_index - local_base,
-                        .source = {ExplanationKind::unknown, pattern.index()}
+                        .source = {ExplanationKind::pattern_capture, pattern.index()}
                       };
                     } else {
                       return located_output::PatternLocal{
                         .local_index = me.locals_stack[id.var_index],
-                        .source = {ExplanationKind::unknown, pattern.index()}
+                        .source = {ExplanationKind::pattern_local, pattern.index()}
                       };
                     }
                   } else {
                     return located_output::PatternEmbed{
                       .embed_index = id.var_index,
-                      .source = {ExplanationKind::unknown, pattern.index()}
+                      .source = {ExplanationKind::pattern_embed, pattern.index()}
                     };
                   }
                 },
                 [&](resolved_archive::PatternHole const& hole) -> located_output::Pattern {
                   return located_output::PatternHole{
-                    .source = {ExplanationKind::unknown, pattern.index()}
+                    .source = {ExplanationKind::pattern_hole, pattern.index()}
                   };
                 }
               });
             }
           };
           Detail detail{*this, locals_stack.size()};
-          auto [replacement_commands, replacement] = sub_frame(rule.args_in_pattern, {ExplanationKind::unknown, rule.index()}, [&](std::size_t arg_index) {
+          auto [replacement_commands, replacement] = sub_frame(rule.args_in_pattern, [&](std::size_t arg_index) {
             return compile(rule.replacement);
           });
           commands.push_back(located_output::Rule{
@@ -302,7 +302,7 @@ namespace compiler::new_instruction {
             .commands = std::move(replacement_commands),
             .replacement = std::move(replacement),
             .capture_count = rule.args_in_pattern,
-            .source = {ExplanationKind::unknown, rule.index()}
+            .source = {ExplanationKind::rule, rule.index()}
           });
         },
         [&](resolved_archive::Axiom const& axiom) {
