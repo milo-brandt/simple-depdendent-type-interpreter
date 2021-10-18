@@ -257,6 +257,7 @@ namespace solver::evaluator {
       .type_family = interface.type_family,
       .arena = interface.arena,
       .rule_collector = interface.rule_collector,
+      .type_collector = interface.type_collector,
       .register_type = interface.register_type,
       .register_declaration = interface.register_declaration,
       .add_rule = interface.add_rule

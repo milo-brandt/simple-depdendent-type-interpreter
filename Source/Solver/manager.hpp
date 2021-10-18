@@ -17,7 +17,7 @@ namespace solver {
     new_expression::Arena& arena;
     new_expression::RuleCollector rule_collector;
     new_expression::TypeTheoryPrimitives primitives;
-    new_expression::WeakKeyMap<new_expression::OwnedExpression, new_expression::PartDestroyer> primitive_types;
+    new_expression::PrimitiveTypeCollector type_collector;
     BasicContext(new_expression::Arena&);
     BasicContext(BasicContext&&) = default;
     BasicContext& operator=(BasicContext&&) = default;

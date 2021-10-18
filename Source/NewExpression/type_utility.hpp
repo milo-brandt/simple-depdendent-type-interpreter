@@ -17,6 +17,9 @@ namespace new_expression {
     mdb::function<OwnedExpression(OwnedExpression)> reduce_head;
   };
   OwnedExpression get_type_of(Arena& arena, WeakExpression, TypeGetterContext const&);
+  struct PrimitiveTypeCollector {
+    WeakKeyMap<OwnedExpression, PartDestroyer> type_of_primitive;
+  };
 }
 
 #endif

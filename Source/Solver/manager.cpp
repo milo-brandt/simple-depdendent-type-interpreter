@@ -12,10 +12,10 @@ namespace solver {
     arena(arena),
     rule_collector(arena),
     primitives(arena, rule_collector),
-    primitive_types(arena)
+    type_collector(arena)
   {
     for(auto& pair : primitives.get_types_of_primitives(arena)) {
-      primitive_types.set(pair.first, std::move(pair.second));
+      type_collector.type_of_primitive.set(pair.first, std::move(pair.second));
     }
   }
   BasicContext::~BasicContext() {
@@ -42,7 +42,7 @@ namespace solver {
     RuleCollector& rule_collector;
     new_expression::EvaluationContext evaluation;
     new_expression::TypeTheoryPrimitives& primitives;
-    new_expression::WeakKeyMap<new_expression::OwnedExpression, new_expression::PartDestroyer>& primitive_types;
+    new_expression::PrimitiveTypeCollector& type_collector;
     std::vector<EquationSolver> active_solvers;
     std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeySet definable_indeterminates;
@@ -270,6 +270,7 @@ namespace solver {
       return {
         .arena = arena,
         .rule_collector = rule_collector,
+        .type_collector = type_collector,
         .type = primitives.type,
         .arrow = primitives.arrow,
         .arrow_type = primitives.arrow_type,
@@ -277,7 +278,7 @@ namespace solver {
         .id = primitives.id,
         .constant = primitives.constant,
         .register_type = [this](WeakExpression primitive, OwnedExpression type) {
-          primitive_types.set(primitive, std::move(type));
+          type_collector.type_of_primitive.set(primitive, std::move(type));
         },
         .register_declaration = [this](WeakExpression expr) {
           rule_collector.register_declaration(expr);
@@ -318,7 +319,7 @@ namespace solver {
     .rule_collector = context.rule_collector,
     .evaluation{context.arena, context.rule_collector},
     .primitives = context.primitives,
-    .primitive_types{context.primitive_types},
+    .type_collector{context.type_collector},
     .definable_indeterminates{context.arena}
   }){}
   Manager::Manager(Manager&&) = default;

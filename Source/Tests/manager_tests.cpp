@@ -11,6 +11,7 @@ stack::Stack get_empty_stack_for(solver::BasicContext& context) {
     .type_family = context.primitives.type_family,
     .arena = context.arena,
     .rule_collector = context.rule_collector,
+    .type_collector = context.type_collector,
     .register_type = [&context](new_expression::WeakExpression, new_expression::OwnedExpression t) {
       context.arena.drop(std::move(t));
     },

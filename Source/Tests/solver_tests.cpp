@@ -13,6 +13,7 @@ stack::Stack get_empty_stack_for(new_expression::Arena& arena, new_expression::R
     .type_family = placeholder,
     .arena = arena,
     .rule_collector = rule_collector,
+    .type_collector = *(new_expression::PrimitiveTypeCollector*)nullptr,
     .register_type = [&arena](new_expression::WeakExpression, new_expression::OwnedExpression t) {
       arena.drop(std::move(t));
     },

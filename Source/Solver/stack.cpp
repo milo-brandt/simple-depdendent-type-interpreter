@@ -67,6 +67,33 @@ namespace stack {
     if(!ptr->parent) std::terminate();
     return ptr->interface.arena.copy(*ptr->parent->extension_family);
   }
+  OwnedExpression Stack::type_of(WeakExpression expr) const {
+    return new_expression::get_type_of(impl->interface.arena, expr, {
+      .arrow = impl->interface.arrow,
+      .type_of_primitive = [&](WeakExpression expr) {
+        return impl->interface.arena.visit(expr, mdb::overloaded{
+          [&](new_expression::Apply const&) -> OwnedExpression { std::terminate(); }, //not primitive
+          [&](new_expression::Argument const& arg) {
+            return type_of_arg(arg.index);
+          },
+          [&](new_expression::Conglomerate const& conglom) {
+            auto equiv = impl->evaluation->eliminate_conglomerates(impl->interface.arena.copy(expr));
+            auto ret = type_of(equiv);
+            impl->interface.arena.drop(std::move(equiv));
+            return ret;
+          },
+          [&](auto const&) {
+            return impl->interface.arena.copy(
+              impl->interface.type_collector.type_of_primitive.at(expr)
+            );
+          }
+        });
+      },
+      .reduce_head = [&](OwnedExpression expr) {
+        return impl->evaluation->reduce(std::move(expr));
+      }
+    });
+  }
   Stack Stack::empty(StackInterface context) {
     auto& arena = context.arena;
     auto type = arena.copy(context.type);
