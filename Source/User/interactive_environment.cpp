@@ -27,21 +27,22 @@ namespace interactive {
     };
     struct EvaluateInfo : ResolveInfo {
       new_expression::TypedValue result;
+      new_expression::WeakKeyMap<solver::evaluator::variable_explanation::Any> variable_explanations;
+      compiler::new_instruction::output::archive_root::Program instruction_output;
+      compiler::new_instruction::locator::archive_root::Program instruction_locator;
       /*compiler::evaluate::EvaluateResult evaluate_result;
-      compiler::instruction::output::archive_root::Program instruction_output;
-      compiler::instruction::locator::archive_root::Program instruction_locator;
       std::uint64_t rule_begin;
       std::uint64_t rule_end;*/
       //solver::ErrorInfo error_info;
 
       //bool is_solved() const { return error_info.failed_equations.empty() && error_info.unconstrainable_patterns.empty(); }
-      /*std::optional<std::string_view> get_explicit_name(std::uint64_t ext_index) const {
-        namespace explanation = compiler::evaluate::variable_explanation;
-        if(!evaluate_result.variables.contains(ext_index)) return std::nullopt;
-        auto const& reason = evaluate_result.variables.at(ext_index);
+      std::optional<std::string_view> get_explicit_name(new_expression::WeakExpression primitive) const {
+        namespace explanation = solver::evaluator::variable_explanation;
+        if(!variable_explanations.contains(primitive)) return std::nullopt;
+        auto const& reason = variable_explanations.at(primitive);
         if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
           auto const& location = instruction_locator[declared->index];
-          if(location.source.kind == compiler::instruction::ExplanationKind::declare) {
+          if(location.source.kind == compiler::new_instruction::ExplanationKind::declare) {
             auto const& parsed_position = parser_output[location.source.index];
             if(auto* declare_locator = parsed_position.get_if_declare()) {
               return declare_locator->name;
@@ -49,7 +50,7 @@ namespace interactive {
           }
         } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
           auto const& location = instruction_locator[axiom->index];
-          if(location.source.kind == compiler::instruction::ExplanationKind::axiom) {
+          if(location.source.kind == compiler::new_instruction::ExplanationKind::axiom) {
             auto const& parsed_position = parser_output[location.source.index];
             if(auto* axiom_locator = parsed_position.get_if_axiom()) {
               return axiom_locator->name;
@@ -58,7 +59,7 @@ namespace interactive {
         }
         return std::nullopt;
       }
-      std::vector<std::pair<std::string, expression::TypedValue> > get_outer_values() { //values in outermost block, if such a thing makes sense.
+      /*std::vector<std::pair<std::string, expression::TypedValue> > get_outer_values() { //values in outermost block, if such a thing makes sense.
         if(!parser_output.root().holds_block()) return {}; //only do anything if block is outermost thing
         auto const& block = parser_output.root().get_block();
         struct IndexHasher { std::size_t operator()(expression_parser::archive_index::PolymorphicKind const& i) const { return i.index(); }};
@@ -248,8 +249,14 @@ namespace interactive {
       auto instruction_output = archive(std::move(instructions.output));
       auto instruction_locator = archive(std::move(instructions.locator));
       solver::Manager manager(context);
-      auto interface = manager.get_evaluator_interface([&](std::uint64_t embed_index) {
-        return copy_on_arena(arena, input.embeds[embed_index]);
+      new_expression::WeakKeyMap<solver::evaluator::variable_explanation::Any> variable_explanations(arena);
+      auto interface = manager.get_evaluator_interface({
+        .explain_variable = [&](new_expression::WeakExpression primitive, solver::evaluator::variable_explanation::Any explanation) {
+          variable_explanations.set(primitive, explanation);
+        },
+        .embed = [&](std::uint64_t embed_index) {
+          return copy_on_arena(arena, input.embeds[embed_index]);
+        }
       });
       auto eval_result = solver::evaluator::evaluate(instruction_output.root().get_program_root(), std::move(interface));
       manager.run();
@@ -260,7 +267,10 @@ namespace interactive {
 
       return EvaluateInfo{
         std::move(input),
-        std::move(eval_result)
+        std::move(eval_result),
+        std::move(variable_explanations),
+        std::move(instruction_output),
+        std::move(instruction_locator)
       };
     }
     mdb::Result<EvaluateInfo, std::string> full_compile(std::string_view str) {
@@ -594,7 +604,9 @@ namespace interactive {
     auto result = full_compile(expr);
     if(auto* value = result.get_if_value()) {
       auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
-        if(externals_to_names.contains(expr)) {
+        if(auto name = value->get_explicit_name(expr)) {
+          o << *name;
+        } else if(externals_to_names.contains(expr)) {
           o << externals_to_names.at(expr);
         } else if(arena.holds_declaration(expr)) {
           o << "decl_" << expr.index();
