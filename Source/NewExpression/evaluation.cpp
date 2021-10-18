@@ -333,7 +333,7 @@ namespace new_expression {
       std::size_t conglomerate_index_of_class(std::size_t class_index) {
         return std::visit([](auto const& status) {
           return status.conglomerate_index;
-        }, conglomerate_class_info[conglomerate_to_class[class_index]].status);
+        }, conglomerate_class_info[class_index].status);
       }
       bool conglomerate_has_definition(std::size_t index) {
         return std::visit(mdb::overloaded{
