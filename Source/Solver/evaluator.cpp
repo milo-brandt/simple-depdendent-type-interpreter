@@ -1,12 +1,13 @@
 #include "evaluator.hpp"
 #include "../NewExpression/arena_utility.hpp"
+#include "rule_utility.hpp"
 
 namespace solver::evaluator {
   using TypedValue = new_expression::TypedValue;
   using OwnedExpression = new_expression::OwnedExpression;
   using WeakExpression = new_expression::WeakExpression;
   using Stack = stack::Stack;
-  namespace instruction_archive = compiler::instruction::output::archive_part;
+  namespace instruction_archive = compiler::new_instruction::output::archive_part;
   using Expression = expression::tree::Expression;
   enum class VariableKind {
     axiom,
@@ -138,11 +139,11 @@ namespace solver::evaluator {
         },
         [&](instruction_archive::PrimitiveExpression const& primitive) -> ExpressionResult {
           switch(primitive.primitive) {
-            case compiler::instruction::Primitive::type: return TypedValue{
+            case compiler::new_instruction::Primitive::type: return TypedValue{
               .value = interface.arena.copy(interface.type),
               .type = interface.arena.copy(interface.type)
             };
-            case compiler::instruction::Primitive::arrow: return {
+            case compiler::new_instruction::Primitive::arrow: return {
               .value = interface.arena.copy(interface.arrow),
               .type = interface.arena.copy(interface.arrow_type)
             };
@@ -194,15 +195,41 @@ namespace solver::evaluator {
           return create_declaration<VariableKind::axiom>(axiom.type, local_context);
         },
         [&](instruction_archive::Rule const& rule) {
-          auto pattern = evaluate(rule.pattern, local_context);
-          auto replacement = evaluate(rule.replacement, local_context);
-          interface.rule({
-            .stack = local_context,
-            .pattern_type = std::move(pattern.type),
-            .pattern = std::move(pattern.value),
-            .replacement_type = std::move(replacement.type),
+          if(rule.secondary_matches.begin() != rule.secondary_matches.end()) std::terminate();
+          if(rule.secondary_patterns.begin() != rule.secondary_patterns.end()) std::terminate();
+          auto resolved = resolve_pattern(rule.primary_pattern, {
+            .lookup_local = [&](std::uint64_t index) {
+              return interface.arena.copy(locals.at(index).value);
+            },
+            .lookup_embed = [&](std::uint64_t index) {
+              auto typed = interface.embed(index);
+              interface.arena.drop(std::move(typed.type));
+              return std::move(typed.value);
+            }
+          });
+          auto folded = normalize_pattern(interface.arena, std::move(resolved), rule.capture_count);
+          auto flat = flatten_pattern(interface.arena, std::move(folded));
+          auto executed = execute_pattern(interface.arena, local_context, interface.arrow, std::move(flat));
+          auto locals_size_before = locals.size();
+          for(auto& capture : executed.captures) {
+            locals.push_back({
+              std::move(capture),
+              executed.pattern_stack.type_of(capture)
+            });
+          }
+          for(auto const& command : rule.commands) {
+            evaluate(command, executed.pattern_stack);
+          }
+          auto replacement = evaluate(rule.replacement, executed.pattern_stack);
+          for(std::size_t i = locals_size_before; i < locals.size(); ++i) {
+            destroy_from_arena(interface.arena, locals[i]);
+          }
+          locals.erase(locals.begin() + locals_size_before, locals.end());
+          interface.add_rule({
+            .pattern = std::move(executed.pattern),
             .replacement = std::move(replacement.value)
           });
+          destroy_from_arena(interface.arena, executed.checks, executed.type_of_pattern, replacement.type); //TODO: Actually check
         },
         [&](instruction_archive::Let const& let) {
           if(let.type) {
@@ -223,32 +250,11 @@ namespace solver::evaluator {
             auto result = evaluate(let.value, local_context);
             locals.push_back(std::move(result));
           }
-        },
-        [&](instruction_archive::ForAll const& for_all) {
-          auto local_size = locals.size();
-          auto local_type_raw = evaluate(for_all.type, local_context);
-          auto local_type = cast(
-            std::move(local_type_raw),
-            interface.arena.copy(interface.type),
-            local_context
-          );
-          locals.push_back({
-            .value = interface.arena.argument(local_context.depth()),
-            .type = interface.arena.copy(local_type)
-          });
-          auto new_context = local_context.extend(std::move(local_type));
-          for(auto const& command : for_all.commands) {
-            evaluate(command, new_context);
-          }
-          for(auto it = locals.begin() + local_size; it != locals.end(); ++it) {
-            destroy_from_arena(interface.arena, *it); //destroy typedvalues
-          }
-          locals.erase(locals.begin() + local_size, locals.end()); //restore stack
         }
       });
     }
   };
-  TypedValue evaluate(compiler::instruction::output::archive_part::ProgramRoot const& root, EvaluatorInterface interface) {
+  TypedValue evaluate(compiler::new_instruction::output::archive_part::ProgramRoot const& root, EvaluatorInterface interface) {
     auto local_context = Stack::empty({
       .type = interface.type,
       .arrow = interface.arrow,

@@ -1,7 +1,7 @@
 #ifndef COMPILER_EVALUATOR_HPP
 #define COMPILER_EVALUATOR_HPP
 
-#include "../Compiler/instructions.hpp"
+#include "../Compiler/new_instructions.hpp"
 #include "stack.hpp"
 #include "../NewExpression/evaluation.hpp"
 #include "../NewExpression/typed_value.hpp"
@@ -29,7 +29,7 @@ namespace solver::evaluator {
     mdb::function<void(Rule)> rule;
     mdb::function<new_expression::TypedValue(std::uint64_t)> embed;
   };
-  new_expression::TypedValue evaluate(compiler::instruction::output::archive_part::ProgramRoot const& tree, EvaluatorInterface interface);
+  new_expression::TypedValue evaluate(compiler::new_instruction::output::archive_part::ProgramRoot const& tree, EvaluatorInterface interface);
 }
 
 #endif

@@ -31,8 +31,8 @@ TEST_CASE("The evaluator can handle simple programs") {
     auto simple_embed = make_embeder(arena, embeds);
     SECTION("Embedding a value gives the expected answer") {
       auto embed_index = (std::uint64_t)GENERATE(0, 1, 2);
-      auto program_archive = archive([&]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([&]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {},
           .value = Embed{embed_index}
@@ -49,18 +49,18 @@ TEST_CASE("The evaluator can handle simple programs") {
     }
     SECTION("Embedding primitives gives the expected values") {
       struct Case{
-        compiler::instruction::Primitive primitive;
+        compiler::new_instruction::Primitive primitive;
         new_expression::WeakExpression value;
         new_expression::WeakExpression type;
       };
       auto case_index = GENERATE(0, 1);
       Case cases[] = {
-        {compiler::instruction::Primitive::type, context.primitives.type, context.primitives.type},
-        {compiler::instruction::Primitive::arrow, context.primitives.arrow, context.primitives.arrow_type}
+        {compiler::new_instruction::Primitive::type, context.primitives.type, context.primitives.type},
+        {compiler::new_instruction::Primitive::arrow, context.primitives.arrow, context.primitives.arrow_type}
       };
       auto const& active_case = cases[case_index];
-      auto program_archive = archive([&]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([&]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {},
           .value = PrimitiveExpression{active_case.primitive}
@@ -76,8 +76,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret);
     }
     SECTION("A simple application is correctly interpreted") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {},
           .value = Apply{
@@ -114,8 +114,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret, expected_value, expected_type);
     }
     SECTION("The TypeFamily element is correctly interpreted") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {},
           .value = TypeFamilyOver{
@@ -141,8 +141,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret, inner_application);
     }
     SECTION("A declaration can be created") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {
             Declare{
@@ -163,8 +163,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret);
     }
     SECTION("An axiom can be created") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {
             Axiom{
@@ -185,8 +185,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret);
     }
     SECTION("An ill-typed application is not solved") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {},
           .value = Apply{
@@ -257,8 +257,8 @@ TEST_CASE("The evaluator can handle simple programs") {
         {f, f_type},
         {x, x_type}
       };
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {
             DeclareHole{
@@ -292,8 +292,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret, expected_value);
     }
     SECTION("A simple type family defined by a lambda function is interpreted correctly.") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {
             Declare{ //codomain
@@ -301,17 +301,13 @@ TEST_CASE("The evaluator can handle simple programs") {
                 Embed{2}
               }
             },
-            ForAll {
-              .type = Embed{2},
-              .commands = {
-                Rule {
-                  .pattern = Apply{
-                    Local{0},
-                    Local{1}
-                  },
-                  .replacement = Embed{2}
-                }
-              }
+            Rule{
+              .primary_pattern = PatternApply{
+                PatternLocal{0},
+                PatternCapture{0}
+              },
+              .replacement = Embed{2},
+              .capture_count = 1
             }
           },
           .value = Local{0}
@@ -342,8 +338,8 @@ TEST_CASE("The evaluator can handle simple programs") {
       destroy_from_arena(arena, ret, application, inner_application_type);
     }
     SECTION("The identity function Nat -> Nat can be defined through the evaluator.") {
-      auto program_archive = archive([]() -> compiler::instruction::output::Program {
-        using namespace compiler::instruction::output;
+      auto program_archive = archive([]() -> compiler::new_instruction::output::Program {
+        using namespace compiler::new_instruction::output;
         return ProgramRoot{
           .commands = {
             Declare{ //codomain
@@ -351,38 +347,30 @@ TEST_CASE("The evaluator can handle simple programs") {
                 Embed{2}
               }
             },
-            ForAll {
-              .type = Embed{2},
-              .commands = {
-                Rule {
-                  .pattern = Apply{
-                    Local{0},
-                    Local{1}
-                  },
-                  .replacement = Embed{2}
-                }
-              }
+            Rule{
+              .primary_pattern = PatternApply{
+                PatternLocal{0},
+                PatternCapture{0}
+              },
+              .replacement = Embed{2},
+              .capture_count = 1
             },
             Declare{ //id
               .type = Apply{
                 Apply{
-                  PrimitiveExpression{compiler::instruction::Primitive::arrow},
+                  PrimitiveExpression{compiler::new_instruction::Primitive::arrow},
                   Embed{2}
                 },
                 Local{0}
               }
             },
-            ForAll {
-              .type = Embed{2},
-              .commands = {
-                Rule {
-                  .pattern = Apply{
-                    Local{1},
-                    Local{2}
-                  },
-                  .replacement = Local{2}
-                }
-              }
+            Rule{
+              .primary_pattern = PatternApply{
+                PatternLocal{1},
+                PatternCapture{0}
+              },
+              .replacement = Local{2},
+              .capture_count = 1
             }
           },
           .value = Local{1}
