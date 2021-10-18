@@ -225,11 +225,17 @@ namespace solver::evaluator {
             destroy_from_arena(interface.arena, locals[i]);
           }
           locals.erase(locals.begin() + locals_size_before, locals.end());
-          interface.add_rule({
+          new_expression::Rule proposed_rule{
             .pattern = std::move(executed.pattern),
             .replacement = std::move(replacement.value)
+          };
+          std::vector<std::pair<OwnedExpression, OwnedExpression> > checks = std::move(executed.checks);
+          checks.emplace_back(std::move(executed.type_of_pattern), std::move(replacement.type));
+          interface.rule({
+            .stack = executed.pattern_stack,
+            .rule = std::move(proposed_rule),
+            .checks = std::move(checks)
           });
-          destroy_from_arena(interface.arena, executed.checks, executed.type_of_pattern, replacement.type); //TODO: Actually check
         },
         [&](instruction_archive::Let const& let) {
           if(let.type) {

@@ -24,10 +24,8 @@ namespace solver {
   };
   struct Rule {
     stack::Stack stack;
-    new_expression::OwnedExpression pattern_type;
-    new_expression::OwnedExpression pattern;
-    new_expression::OwnedExpression replacement_type;
-    new_expression::OwnedExpression replacement;
+    new_expression::Rule rule;
+    std::vector<std::pair<new_expression::OwnedExpression, new_expression::OwnedExpression> > checks;
   };
 }
 

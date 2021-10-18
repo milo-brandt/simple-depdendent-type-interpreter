@@ -211,29 +211,43 @@ namespace solver {
       return std::move(future);
     }
     mdb::Future<bool> register_rule(Rule rule) {
-      auto [promise, future] = mdb::create_promise_future_pair<bool>();
-      register_equation({
-        .lhs = std::move(rule.pattern_type),
-        .rhs = std::move(rule.replacement_type),
-        .stack = rule.stack
-      }).listen([
-        this,
-        pattern = std::move(rule.pattern),
-        replacement = std::move(rule.replacement),
-        depth = rule.stack.depth(),
-        promise = std::move(promise)
-      ](EquationResult result) mutable {
-        if(result == EquationResult::solved) {
-          active_rule_builders.push_back({
-            .pattern = std::move(pattern),
-            .replacement = std::move(replacement),
-            .result = std::move(promise)
-          });
-        } else {
-          destroy_from_arena(arena, pattern, replacement);
-          promise.set_value(false);
+      struct SharedState {
+        Impl& me;
+        new_expression::Rule rule;
+        mdb::Promise<bool> promise;
+        std::size_t equations_left;
+        SharedState(Impl& me, new_expression::Rule rule, mdb::Promise<bool> promise, std::size_t equations_left):me(me), rule(std::move(rule)), promise(std::move(promise)), equations_left(equations_left) {}
+        void mark_solve() {
+          if(--equations_left == 0) {
+            me.rule_collector.add_rule(std::move(rule));
+            promise.set_value(true);
+          }
         }
-      });
+        ~SharedState() {
+          if(equations_left > 0) {
+            destroy_from_arena(me.arena, rule);
+            promise.set_value(false);
+          }
+        }
+      };
+      auto [promise, future] = mdb::create_promise_future_pair<bool>();
+      if(rule.checks.empty()) {
+        rule_collector.add_rule(std::move(rule.rule));
+        promise.set_value(true);
+      } else {
+        auto shared = std::make_shared<SharedState>(*this, std::move(rule.rule), std::move(promise), rule.checks.size());
+        for(auto& check : rule.checks) {
+          register_equation({
+            .lhs = std::move(check.first),
+            .rhs = std::move(check.second),
+            .stack = rule.stack
+          }).listen([shared](EquationResult result) {
+            if(result == EquationResult::solved) {
+              shared->mark_solve();
+            }
+          });
+        }
+      }
       return std::move(future);
     }
     void run() {
