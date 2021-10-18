@@ -163,6 +163,7 @@ namespace compiler::new_instruction {
             },
             .commands = std::move(body_commands),
             .replacement = std::move(body),
+            .capture_count = 1,
             .source = {ExplanationKind::unknown, lambda.index()}
           });
           return ret;
@@ -212,6 +213,7 @@ namespace compiler::new_instruction {
             },
             .commands = std::move(body_commands),
             .replacement = std::move(body),
+            .capture_count = 1,
             .source = {ExplanationKind::unknown, arrow.index()}
           });
           return this->arrow(domain, codomain,
