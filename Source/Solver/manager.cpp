@@ -280,7 +280,7 @@ namespace solver {
         return true;
       });
     }
-    evaluator::EvaluatorInterface get_evaluator_interface(mdb::function<new_expression::TypedValue(std::uint64_t)> embed) {
+    evaluator::EvaluatorInterface get_evaluator_interface(ExternalInterfaceParts external_interface) {
       return {
         .arena = arena,
         .rule_collector = rule_collector,
@@ -303,6 +303,7 @@ namespace solver {
         .add_rule = [this](new_expression::Rule rule) {
           rule_collector.add_rule(std::move(rule));
         },
+        .explain_variable = std::move(external_interface.explain_variable),
         .reduce = [this](OwnedExpression in) {
           return evaluation.reduce(std::move(in));
         },
@@ -318,7 +319,7 @@ namespace solver {
           register_rule(std::move(rule));
           run();
         },
-        .embed = std::move(embed)
+        .embed = std::move(external_interface.embed)
       };
     }
     void register_definable_indeterminate(new_expression::OwnedExpression expr) {
@@ -349,7 +350,7 @@ namespace solver {
   mdb::Future<bool> Manager::register_rule(Rule rule) { return impl->register_rule(std::move(rule)); }
   void Manager::run() { return impl->run(); }
   void Manager::close() { return impl->close(); }
-  evaluator::EvaluatorInterface Manager::get_evaluator_interface(mdb::function<new_expression::TypedValue(std::uint64_t)> embed) { return impl->get_evaluator_interface(std::move(embed)); }
+  evaluator::EvaluatorInterface Manager::get_evaluator_interface(ExternalInterfaceParts external_interface) { return impl->get_evaluator_interface(std::move(external_interface)); }
   OwnedExpression Manager::reduce(OwnedExpression expr) {
     return impl->evaluation.reduce(std::move(expr));
   }

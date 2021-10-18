@@ -104,7 +104,8 @@ namespace compiler::instruction {
           }
         },
         [&](resolved_archive::PatternHole const& hole) -> located_output::Expression {
-          return resolved_local(hole.var_index, {ExplanationKind::pattern_hole, hole.index()});
+          std::terminate(); //this code will all be deleted soon
+          //return resolved_local(hole.var_index, {ExplanationKind::pattern_hole, hole.index()});
         }
       });
     }

@@ -16,6 +16,13 @@ auto make_embeder(new_expression::Arena& arena, new_expression::WeakExpression (
     }
   };
 }
+template<class Embed>
+solver::ExternalInterfaceParts interface_from_embed(Embed embed) {
+  return solver::ExternalInterfaceParts{
+    .explain_variable = [](auto&&...){},
+    .embed = std::move(embed)
+  };
+}
 TEST_CASE("The evaluator can handle simple programs") {
   new_expression::Arena arena;
   {
@@ -40,7 +47,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
       REQUIRE(manager.solved());
       REQUIRE(ret.value == embeds[embed_index][0]);
@@ -68,7 +77,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
       REQUIRE(manager.solved());
       REQUIRE(ret.value == active_case.value);
@@ -88,7 +99,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
       auto expected_value = arena.apply(
         arena.copy(context.primitives.arrow),
@@ -125,7 +138,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
       REQUIRE(ret.type == context.primitives.type);
       ret.value = manager.reduce(std::move(ret.value));
@@ -154,7 +169,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
 
       REQUIRE(manager.solved());
@@ -176,7 +193,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
 
       REQUIRE(manager.solved());
@@ -197,7 +216,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
       REQUIRE(!manager.solved());
       manager.close();
@@ -276,7 +297,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(make_embeder(arena, embeds))
+        manager.get_evaluator_interface(interface_from_embed(
+          make_embeder(arena, embeds)
+        ))
       );
       auto expected_value = arena.apply(
         arena.copy(f),
@@ -315,7 +338,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
 
       REQUIRE(manager.solved());
@@ -378,7 +403,9 @@ TEST_CASE("The evaluator can handle simple programs") {
       }());
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
-        manager.get_evaluator_interface(simple_embed)
+        manager.get_evaluator_interface(interface_from_embed(
+          simple_embed
+        ))
       );
 
       REQUIRE(manager.solved());

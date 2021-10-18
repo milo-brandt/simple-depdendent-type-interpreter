@@ -23,6 +23,10 @@ namespace solver {
     BasicContext& operator=(BasicContext&&) = default;
     ~BasicContext();
   };
+  struct ExternalInterfaceParts {
+    std::function<void(new_expression::WeakExpression, evaluator::variable_explanation::Any)> explain_variable;
+    mdb::function<new_expression::TypedValue(std::uint64_t)> embed;
+  };
   class Manager {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -40,7 +44,7 @@ namespace solver {
     void run();
     void close();
     bool solved(); //returns true if nothing is waiting
-    evaluator::EvaluatorInterface get_evaluator_interface(mdb::function<new_expression::TypedValue(std::uint64_t)> embed);
+    evaluator::EvaluatorInterface get_evaluator_interface(ExternalInterfaceParts);
   };
 }
 

@@ -19,7 +19,7 @@ namespace solver::evaluator {
     std::vector<TypedValue> locals;
 
     template<VariableKind kind>
-    TypedValue make_variable_typed(OwnedExpression type, Stack& local_context) {
+    TypedValue make_variable_typed(OwnedExpression type, Stack& local_context, variable_explanation::Any explanation) {
       //auto true_type = local_context.instance_of_type_family(interface.arena.copy(type));
       auto var = [&] {
         if constexpr(kind == VariableKind::axiom) {
@@ -30,25 +30,26 @@ namespace solver::evaluator {
       }();
       interface.register_type(var, local_context.instance_of_type_family(interface.arena.copy(type)));
       interface.register_declaration(var);
+      interface.explain_variable(var, std::move(explanation));
       if constexpr(kind == VariableKind::indeterminate) {
         interface.register_definable_indeterminate(interface.arena.copy(var));
       }
       return {.value = local_context.apply_args(std::move(var)), .type = std::move(type)};
     }
     template<VariableKind kind>
-    OwnedExpression make_variable(OwnedExpression type, Stack& local_context) {
-      auto typed = make_variable_typed<kind>(std::move(type), local_context);
+    OwnedExpression make_variable(OwnedExpression type, Stack& local_context, variable_explanation::Any explanation) {
+      auto typed = make_variable_typed<kind>(std::move(type), local_context, std::move(explanation));
       interface.arena.drop(std::move(typed.type));
       return std::move(typed.value);
     }
-    TypedValue cast_typed(TypedValue input, OwnedExpression new_type, Stack& local_context) {
+    TypedValue cast_typed(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation) {
       input.type = interface.reduce(std::move(input.type));
       new_type = interface.reduce(std::move(new_type));
       if(input.type == new_type) {
         interface.arena.drop(std::move(new_type));
         return std::move(input);
       }
-      auto cast_var = make_variable<VariableKind::declaration>(interface.arena.copy(new_type), local_context);
+      auto cast_var = make_variable<VariableKind::declaration>(interface.arena.copy(new_type), local_context, std::move(cast_var_explanation));
       auto var = new_expression::unfold(interface.arena, cast_var).head;
       interface.cast({
         .stack = local_context,
@@ -62,8 +63,8 @@ namespace solver::evaluator {
         .type = std::move(new_type)
       };
     }
-    OwnedExpression cast(TypedValue input, OwnedExpression new_type, Stack& local_context) {
-      auto typed = cast_typed(std::move(input), std::move(new_type), local_context);
+    OwnedExpression cast(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation) {
+      auto typed = cast_typed(std::move(input), std::move(new_type), local_context, std::move(cast_var_explanation));
       interface.arena.drop(std::move(typed.type));
       return std::move(typed.value);
     }
@@ -85,28 +86,39 @@ namespace solver::evaluator {
                 cast(
                   std::move(rhs),
                   interface.arena.copy(lhs_unfolded.args[0]),
-                  local_context
+                  local_context,
+                  variable_explanation::ApplyRHSCast{apply.index()}
                 )
               );
             }
             auto domain = make_variable<VariableKind::indeterminate>(
               interface.arena.copy(interface.type),
-              local_context
+              local_context,
+              variable_explanation::ApplyDomain{apply.index()}
             );
             auto codomain = make_variable<VariableKind::indeterminate>(
               interface.arena.apply(
                 interface.arena.copy(interface.type_family),
                 interface.arena.copy(domain)
               ),
-              local_context
+              local_context,
+              variable_explanation::ApplyCodomain{apply.index()}
             );
             auto expected_function_type = interface.arena.apply(
               interface.arena.copy(interface.arrow),
               interface.arena.copy(domain),
               interface.arena.copy(codomain)
             );
-            auto func = make_variable<VariableKind::declaration>(interface.arena.copy(expected_function_type), local_context);
-            auto arg = make_variable<VariableKind::declaration>(interface.arena.copy(domain), local_context);
+            auto func = make_variable<VariableKind::declaration>(
+              interface.arena.copy(expected_function_type),
+              local_context,
+              variable_explanation::ApplyLHSCast{apply.index()}
+            );
+            auto arg = make_variable<VariableKind::declaration>(
+              interface.arena.copy(domain),
+              local_context,
+              variable_explanation::ApplyRHSCast{apply.index()}
+            );
             auto func_var = unfold(interface.arena, func).head;
             auto arg_var = unfold(interface.arena, arg).head;
             interface.function_cast({
@@ -158,7 +170,8 @@ namespace solver::evaluator {
           auto type = cast(
             std::move(type_family_type),
             interface.arena.copy(interface.type),
-            local_context
+            local_context,
+            variable_explanation::TypeFamilyCast{type_family.index()}
           );
           return {
             .value = interface.arena.apply(
@@ -171,28 +184,45 @@ namespace solver::evaluator {
       });
     }
     template<VariableKind kind>
-    void create_declaration(instruction_archive::Expression const& type, Stack& local_context) {
+    void create_declaration(instruction_archive::Expression const& type, Stack& local_context, variable_explanation::Any cast_explanation, variable_explanation::Any var_explanation) {
       auto type_eval = evaluate(type, local_context);
       auto value = make_variable_typed<kind>(
         cast(
           std::move(type_eval),
           interface.arena.copy(interface.type),
-          local_context
+          local_context,
+          std::move(cast_explanation)
         ),
-        local_context
+        local_context,
+        std::move(var_explanation)
       );
       locals.push_back(std::move(value));
     }
     void evaluate(instruction_archive::Command const& command, Stack& local_context) {
       return command.visit(mdb::overloaded{
         [&](instruction_archive::DeclareHole const& hole) {
-          return create_declaration<VariableKind::indeterminate>(hole.type, local_context);
+          return create_declaration<VariableKind::indeterminate>(
+            hole.type,
+            local_context,
+            variable_explanation::HoleTypeCast{hole.index()},
+            variable_explanation::ExplicitHole{hole.index()}
+          );
         },
         [&](instruction_archive::Declare const& declare) {
-          return create_declaration<VariableKind::declaration>(declare.type, local_context);
+          return create_declaration<VariableKind::declaration>(
+            declare.type,
+            local_context,
+            variable_explanation::DeclareTypeCast{declare.index()},
+            variable_explanation::Declaration{declare.index()}
+          );
         },
         [&](instruction_archive::Axiom const& axiom) {
-          return create_declaration<VariableKind::axiom>(axiom.type, local_context);
+          return create_declaration<VariableKind::axiom>(
+            axiom.type,
+            local_context,
+            variable_explanation::AxiomTypeCast{axiom.index()},
+            variable_explanation::Axiom{axiom.index()}
+          );
         },
         [&](instruction_archive::Rule const& rule) {
           if(rule.secondary_matches.begin() != rule.secondary_matches.end()) std::terminate();
@@ -247,9 +277,11 @@ namespace solver::evaluator {
               cast(
                 std::move(type),
                 interface.arena.copy(interface.type),
-                local_context
+                local_context,
+                variable_explanation::LetTypeCast{let.index()}
               ),
-              local_context
+              local_context,
+              variable_explanation::LetCast{let.index()}
             );
             locals.push_back(std::move(result));
           } else {
