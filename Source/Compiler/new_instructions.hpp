@@ -1,5 +1,5 @@
-#ifndef COMPILER_INSTRUCTIONS_HPP
-#define COMPILER_INSTRUCTIONS_HPP
+#ifndef COMPILER_NEW_INSTRUCTIONS_HPP
+#define COMPILER_NEW_INSTRUCTIONS_HPP
 
 #include "new_instruction_tree_impl.hpp"
 #include "../Utility/result.hpp"
