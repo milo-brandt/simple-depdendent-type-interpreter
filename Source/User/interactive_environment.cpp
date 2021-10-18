@@ -244,6 +244,7 @@ namespace interactive {
     EvaluateInfo evaluate(ResolveInfo input) {
       //auto rule_start = expression_context.rules.size();
       auto instructions = compiler::new_instruction::make_instructions(input.parser_resolved.root());
+      std::cout << format(instructions.output) << "\n";
       auto instruction_output = archive(std::move(instructions.output));
       auto instruction_locator = archive(std::move(instructions.locator));
       solver::Manager manager(context);
@@ -252,10 +253,10 @@ namespace interactive {
       });
       auto eval_result = solver::evaluator::evaluate(instruction_output.root().get_program_root(), std::move(interface));
       manager.run();
-      manager.close();
       if(!manager.solved()) {
         std::cout << "Not solved. :(\n";
       }
+      manager.close();
 
       return EvaluateInfo{
         std::move(input),
@@ -592,15 +593,26 @@ namespace interactive {
   void Environment::Impl::debug_parse(std::string_view expr, std::ostream& output)  {
     auto result = full_compile(expr);
     if(auto* value = result.get_if_value()) {
+      auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
+        if(externals_to_names.contains(expr)) {
+          o << externals_to_names.at(expr);
+        } else if(arena.holds_declaration(expr)) {
+          o << "decl_" << expr.index();
+        } else if(arena.holds_axiom(expr)) {
+          o << "ax_" << expr.index();
+        } else {
+          o << "???";
+        }
+      };
       std::cout << "RAW TYPE AND VALUE:\n";
-      std::cout << user::raw_format(arena, value->result.value) << "\n";
-      std::cout << user::raw_format(arena, value->result.type) << "\n";
+      std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
+      std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
       std::cout << "REDUCED TYPE AND VALUE:\n";
       new_expression::EvaluationContext ctx{arena, context.rule_collector};
       value->result.value = ctx.reduce(std::move(value->result.value));
       value->result.type = ctx.reduce(std::move(value->result.type));
-      std::cout << user::raw_format(arena, value->result.value) << "\n";
-      std::cout << user::raw_format(arena, value->result.type) << "\n";
+      std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
+      std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
     } else {
       std::cout << result.get_error() << "\n";
     }
