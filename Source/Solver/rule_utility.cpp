@@ -204,4 +204,100 @@ namespace solver {
       .checks = std::move(detail.checks)
     };
   }
+  using Stack = stack::Stack;
+  namespace {
+    new_expression::OwnedExpression as_expression(new_expression::Arena& arena, pattern_expr::PatternExpr expr, std::vector<new_expression::OwnedExpression> const& captures) {
+      return expr.visit(mdb::overloaded{
+        [&](pattern_expr::Apply& apply) {
+          return arena.apply(
+            as_expression(arena, std::move(apply.lhs), captures),
+            as_expression(arena, std::move(apply.rhs), captures)
+          );
+        },
+        [&](pattern_expr::Embed& embed) {
+          return std::move(embed.value);
+        },
+        [&](pattern_expr::Capture& capture) {
+          return arena.copy(captures.at(capture.capture_index));
+        },
+        [&](pattern_expr::Hole&) -> new_expression::OwnedExpression {
+          std::terminate(); //can't yet deal with holes appearing!
+        }
+      });
+    }
+    new_expression::OwnedExpression extract_application_domain(new_expression::Arena& arena, Stack& stack, new_expression::WeakExpression arrow, new_expression::OwnedExpression& fn, new_expression::OwnedExpression arg) {
+      auto type_of = stack.reduce(stack.type_of(fn));
+      if(auto fn_info = get_function_data(arena, type_of, arrow)) {
+        fn = arena.apply(
+          std::move(fn),
+          std::move(arg)
+        );
+        auto ret = arena.copy(fn_info->domain);
+        arena.drop(std::move(type_of));
+        return ret;
+      } else {
+        std::terminate();
+      }
+    }
+    Stack extend_by_assumption_typeless(Stack stack, new_expression::OwnedExpression lhs, new_expression::OwnedExpression rhs) {
+      return stack.extend_by_assumption(new_expression::TypedValue{
+        .value = std::move(lhs),
+        .type = stack.type_of(lhs)
+      }, new_expression::TypedValue{
+        .value = std::move(rhs),
+        .type = stack.type_of(rhs)
+      });
+    }
+  }
+  PatternExecutionResult execute_pattern(new_expression::Arena& arena, Stack stack, new_expression::WeakExpression arrow, FlatPattern flat) {
+    if(stack.depth() != flat.stack_arg_count) std::terminate(); //not good
+    auto outer_head = arena.copy(flat.head);
+    for(std::size_t i = 0; i < flat.stack_arg_count; ++i) {
+      outer_head = arena.apply(
+        std::move(outer_head),
+        arena.argument(i)
+      );
+    }
+    for(std::size_t i = flat.stack_arg_count; i < flat.arg_count; ++i) {
+      auto next_type = extract_application_domain(arena, stack, arrow, outer_head, arena.argument(i));
+      stack = stack.extend(std::move(next_type));
+    }
+    auto type_of_pattern = stack.type_of(outer_head);
+    arena.drop(std::move(outer_head));
+    std::size_t next_arg = flat.arg_count;
+    std::vector<new_expression::PatternMatch> sub_matches;
+    for(auto& shard : flat.shards) {
+      sub_matches.push_back({
+        .substitution = arena.argument(shard.matched_arg_index),
+        .expected_head = arena.copy(shard.match_head),
+        .args_captured = shard.capture_count
+      });
+      auto shard_head = std::move(shard.match_head);
+      for(std::size_t i = 0; i < shard.capture_count; ++i) {
+        auto next_type = extract_application_domain(arena, stack, arrow, shard_head, arena.argument(next_arg++));
+        stack = stack.extend(std::move(next_type));
+      }
+      stack = extend_by_assumption_typeless(std::move(stack), arena.argument(shard.matched_arg_index), std::move(shard_head));
+    }
+    std::vector<std::pair<new_expression::OwnedExpression, new_expression::OwnedExpression> > checks;
+    for(auto& check : flat.checks) {
+      checks.emplace_back(
+        arena.argument(check.arg_index),
+        std::move(as_expression(arena, std::move(check.expected_value), flat.captures))
+      );
+    }
+    return {
+      .pattern = {
+        .head = std::move(flat.head),
+        .body = {
+          .args_captured = flat.arg_count,
+          .sub_matches = std::move(sub_matches)
+        }
+      },
+      .type_of_pattern = std::move(type_of_pattern),
+      .captures = std::move(flat.captures),
+      .checks = std::move(checks),
+      .pattern_stack = std::move(stack)
+    };
+  }
 }

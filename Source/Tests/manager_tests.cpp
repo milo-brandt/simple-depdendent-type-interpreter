@@ -2,28 +2,29 @@
 #include <catch.hpp>
 
 
-stack::Stack get_empty_stack_for(solver::BasicContext& context) {
-  return stack::Stack::empty({
-    .type = context.primitives.type,
-    .arrow = context.primitives.arrow,
-    .id = context.primitives.id,
-    .constant = context.primitives.constant,
-    .type_family = context.primitives.type_family,
-    .arena = context.arena,
-    .rule_collector = context.rule_collector,
-    .type_collector = context.type_collector,
-    .register_type = [&context](new_expression::WeakExpression, new_expression::OwnedExpression t) {
-      context.arena.drop(std::move(t));
-    },
-    .register_declaration = [&context](new_expression::WeakExpression expr) {
-      context.rule_collector.register_declaration(expr);
-    },
-    .add_rule = [&context](new_expression::Rule rule) {
-      context.rule_collector.add_rule(std::move(rule));
-    }
-  });
+namespace {
+  stack::Stack get_empty_stack_for(solver::BasicContext& context) {
+    return stack::Stack::empty({
+      .type = context.primitives.type,
+      .arrow = context.primitives.arrow,
+      .id = context.primitives.id,
+      .constant = context.primitives.constant,
+      .type_family = context.primitives.type_family,
+      .arena = context.arena,
+      .rule_collector = context.rule_collector,
+      .type_collector = context.type_collector,
+      .register_type = [&context](new_expression::WeakExpression, new_expression::OwnedExpression t) {
+        context.arena.drop(std::move(t));
+      },
+      .register_declaration = [&context](new_expression::WeakExpression expr) {
+        context.rule_collector.register_declaration(expr);
+      },
+      .add_rule = [&context](new_expression::Rule rule) {
+        context.rule_collector.add_rule(std::move(rule));
+      }
+    });
+  }
 }
-
 
 TEST_CASE("var_1 = axiom is resolved by manager.") {
   new_expression::Arena arena;

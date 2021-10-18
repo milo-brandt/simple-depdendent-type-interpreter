@@ -4,6 +4,7 @@
 #include "RuleStructures/pattern_tree_impl.hpp"
 #include "../Compiler/new_instructions.hpp"
 #include "../NewExpression/on_arena_utility.hpp"
+#include "stack.hpp"
 
 namespace solver {
   /*
@@ -39,7 +40,19 @@ namespace solver {
     std::vector<FlatPatternCheck> checks;
     static constexpr auto part_info = mdb::parts::simple<6>;
   };
-
+  struct RequiredEquality {
+    new_expression::OwnedExpression lhs;
+    new_expression::OwnedExpression rhs;
+    static constexpr auto part_info = mdb::parts::simple<2>;
+  };
+  struct PatternExecutionResult {
+    new_expression::Pattern pattern;
+    new_expression::OwnedExpression type_of_pattern;
+    std::vector<new_expression::OwnedExpression> captures; //what to push on to locals stack
+    std::vector<std::pair<new_expression::OwnedExpression, new_expression::OwnedExpression> > checks;
+    stack::Stack pattern_stack;
+    static constexpr auto part_info = mdb::parts::simple<5>;
+  };
 
   struct PatternResolveInterface {
     mdb::function<new_expression::OwnedExpression(std::uint64_t)> lookup_local;
@@ -48,6 +61,7 @@ namespace solver {
   pattern_expr::PatternExpr resolve_pattern(compiler::new_instruction::output::archive_part::Pattern const&, PatternResolveInterface const& interface);
   FoldedPattern normalize_pattern(new_expression::Arena&, pattern_expr::PatternExpr, std::size_t capture_count);
   FlatPattern flatten_pattern(new_expression::Arena&, FoldedPattern);
+  PatternExecutionResult execute_pattern(new_expression::Arena& arena, stack::Stack stack, new_expression::WeakExpression arrow, FlatPattern);
 }
 
 #endif
