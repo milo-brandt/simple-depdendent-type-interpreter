@@ -14,14 +14,32 @@ namespace expression_parser {
     struct PatternContext {
       std::vector<LocalContext> declaration_vector;
       std::uint64_t next_index;
+      std::uint64_t root_index;
       ContextParent parent;
-      ContextParent link_vector() {
+      template<class Filter>
+      std::pair<ContextParent, std::vector<std::uint64_t> > link_vector(Filter&& filter) {
         ContextParent p = parent;
+        std::vector<std::size_t> indices_used;
+        std::uint64_t index = 0;
+        std::uint64_t local_index = root_index;
         for(auto& local : declaration_vector) {
-          local.parent = p;
-          p = &local;
+          if(filter(local.name)) {
+            indices_used.push_back(index);
+            local.index = local_index++;
+            local.parent = p;
+            p = &local;
+          }
+          ++index;
         }
-        return p;
+        return std::make_pair(p, std::move(indices_used));
+      }
+      void unlink_vector() {
+        for(std::size_t i = 0; i < declaration_vector.size(); ++i) {
+          declaration_vector[i].index = root_index + i;
+        }
+      }
+      ContextParent link_vector() {
+        return link_vector([](auto&&) { return true; }).first;
       }
     };
     struct CommandContext {
@@ -124,22 +142,84 @@ namespace expression_parser {
       for(auto& err : rhs.bad_pattern_ids) { lhs.bad_pattern_ids.push_back(std::move(err)); }
       return lhs;
     };
+
     template<class Callback, class... Ts>
     auto merged_result(Callback&& callback, Ts&&... ts) {
       return multi_error_gather_map(std::forward<Callback>(callback), merge_errors, std::forward<Ts>(ts)...);
     }
     namespace output_archive = output::archive_part;
 
-    template<class Context, class Then>
-    auto resolve_pattern(Context& context, std::uint64_t stack_depth, output_archive::Pattern const& pattern, Then&& then) {
+    bool expression_uses_identifier(output_archive::Expression const& expr, std::string_view id) {
+      return expr.visit(mdb::overloaded{
+        [&](output_archive::Apply const& apply) {
+          return expression_uses_identifier(apply.lhs, id) || expression_uses_identifier(apply.rhs, id);
+        },
+        [&](output_archive::Lambda const& lambda) {
+          if(lambda.type && expression_uses_identifier(*lambda.type, id)) return true;
+          if(lambda.arg_name && *lambda.arg_name == id) return false;
+          return expression_uses_identifier(lambda.body, id);
+        },
+        [&](output_archive::Identifier const& identifier) {
+          return identifier.id == id;
+        },
+        [&](output_archive::Hole const&) {
+          return false;
+        },
+        [&](output_archive::Arrow const& arrow) {
+          if(expression_uses_identifier(arrow.domain, id)) return true;
+          if(arrow.arg_name && *arrow.arg_name == id) return false;
+          return expression_uses_identifier(arrow.codomain, id);
+        },
+        [&](output_archive::VectorLiteral const& vector_literal) {
+          for(auto const& element : vector_literal.elements) {
+            if(expression_uses_identifier(element, id)) return true;
+          }
+          return false;
+        },
+        [&](output_archive::Literal const&) {
+          return false;
+        },
+        [&](output_archive::Block const& block) {
+          for(auto const& statement : block.statements) {
+            bool shadowed = false;
+            if(statement.visit(mdb::overloaded{
+              [&](output_archive::Declare const& declare) {
+                shadowed = declare.name == id;
+                return expression_uses_identifier(declare.type, id);
+              },
+              [&](output_archive::Axiom const& axiom) {
+                shadowed = axiom.name == id;
+                return expression_uses_identifier(axiom.type, id);
+              },
+              [&](output_archive::Let const& let) {
+                shadowed = let.name == id;
+                if(let.type && expression_uses_identifier(*let.type, id)) return true;
+                return expression_uses_identifier(let.value, id);
+              },
+              [&](output_archive::Rule const& rule) {
+                for(auto const& subexpr : rule.subclause_expressions) {
+                  if(expression_uses_identifier(subexpr, id)) return true;
+                }
+                return expression_uses_identifier(rule.replacement, id);
+              }
+            })) return true;
+            if(shadowed) return false;
+          }
+          return expression_uses_identifier(block.value, id);
+        }
+      });
+    }
+    mdb::Result<resolved::Command, ResolutionError> resolve_impl(CommandContext& command_context, output_archive::Command const& command);
+    template<class Context>
+    mdb::Result<resolved::Expression, ResolutionError> resolve_impl(Context& context, std::uint64_t stack_depth, output_archive::Expression const& expression);
+    mdb::Result<resolved::Command, ResolutionError> resolve_rule(CommandContext& context, std::uint64_t stack_depth, output_archive::Rule const& rule) {
       struct Detail {
-        Context& context;
         PatternContext pattern_context;
-        mdb::Result<resolved::Pattern, ResolutionError> resolve_impl(output_archive::Pattern const& pattern, bool allow_wildcard) {
+        mdb::Result<resolved::Pattern, ResolutionError> resolve_pattern(output_archive::Pattern const& pattern, bool allow_wildcard) {
           return pattern.visit(mdb::overloaded{
             [&](output_archive::PatternApply const& apply) -> mdb::Result<resolved::Pattern, ResolutionError> {
-              auto lhs = resolve_impl(apply.lhs, false);
-              auto rhs = resolve_impl(apply.rhs, true);
+              auto lhs = resolve_pattern(apply.lhs, false);
+              auto rhs = resolve_pattern(apply.rhs, true);
               return merged_result([&](auto lhs, auto rhs) -> resolved::Pattern {
                 return resolved::PatternApply{
                   .lhs = std::move(lhs),
@@ -151,7 +231,9 @@ namespace expression_parser {
               if(auto ret = lookup_pattern(pattern_context, id.id, allow_wildcard)) {
                 return resolved::Pattern{std::move(*ret)};
               } else {
-                return ResolutionError{.bad_pattern_ids = {id.index()}};
+                return ResolutionError{
+                  .bad_pattern_ids = {id.index()}
+                };
               }
             },
             [&](output_archive::PatternHole const& hole) -> mdb::Result<resolved::Pattern, ResolutionError> {
@@ -163,18 +245,72 @@ namespace expression_parser {
         }
       };
       Detail detail{
-        .context = context,
         .pattern_context = {
           .next_index = stack_depth,
+          .root_index = stack_depth,
           .parent = &context
         }
       };
-      auto ret = detail.resolve_impl(pattern, false);
-      return std::visit([&](auto* context) {
-        return then(*context, detail.pattern_context.next_index, std::move(ret));
+      auto primary_pattern = detail.resolve_pattern(rule.pattern, false);
+      if(primary_pattern.holds_error()) return std::move(primary_pattern.get_error());
+      std::vector<std::vector<std::uint64_t> > captures_used_in_subclause_expression;
+      std::vector<resolved::Expression> subexpression_exprs;
+      std::vector<ResolutionError> subexpression_expr_errors;
+      std::vector<resolved::Pattern> subexpression_patterns;
+      for(std::size_t i = 0; i < rule.subclause_expressions.size(); ++i) {
+        auto [context, indices_used] = detail.pattern_context.link_vector([&](std::string_view id) {
+          return expression_uses_identifier(rule.subclause_expressions[i], id);
+        });
+        captures_used_in_subclause_expression.push_back(std::move(indices_used));
+        auto subexpr = std::visit([&](auto* context) {
+          return resolve_impl(*context, stack_depth + indices_used.size(), rule.subclause_expressions[i]);
+        }, context);
+        if(subexpr.holds_error()) {
+          subexpression_expr_errors.push_back(std::move(subexpr.get_error()));
+        } else {
+          subexpression_exprs.push_back(std::move(subexpr.get_value()));
+        }
+        detail.pattern_context.unlink_vector();
+        auto subpattern = detail.resolve_pattern(rule.subclause_patterns[i], false);
+        if(subpattern.holds_error()) {
+          if(subexpression_expr_errors.empty()) {
+            return std::move(subpattern.get_error());
+          } else {
+            auto err = std::move(subexpression_expr_errors[0]);
+            for(std::size_t i = 1; i < subexpression_expr_errors.size(); ++i) {
+              err = merge_errors(std::move(err), std::move(subexpression_expr_errors[i]));
+            }
+            return merge_errors(std::move(err), std::move(subpattern.get_error()));
+          }
+        } else {
+          subexpression_patterns.push_back(std::move(subpattern.get_value()));
+        }
+      }
+      auto replacement = std::visit([&](auto* context) {
+        return resolve_impl(*context, stack_depth + detail.pattern_context.declaration_vector.size(), rule.replacement);
       }, detail.pattern_context.link_vector());
+      if(!subexpression_expr_errors.empty()) {
+        auto err = std::move(subexpression_expr_errors[0]);
+        for(std::size_t i = 1; i < subexpression_expr_errors.size(); ++i) {
+          err = merge_errors(std::move(err), std::move(subexpression_expr_errors[i]));
+        }
+        if(replacement.holds_error()) {
+          err = merge_errors(std::move(err), std::move(replacement.get_error()));
+        }
+        return std::move(err);
+      }
+      if(replacement.holds_error()) {
+        return std::move(replacement.get_error());
+      }
+      return resolved::Command{resolved::Rule{
+        .pattern = std::move(primary_pattern.get_value()),
+        .subclause_expressions = std::move(subexpression_exprs),
+        .subclause_patterns = std::move(subexpression_patterns),
+        .replacement = std::move(replacement.get_value()),
+        .captures_used_in_subclause_expression = std::move(captures_used_in_subclause_expression),
+        .args_in_pattern = detail.pattern_context.declaration_vector.size()
+      }};
     }
-    mdb::Result<resolved::Command, ResolutionError> resolve_impl(CommandContext& command_context, output_archive::Command const& command);
     template<class Context>
     mdb::Result<resolved::Expression, ResolutionError> resolve_impl(Context& context, std::uint64_t stack_depth, output_archive::Expression const& expression) {
       return expression.visit(mdb::overloaded{
@@ -330,15 +466,7 @@ namespace expression_parser {
           return ret;
         },
         [&](output_archive::Rule const& rule) -> mdb::Result<resolved::Command, ResolutionError> {
-          return resolve_pattern(command_context, command_context.next_index, rule.pattern, [&](auto& inner_context, std::uint64_t inner_stack_depth, mdb::Result<resolved::Pattern, ResolutionError> pattern) {
-            return merged_result([&](resolved::Pattern pattern, resolved::Expression replacement) -> resolved::Command {
-              return resolved::Rule{
-                .pattern = std::move(pattern),
-                .replacement = std::move(replacement),
-                .args_in_pattern = inner_stack_depth - command_context.next_index
-              };
-            }, std::move(pattern), resolve_impl(inner_context, inner_stack_depth, rule.replacement));
-          });
+          return resolve_rule(command_context, command_context.next_index, rule);
         },
         [&](output_archive::Axiom const& axiom) -> mdb::Result<resolved::Command, ResolutionError> {
           auto ret = map(resolve_impl(command_context, command_context.next_index, axiom.type), [&](resolved::Expression expr) -> resolved::Command {

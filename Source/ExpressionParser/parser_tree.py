@@ -171,7 +171,7 @@ resolution = shape.generate_instance(namespace = "expression_parser::resolved", 
     "Command": {
         "Declare": [],
         "Rule": [
-            ("captures_used_in_subclause", "std::vector<std::vector<std::uint64_t> >"),
+            ("captures_used_in_subclause_expression", "std::vector<std::vector<std::uint64_t> >"),
             ("args_in_pattern", "std::uint64_t")
         ],
         "Axiom": [],
