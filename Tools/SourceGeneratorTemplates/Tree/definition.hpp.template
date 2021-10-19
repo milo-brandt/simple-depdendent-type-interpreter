@@ -209,5 +209,7 @@ std::common_type_t<{%- for component in kind.components -%}std::invoke_result_t<
 {{ tree_component_declarations(tree) }}
 {{ tree_kind_definitions(tree) }}
 {{ tree_visitor_implementations(tree) }}
+{%- if tree.comparable %}
 {{ tree_cmp_implementation(tree) }}
+{%- endif %}
 {%- endmacro %}

@@ -331,11 +331,11 @@ class CompoundShape:
         self.kinds = generate_kinds(self, empty_data_for_shape(self.inner_kinds))
         self.components = [component for kind in self.kinds for component in kind["components"]]
         self.multikind = len(self.kinds) > 1
-    def generate_instance(self, *, namespace, data, copyable = True):
-        return ShapeInstance(self, namespace, data, copyable)
+    def generate_instance(self, *, namespace, data, copyable = True, comparable = True):
+        return ShapeInstance(self, namespace, data, copyable, comparable)
 
 class ShapeInstance:
-    def __init__(self, shape, namespace, data, copyable):
+    def __init__(self, shape, namespace, data, copyable, comparable):
         self.shape = shape
         self.namespace = namespace
         self.data = data
@@ -343,6 +343,7 @@ class ShapeInstance:
         self.components = [component for kind in self.kinds for component in kind["components"]]
         self.multikind = len(self.kinds) > 1
         self.copyable = copyable
+        self.comparable = comparable
 
 def multitree_merge_components(component_list):
     base_members = component_list[0]["base_members"]
