@@ -23,6 +23,13 @@ shape = CompoundShape({
         "PatternCapture": [],
         "PatternHole": []
     },
+    "SubmatchGeneric": {
+        "Submatch": [
+            ("matched_expression_commands", vector("Command")),
+            ("matched_expression", "Expression"),
+            ("pattern", "Pattern")
+        ]
+    },
     "Command": {
         "DeclareHole": [
             ("type", "Expression")
@@ -39,8 +46,7 @@ shape = CompoundShape({
         ],
         "Rule": [
             ("primary_pattern", "Pattern"),
-            ("secondary_matches", vector("Expression")),
-            ("secondary_patterns", vector("Pattern")),
+            ("submatches", vector("SubmatchGeneric")),
             ("commands", vector("Command")),
             ("replacement", "Expression")
         ],
@@ -80,6 +86,11 @@ output = shape.generate_instance(namespace = "compiler::new_instruction::output"
         ],
         "PatternHole": []
     },
+    "SubmatchGeneric": {
+        "Submatch": [
+            ("captures_used", "std::vector<std::uint64_t>")
+        ]
+    },
     "Command": {
         "DeclareHole": [],
         "Declare": [],
@@ -108,6 +119,9 @@ locator = shape.generate_instance(namespace = "compiler::new_instruction::locato
         "PatternCapture": [("source", "Explanation")],
         "PatternHole": [("source", "Explanation")]
     },
+    "SubmatchGeneric": {
+        "Submatch": [("source", "Explanation")]
+    },
     "Command": {
         "DeclareHole": [("source", "Explanation")],
         "Declare": [("source", "Explanation")],
@@ -133,6 +147,9 @@ forward_locator = shape.generate_instance(namespace = "compiler::new_instruction
         "PatternEmbed": [],
         "PatternCapture": [],
         "PatternHole": []
+    },
+    "SubmatchGeneric": {
+        "Submatch": []
     },
     "Command": {
         "DeclareHole": [("result", "expression::TypedValue")],

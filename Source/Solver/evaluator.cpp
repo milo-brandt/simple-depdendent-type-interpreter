@@ -225,8 +225,8 @@ namespace solver::evaluator {
           );
         },
         [&](instruction_archive::Rule const& rule) {
-          if(rule.secondary_matches.begin() != rule.secondary_matches.end()) std::terminate();
-          if(rule.secondary_patterns.begin() != rule.secondary_patterns.end()) std::terminate();
+          //if(rule.secondary_matches.begin() != rule.secondary_matches.end()) std::terminate();
+          //if(rule.secondary_patterns.begin() != rule.secondary_patterns.end()) std::terminate();
           auto resolved = resolve_pattern(rule.primary_pattern, {
             .lookup_local = [&](std::uint64_t index) {
               return interface.arena.copy(locals.at(index).value);

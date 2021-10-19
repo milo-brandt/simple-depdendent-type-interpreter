@@ -137,6 +137,7 @@ namespace interactive {
           {"axiom", 2},
           {"rule", 3},
           {"let", 4},
+          {"where", 14},
           {"->", 5},
           {":", 6},
           {";", 7},
@@ -243,9 +244,24 @@ namespace interactive {
       }
     }
     EvaluateInfo evaluate(ResolveInfo input) {
+      auto primitive_printer = mdb::overloaded{
+        []<class T>(std::ostream& o, std::vector<T> const& vec) {
+          o << "[";
+          bool first = true;
+          for(auto const& v : vec) {
+            if(first) first = false;
+            else o << ", ";
+            o << v;
+          }
+          o << "]";
+        },
+        [](std::ostream& o, auto const& v) {
+          o << v;
+        }
+      };
       //auto rule_start = expression_context.rules.size();
       auto instructions = compiler::new_instruction::make_instructions(input.parser_resolved.root());
-      std::cout << format(instructions.output) << "\n";
+      std::cout << format(instructions.output, primitive_printer) << "\n";
       auto instruction_output = archive(std::move(instructions.output));
       auto instruction_locator = archive(std::move(instructions.locator));
       solver::Manager manager(context);

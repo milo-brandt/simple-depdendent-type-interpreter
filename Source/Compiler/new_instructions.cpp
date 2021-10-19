@@ -294,11 +294,29 @@ namespace compiler::new_instruction {
             }
           };
           Detail detail{*this, locals_stack.size()};
+          std::vector<located_output::SubmatchGeneric> submatches;
+          for(std::size_t i = 0; i < rule.subclause_expressions.size(); ++i) {
+            auto [submatch_commands, submatch_expression] = sub_frame(
+              rule.captures_used_in_subclause_expression[i].size(),
+              [&](std::size_t arg_index) {
+                return compile(rule.subclause_expressions[i]);
+              }
+            );
+            auto pattern = detail.get_pattern(rule.subclause_patterns[i]);
+            submatches.push_back(located_output::Submatch{
+              .matched_expression_commands = std::move(submatch_commands),
+              .matched_expression = std::move(submatch_expression),
+              .pattern = std::move(pattern),
+              .captures_used = std::move(rule.captures_used_in_subclause_expression[i]),
+              .source = {ExplanationKind::submatch, rule.subclause_expressions[i].index()}
+            });
+          }
           auto [replacement_commands, replacement] = sub_frame(rule.args_in_pattern, [&](std::size_t arg_index) {
             return compile(rule.replacement);
           });
           commands.push_back(located_output::Rule{
             .primary_pattern = detail.get_pattern(rule.pattern),
+            .submatches = std::move(submatches),
             .commands = std::move(replacement_commands),
             .replacement = std::move(replacement),
             .capture_count = rule.args_in_pattern,
