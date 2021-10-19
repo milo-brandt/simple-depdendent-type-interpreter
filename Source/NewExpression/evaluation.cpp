@@ -16,31 +16,36 @@ namespace new_expression {
           auto const& declaration_info = collector.declaration_info(unfolded.head);
           for(auto const& rule : declaration_info.rules) {
             if(rule.pattern_body.args_captured <= unfolded.args.size()) {
+              auto next_arg = unfolded.args.begin();
               std::vector<WeakExpression> pattern_stack;
-              pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.begin() + rule.pattern_body.args_captured);
               std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
-              for(auto const& match : rule.pattern_body.sub_matches) {
-                auto new_expr = substitute_into(arena, match.substitution, mdb::as_span(pattern_stack));
-                new_expr = me().reduce(std::move(new_expr));
-                auto match_unfold = unfold(arena, new_expr);
-                novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
-                if(match_unfold.head != match.expected_head) goto PATTERN_FAILED;
-                if(match_unfold.args.size() != match.args_captured) goto PATTERN_FAILED;
-                pattern_stack.insert(pattern_stack.end(), match_unfold.args.begin(), match_unfold.args.end());
-              }
-              for(auto const& data_check : rule.pattern_body.data_checks) {
-                auto new_expr = arena.copy(pattern_stack[data_check.capture_index]);
-                new_expr = me().reduce(std::move(new_expr));
-                pattern_stack[data_check.capture_index] = new_expr;
-                bool success = [&] {
-                  if(auto* data = arena.get_if_data(new_expr)) {
-                    return data->type_index == data_check.expected_type;
-                  } else {
-                    return false;
-                  }
-                }();
-                novel_roots.push_back(std::move(new_expr));
-                if(!success) goto PATTERN_FAILED;
+              for(auto const& step : rule.pattern_body.steps) {
+                if(auto* match = std::get_if<PatternMatch>(&step)) {
+                  auto new_expr = substitute_into(arena, match->substitution, mdb::as_span(pattern_stack));
+                  new_expr = me().reduce(std::move(new_expr));
+                  auto match_unfold = unfold(arena, new_expr);
+                  novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
+                  if(match_unfold.head != match->expected_head) goto PATTERN_FAILED;
+                  if(match_unfold.args.size() != match->args_captured) goto PATTERN_FAILED;
+                  pattern_stack.insert(pattern_stack.end(), match_unfold.args.begin(), match_unfold.args.end());
+                } else if(auto* data_check = std::get_if<DataCheck>(&step)) {
+                  auto new_expr = arena.copy(pattern_stack[data_check->capture_index]);
+                  new_expr = me().reduce(std::move(new_expr));
+                  pattern_stack[data_check->capture_index] = new_expr;
+                  bool success = [&] {
+                    if(auto* data = arena.get_if_data(new_expr)) {
+                      return data->type_index == data_check->expected_type;
+                    } else {
+                      return false;
+                    }
+                  }();
+                  novel_roots.push_back(std::move(new_expr));
+                  if(!success) goto PATTERN_FAILED;
+                } else {
+                  if(!std::holds_alternative<PullArgument>(step)) std::terminate(); //make sure we hit every case
+                  pattern_stack.push_back(*next_arg);
+                  ++next_arg;
+                }
               }
               //if we get here, the pattern succeeded.
               {
@@ -550,45 +555,47 @@ namespace new_expression {
             if(consider_extra_args || rule.pattern_body.args_captured <= unfolded.args.size()) {
               bool is_indeterminate = false;
               std::vector<WeakExpression> pattern_stack;
-              if(rule.pattern_body.args_captured <= unfolded.args.size()) {
-                pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.begin() + rule.pattern_body.args_captured);
-              } else {
-                is_indeterminate = true; //considered indeterminate *even if* it's a constant lambda that doesn't touch the extra stuff
-                pattern_stack.insert(pattern_stack.end(), unfolded.args.begin(), unfolded.args.end());
-                for(std::size_t i = unfolded.args.size(); i < rule.pattern_body.args_captured; ++i) {
-                  pattern_stack.push_back(indeterminate_head);
-                }
-              }
+              auto next_arg = unfolded.args.begin();
               std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
-              for(auto const& match : rule.pattern_body.sub_matches) {
-                auto new_expr = substitute_into(arena, match.substitution, mdb::as_span(pattern_stack));
-                new_expr = reduce(std::move(new_expr), false);
-                auto match_unfold = unfold(arena, new_expr);
-                novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
-                if(new_expr == indeterminate_head) {
-                  is_indeterminate = true;
-                  for(std::size_t i = 0; i < match.args_captured; ++i) {
-                    pattern_stack.push_back(indeterminate_head);
-                  }
-                } else {
-                  if(match_unfold.head != match.expected_head) goto PATTERN_FAILED;
-                  if(match_unfold.args.size() != match.args_captured) goto PATTERN_FAILED;
-                  pattern_stack.insert(pattern_stack.end(), match_unfold.args.begin(), match_unfold.args.end());
-                }
-              }
-              for(auto const& data_check : rule.pattern_body.data_checks) {
-                auto new_expr = arena.copy(pattern_stack[data_check.capture_index]);
-                new_expr = reduce(std::move(new_expr), false);
-                pattern_stack[data_check.capture_index] = new_expr;
-                bool success = [&] {
-                  if(auto* data = arena.get_if_data(new_expr)) {
-                    return data->type_index == data_check.expected_type;
+              for(auto const& step : rule.pattern_body.steps) {
+                if(auto* match = std::get_if<PatternMatch>(&step)) {
+                  auto new_expr = substitute_into(arena, match->substitution, mdb::as_span(pattern_stack));
+                  new_expr = reduce(std::move(new_expr), false);
+                  auto match_unfold = unfold(arena, new_expr);
+                  novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
+                  if(new_expr == indeterminate_head) {
+                    is_indeterminate = true;
+                    for(std::size_t i = 0; i < match->args_captured; ++i) {
+                      pattern_stack.push_back(indeterminate_head);
+                    }
                   } else {
-                    return is_indeterminate = new_expr == indeterminate_head;
+                    if(match_unfold.head != match->expected_head) goto PATTERN_FAILED;
+                    if(match_unfold.args.size() != match->args_captured) goto PATTERN_FAILED;
+                    pattern_stack.insert(pattern_stack.end(), match_unfold.args.begin(), match_unfold.args.end());
                   }
-                }();
-                novel_roots.push_back(std::move(new_expr));
-                if(!success) goto PATTERN_FAILED;
+                } else if(auto* data_check = std::get_if<DataCheck>(&step)) {
+                  auto new_expr = arena.copy(pattern_stack[data_check->capture_index]);
+                  new_expr = reduce(std::move(new_expr), false);
+                  pattern_stack[data_check->capture_index] = new_expr;
+                  bool success = [&] {
+                    if(auto* data = arena.get_if_data(new_expr)) {
+                      return data->type_index == data_check->expected_type;
+                    } else {
+                      return is_indeterminate = new_expr == indeterminate_head;
+                    }
+                  }();
+                  novel_roots.push_back(std::move(new_expr));
+                  if(!success) goto PATTERN_FAILED;
+                } else {
+                  if(!std::holds_alternative<PullArgument>(step)) std::terminate(); //make sure we hit every case
+                  if(next_arg != unfolded.args.end()) {
+                    pattern_stack.push_back(*next_arg);
+                    ++next_arg;
+                  } else {
+                    pattern_stack.push_back(indeterminate_head);
+                    is_indeterminate = true;
+                  }
+                }
               }
               //if we get here, the pattern succeeded.
               if(is_indeterminate) {

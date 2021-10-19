@@ -13,15 +13,16 @@ namespace new_expression {
     std::size_t args_captured;
     static constexpr auto part_info = mdb::parts::simple<3>;
   };
-  struct DataChecks {
+  struct DataCheck {
     std::size_t capture_index;
     std::uint64_t expected_type;
   };
+  struct PullArgument {}; //pull from main expression
+  using PatternStep = std::variant<PatternMatch, DataCheck, PullArgument>;
   struct PatternBody {
-    std::size_t args_captured;
-    std::vector<PatternMatch> sub_matches;
-    std::vector<DataChecks> data_checks;
-    static constexpr auto part_info = mdb::parts::simple<3>;
+    std::size_t args_captured; //just for quick identification of if a rule could apply
+    std::vector<PatternStep> steps;
+    static constexpr auto part_info = mdb::parts::simple<2>;
   }; //output is some list of captures, if successful
   struct Pattern {
     OwnedExpression head;
@@ -29,9 +30,16 @@ namespace new_expression {
     static constexpr auto part_info = mdb::parts::simple<2>;
   };
   inline new_expression::Pattern lambda_pattern(OwnedExpression head, std::size_t args) {
+    std::vector<PatternStep> steps;
+    for(std::size_t i = 0; i < args; ++i) {
+      steps.push_back(PullArgument{});
+    }
     return {
       .head = std::move(head),
-      .body = { .args_captured = args }
+      .body = {
+        .args_captured = args,
+        .steps = std::move(steps)
+      }
     };
   }
   struct Rule {

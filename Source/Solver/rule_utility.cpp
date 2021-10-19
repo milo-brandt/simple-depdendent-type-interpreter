@@ -265,9 +265,12 @@ namespace solver {
     auto type_of_pattern = stack.type_of(outer_head);
     arena.drop(std::move(outer_head));
     std::size_t next_arg = flat.arg_count;
-    std::vector<new_expression::PatternMatch> sub_matches;
+    std::vector<new_expression::PatternStep> steps;
+    for(std::size_t i = 0; i < flat.arg_count; ++i) {
+      steps.push_back(new_expression::PullArgument{});
+    }
     for(auto& shard : flat.shards) {
-      sub_matches.push_back({
+      steps.push_back(new_expression::PatternMatch{
         .substitution = arena.argument(shard.matched_arg_index),
         .expected_head = arena.copy(shard.match_head),
         .args_captured = shard.capture_count
@@ -291,7 +294,7 @@ namespace solver {
         .head = std::move(flat.head),
         .body = {
           .args_captured = flat.arg_count,
-          .sub_matches = std::move(sub_matches)
+          .steps = std::move(steps)
         }
       },
       .type_of_pattern = std::move(type_of_pattern),

@@ -35,7 +35,9 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
         .head = arena.copy(doubler),
         .body = {
           .args_captured = 1,
-          .sub_matches = mdb::make_vector(PatternMatch{
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{},
+            PatternMatch{
             .substitution = arena.argument(0),
             .expected_head = arena.copy(zero),
             .args_captured = 0
@@ -49,7 +51,9 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
         .head = arena.copy(doubler),
         .body = {
           .args_captured = 1,
-          .sub_matches = mdb::make_vector(PatternMatch{
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{},
+            PatternMatch{
             .substitution = arena.argument(0),
             .expected_head = arena.copy(succ),
             .args_captured = 1
@@ -612,7 +616,10 @@ TEST_CASE("EvaluationContext rejects (\\x.x) = $1.") {
       .pattern = {
         .head = arena.copy(f),
         .body = {
-          .args_captured = 1
+          .args_captured = 1,
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{}
+          )
         }
       },
       .replacement = arena.argument(0)
@@ -639,7 +646,10 @@ TEST_CASE("EvaluationContext rejects (\\x.axiom) = $1.") {
       .pattern = {
         .head = arena.copy(f),
         .body = {
-          .args_captured = 1
+          .args_captured = 1,
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{}
+          )
         }
       },
       .replacement = arena.axiom()
@@ -669,7 +679,9 @@ TEST_CASE("EvaluationContext can assumptions regarding the double : Nat -> Nat f
         .head = arena.copy(doubler),
         .body = {
           .args_captured = 1,
-          .sub_matches = mdb::make_vector(PatternMatch{
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{},
+            PatternMatch{
             .substitution = arena.argument(0),
             .expected_head = arena.copy(zero),
             .args_captured = 0
@@ -683,7 +695,9 @@ TEST_CASE("EvaluationContext can assumptions regarding the double : Nat -> Nat f
         .head = arena.copy(doubler),
         .body = {
           .args_captured = 1,
-          .sub_matches = mdb::make_vector(PatternMatch{
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{},
+            PatternMatch{
             .substitution = arena.argument(0),
             .expected_head = arena.copy(succ),
             .args_captured = 1
@@ -881,7 +895,10 @@ TEST_CASE("Evaluation contexts can correctly identify lambda like expressions ar
         .head = arena.copy(add),
         .body = {
           .args_captured = 2,
-          .sub_matches = mdb::make_vector(PatternMatch{
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{},
+            PullArgument{},
+            PatternMatch{
             .substitution = arena.argument(0),
             .expected_head = arena.copy(zero),
             .args_captured = 0
@@ -895,7 +912,10 @@ TEST_CASE("Evaluation contexts can correctly identify lambda like expressions ar
         .head = arena.copy(add),
         .body = {
           .args_captured = 2,
-          .sub_matches = mdb::make_vector(PatternMatch{
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{},
+            PullArgument{},
+            PatternMatch{
             .substitution = arena.argument(0),
             .expected_head = arena.copy(succ),
             .args_captured = 1
@@ -970,7 +990,10 @@ TEST_CASE("Evaluation contexts work properly with rules not consuming every argu
       .pattern = {
         .head = arena.copy(g),
         .body = {
-          .args_captured = 1
+          .args_captured = 1,
+          .steps = mdb::make_vector<PatternStep>(
+            PullArgument{}
+          )
         }
       },
       .replacement = arena.argument(0)
