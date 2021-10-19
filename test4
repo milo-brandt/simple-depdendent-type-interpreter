@@ -1,0 +1,13 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom one : Nat;
+
+  axiom Wrap : Type -> Type;
+  axiom wrap : (T : Type) -> T -> Wrap T;
+
+  declare wrap_first : (T : Type) -> Wrap T -> Wrap T -> Wrap T;
+  wrap_first A (wrap B x) (wrap C y) = wrap A x;
+
+  wrap_first Nat (wrap Nat one) (wrap Nat zero)
+}

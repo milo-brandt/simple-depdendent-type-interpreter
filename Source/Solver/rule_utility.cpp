@@ -102,9 +102,9 @@ namespace solver {
       });
     }
   }
-  FoldedPattern normalize_pattern(new_expression::Arena& arena, pattern_expr::PatternExpr expr, std::size_t capture_count) {
+  FoldedPattern normalize_pattern(new_expression::Arena& arena, RawPattern raw, std::size_t capture_count) {
     //step 1: figure out how many arguments are on head.
-    auto head_pattern_unfolding = unfold(expr);
+    auto head_pattern_unfolding = unfold(raw.primary_pattern);
     auto& head_value = head_pattern_unfolding.head->get_embed();
     auto head_value_unfolding = unfold(arena, head_value.value);
     if(!arena.holds_declaration(head_value_unfolding.head)) std::terminate();
@@ -125,11 +125,18 @@ namespace solver {
     auto matches = mdb::map([&](pattern_expr::PatternExpr* expr) {
       return convert_to_node(arena, std::move(*expr));
     }, head_pattern_unfolding.args);
+    auto subclause_matches = mdb::map([&](RawPatternShard&& shard) {
+      return FoldedSubclause{
+        .used_captures = std::move(shard.used_captures),
+        .node = convert_to_node(arena, std::move(shard.pattern)).get_apply()
+      };
+    }, std::move(raw.subpatterns));
     return FoldedPattern{
       .head = std::move(head),
       .stack_arg_count = arg_count,
       .capture_count = capture_count,
-      .matches = std::move(matches)
+      .matches = std::move(matches),
+      .subclause_matches = std::move(subclause_matches)
     };
   }
   FlatPattern flatten_pattern(new_expression::Arena& arena, FoldedPattern folded) {
@@ -139,35 +146,53 @@ namespace solver {
       std::size_t next_arg;
       std::vector<FlatPatternShard> shards;
       std::vector<FlatPatternCheck> checks;
-      void process(pattern_node::PatternNode node, std::size_t as_arg) {
+      bool has_needed_captures(std::vector<std::uint64_t> const& requested) {
+        for(auto& request : requested) {
+          if(!capture_positions[request]) {
+            return false;
+          }
+        }
+        return true;
+      }
+      std::vector<new_expression::OwnedExpression> get_captures_for(std::vector<std::uint64_t> const& requested) {
+        return mdb::map([&](std::uint64_t request) {
+          auto& position = capture_positions[request];
+          if(!position) std::terminate();
+          return arena.argument(*position);
+        }, requested);
+      }
+      void process(pattern_node::PatternNode node, FlatPatternMatchExpr subexpr) {
         node.visit(mdb::overloaded{
           [&](pattern_node::Apply& apply) {
-            shards.push_back({
-              .matched_arg_index = as_arg,
+            shards.push_back(FlatPatternMatch{
+              .matched_expr = std::move(subexpr),
               .match_head = std::move(apply.head),
               .capture_count = apply.args.size()
             });
             auto arg_pos = next_arg;
             next_arg += apply.args.size();
             for(auto& arg : apply.args) {
-              process(std::move(arg), arg_pos++);
+              process(std::move(arg), FlatPatternMatchArg{arg_pos++});
             }
           },
           [&](pattern_node::Capture& capture) {
+            //this function will only be called for MatchArgs, never Subexpressions
+            auto index = std::get<0>(subexpr).matched_arg_index;
             if(capture_positions[capture.capture_index]) {
               checks.push_back({
-                .arg_index = as_arg,
+                .arg_index = index,
                 .expected_value = pattern_expr::Capture{
                   capture.capture_index
                 }
               });
             } else {
-              capture_positions[capture.capture_index] = as_arg;
+              capture_positions[capture.capture_index] = index;
             }
           },
           [&](pattern_node::Check& check) {
+            auto index = std::get<0>(subexpr).matched_arg_index;
             checks.push_back({
-              .arg_index = as_arg,
+              .arg_index = index,
               .expected_value = std::move(check.desired_equality)
             });
           },
@@ -187,14 +212,41 @@ namespace solver {
     Detail detail{
       .arena = arena,
       .capture_positions = std::vector<std::optional<std::size_t> >(folded.capture_count, std::optional<std::size_t>{}),
-      .next_arg = arg_count
+      .next_arg = folded.stack_arg_count
     };
-    for(std::size_t i = 0; i < folded.matches.size(); ++i) {
+    std::size_t args_pulled = 0;
+    auto pull_argument = [&] {
+      detail.shards.push_back(FlatPatternPullArgument{});
       detail.process(
-        std::move(folded.matches[i]),
-        folded.stack_arg_count + i
+        std::move(folded.matches[args_pulled++]),
+        FlatPatternMatchArg{detail.next_arg++}
       );
+    };
+    auto can_pull_argument = [&] {
+      return args_pulled != folded.matches.size();
+    };
+    std::size_t sub_index = 0;
+    for(auto& sub : folded.subclause_matches) {
+    TRY_TO_INSTANTIATE_SUBCLAUSE:
+      if(detail.has_needed_captures(sub.used_captures)) {
+        auto head = FlatPatternMatchSubexpression{
+          .requested_captures = detail.get_captures_for(sub.used_captures),
+          .matched_subexpression = sub_index++
+        };
+        detail.process(
+          std::move(sub.node),
+          std::move(head)
+        );
+      } else {
+        if(can_pull_argument()) {
+          pull_argument();
+          goto TRY_TO_INSTANTIATE_SUBCLAUSE;
+        } else {
+          std::terminate(); //couldn't capture first thing
+        }
+      }
     }
+    while(can_pull_argument()) pull_argument();
     return FlatPattern {
       .head = std::move(folded.head),
       .stack_arg_count = folded.stack_arg_count,
@@ -249,38 +301,51 @@ namespace solver {
       });
     }
   }
-  PatternExecutionResult execute_pattern(new_expression::Arena& arena, Stack stack, new_expression::WeakExpression arrow, FlatPattern flat) {
-    if(stack.depth() != flat.stack_arg_count) std::terminate(); //not good
+  PatternExecutionResult execute_pattern(PatternExecuteInterface interface, FlatPattern flat) {
+    if(interface.stack.depth() != flat.stack_arg_count) std::terminate(); //not good
+    auto& arena = interface.arena;
+    auto stack = interface.stack;
     auto outer_head = arena.copy(flat.head);
+    std::vector<new_expression::PatternStep> steps;
     for(std::size_t i = 0; i < flat.stack_arg_count; ++i) {
       outer_head = arena.apply(
         std::move(outer_head),
         arena.argument(i)
       );
-    }
-    for(std::size_t i = flat.stack_arg_count; i < flat.arg_count; ++i) {
-      auto next_type = extract_application_domain(arena, stack, arrow, outer_head, arena.argument(i));
-      stack = stack.extend(std::move(next_type));
-    }
-    auto type_of_pattern = stack.type_of(outer_head);
-    arena.drop(std::move(outer_head));
-    std::size_t next_arg = flat.arg_count;
-    std::vector<new_expression::PatternStep> steps;
-    for(std::size_t i = 0; i < flat.arg_count; ++i) {
       steps.push_back(new_expression::PullArgument{});
     }
+    std::size_t next_arg = flat.stack_arg_count;
+    auto pull_argument = [&] {
+      auto arg_index = next_arg++;
+      auto next_type = extract_application_domain(arena, stack, interface.arrow, outer_head, arena.argument(arg_index));
+      stack = stack.extend(std::move(next_type));
+      steps.push_back(new_expression::PullArgument{});
+    };
     for(auto& shard : flat.shards) {
-      steps.push_back(new_expression::PatternMatch{
-        .substitution = arena.argument(shard.matched_arg_index),
-        .expected_head = arena.copy(shard.match_head),
-        .args_captured = shard.capture_count
-      });
-      auto shard_head = std::move(shard.match_head);
-      for(std::size_t i = 0; i < shard.capture_count; ++i) {
-        auto next_type = extract_application_domain(arena, stack, arrow, shard_head, arena.argument(next_arg++));
-        stack = stack.extend(std::move(next_type));
+      if(auto* match = std::get_if<FlatPatternMatch>(&shard)) {
+        new_expression::OwnedExpression head_expr = std::visit(mdb::overloaded{
+          [&](FlatPatternMatchArg&& arg) {
+            return arena.argument(arg.matched_arg_index);
+          },
+          [&](FlatPatternMatchSubexpression&& subexpr) {
+            return interface.get_subexpression(subexpr.matched_subexpression, stack, std::move(subexpr.requested_captures));
+          }
+        }, std::move(match->matched_expr));
+        auto shard_head = std::move(match->match_head);
+        for(std::size_t i = 0; i < match->capture_count; ++i) {
+          auto next_type = extract_application_domain(arena, stack, interface.arrow, shard_head, arena.argument(next_arg++));
+          stack = stack.extend(std::move(next_type));
+        }
+        steps.push_back(new_expression::PatternMatch{
+          .substitution = arena.copy(head_expr),
+          .expected_head = arena.copy(match->match_head),
+          .args_captured = match->capture_count
+        });
+        stack = extend_by_assumption_typeless(std::move(stack), std::move(head_expr), std::move(shard_head));
+      } else {
+        if(!std::holds_alternative<FlatPatternPullArgument>(shard)) std::terminate();
+        pull_argument();
       }
-      stack = extend_by_assumption_typeless(std::move(stack), arena.argument(shard.matched_arg_index), std::move(shard_head));
     }
     std::vector<std::pair<new_expression::OwnedExpression, new_expression::OwnedExpression> > checks;
     for(auto& check : flat.checks) {
@@ -289,6 +354,8 @@ namespace solver {
         std::move(as_expression(arena, std::move(check.expected_value), flat.captures))
       );
     }
+    auto type_of_pattern = stack.type_of(outer_head);
+    arena.drop(std::move(outer_head));
     return {
       .pattern = {
         .head = std::move(flat.head),

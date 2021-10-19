@@ -1,6 +1,20 @@
 #include "stack.hpp"
 #include "../Utility/overloaded.hpp"
 #include "../NewExpression/arena_utility.hpp"
+bool is_free_from_conglomerates(new_expression::Arena& arena, new_expression::WeakExpression expr) {
+  return arena.visit(expr, mdb::overloaded{
+    [&](new_expression::Apply const& apply) {
+      return is_free_from_conglomerates(arena, apply.lhs)
+          && is_free_from_conglomerates(arena, apply.rhs);
+    },
+    [&](new_expression::Conglomerate const&) {
+       return false;
+    },
+    [&](auto const&) {
+      return true;
+    }
+  });
+}
 
 namespace stack {
   using OwnedExpression = new_expression::OwnedExpression;
@@ -50,7 +64,7 @@ namespace stack {
     impl->interface.register_declaration(v);
     impl->interface.add_rule({
       .pattern = lambda_pattern(impl->interface.arena.copy(v), depth()),
-      .replacement = std::move(expr)
+      .replacement = eliminate_conglomerates(std::move(expr))
     });
     return impl->interface.arena.apply(
       impl->interface.arena.copy(impl->var),
@@ -120,7 +134,7 @@ namespace stack {
     impl->interface.register_declaration(extension_ext);
     impl->interface.add_rule({
       .pattern = lambda_pattern(arena.copy(extension_ext), impl->depth),
-      .replacement = arena.copy(extension_family)
+      .replacement = eliminate_conglomerates(arena.copy(extension_family))
     });
 
     auto inner_constant_family = arena.declaration();
@@ -174,33 +188,33 @@ namespace stack {
     };
     impl->interface.add_rule({
       .pattern = lambda_pattern(arena.copy(inner_constant_family), impl->depth + 1),
-      .replacement = arena.copy(impl->interface.type)
+      .replacement = eliminate_conglomerates(arena.copy(impl->interface.type))
     });
     impl->interface.add_rule({
       .pattern = lambda_pattern(arena.copy(family_over), impl->depth),
-      .replacement = arena.apply(
+      .replacement = eliminate_conglomerates(arena.apply(
         arena.copy(impl->interface.arrow),
         arena.copy(extension_family),
         apply_args(arena.copy(inner_constant_family), 0, impl->depth)
-      )
+      ))
     });
     impl->interface.add_rule({
       .pattern = lambda_pattern(arena.copy(as_fibration), impl->depth + 1),
-      .replacement = arena.apply(
+      .replacement = eliminate_conglomerates(arena.apply(
         arena.copy(impl->interface.arrow),
         apply_args(arena.copy(extension_ext), 1, impl->depth),
         apply_args(arena.argument(0), 1, impl->depth)
-      )
+      ))
     });
     impl->interface.add_rule({
       .pattern = lambda_pattern(arena.copy(var_p), 1),
-      .replacement = arena.apply(
+      .replacement = eliminate_conglomerates(arena.apply(
         arena.copy(impl->var),
         arena.apply(
           arena.copy(as_fibration),
           arena.argument(0)
         )
-      )
+      ))
     });
     destroy_from_arena(arena,
       extension_ext, inner_constant_family, family_over, as_fibration
@@ -238,6 +252,15 @@ namespace stack {
       return std::move(expr); //er
     } else {
       return impl->evaluation->reduce(std::move(expr));
+    }
+  }
+  OwnedExpression Stack::eliminate_conglomerates(new_expression::OwnedExpression expr) const {
+    if(auto err = impl->evaluation->canonicalize_context()) {
+      return std::move(expr); //er
+    } else {
+      auto ret = impl->evaluation->eliminate_conglomerates(std::move(expr));
+      if(!is_free_from_conglomerates(impl->interface.arena, ret)) std::terminate();
+      return ret;
     }
   }
 }

@@ -31,12 +31,51 @@ namespace mdb {
     }
     return ret;
   }
+  template<class F, class T, class R = std::invoke_result_t<F, T&> >
+  std::vector<R> map(F&& function, std::vector<T>& vec) {
+    std::vector<R> ret;
+    ret.reserve(vec.size());
+    for(auto& entry : vec) {
+      ret.push_back(function(entry));
+    }
+    return ret;
+  }
   template<class F, class T, class R = std::invoke_result_t<F, T&&> >
   std::vector<R> map(F&& function, std::vector<T>&& vec) {
     std::vector<R> ret;
     ret.reserve(vec.size());
     for(auto& entry : vec) {
       ret.push_back(function(std::move(entry)));
+    }
+    return ret;
+  }
+  template<class F, class T, class R = std::invoke_result_t<F, std::size_t, T const&> >
+  std::vector<R> map_indexed(F&& function, std::vector<T> const& vec) {
+    std::vector<R> ret;
+    ret.reserve(vec.size());
+    std::size_t index = 0;
+    for(auto& entry : vec) {
+      ret.push_back(function(index++, entry));
+    }
+    return ret;
+  }
+  template<class F, class T, class R = std::invoke_result_t<F, std::size_t, T&> >
+  std::vector<R> map_indexed(F&& function, std::vector<T>& vec) {
+    std::vector<R> ret;
+    ret.reserve(vec.size());
+    std::size_t index = 0;
+    for(auto& entry : vec) {
+      ret.push_back(function(index++, entry));
+    }
+    return ret;
+  }
+  template<class F, class T, class R = std::invoke_result_t<F, std::size_t, T&&> >
+  std::vector<R> map_indexed(F&& function, std::vector<T>&& vec) {
+    std::vector<R> ret;
+    ret.reserve(vec.size());
+    std::size_t index = 0;
+    for(auto& entry : vec) {
+      ret.push_back(function(index++, std::move(entry)));
     }
     return ret;
   }

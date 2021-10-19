@@ -43,8 +43,8 @@ namespace solver::evaluator {
       return std::move(typed.value);
     }
     TypedValue cast_typed(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation) {
-      input.type = interface.reduce(std::move(input.type));
-      new_type = interface.reduce(std::move(new_type));
+      input.type = local_context.reduce(std::move(input.type));
+      new_type = local_context.reduce(std::move(new_type));
       if(input.type == new_type) {
         interface.arena.drop(std::move(new_type));
         return std::move(input);
@@ -76,7 +76,7 @@ namespace solver::evaluator {
           auto rhs = evaluate(apply.rhs, local_context);
           auto [lhs_value, lhs_codomain, rhs_value] = [&]() -> std::tuple<OwnedExpression, OwnedExpression, OwnedExpression> {
             //this function should consume lhs and rhs.
-            lhs.type = interface.reduce(std::move(lhs.type));
+            lhs.type = local_context.reduce(std::move(lhs.type));
             auto lhs_unfolded = unfold(interface.arena, lhs.type);
             if(lhs_unfolded.head == interface.arrow && lhs_unfolded.args.size() == 2) {
               new_expression::RAIIDestroyer destroyer{interface.arena, lhs.type};
@@ -227,7 +227,7 @@ namespace solver::evaluator {
         [&](instruction_archive::Rule const& rule) {
           //if(rule.secondary_matches.begin() != rule.secondary_matches.end()) std::terminate();
           //if(rule.secondary_patterns.begin() != rule.secondary_patterns.end()) std::terminate();
-          auto resolved = resolve_pattern(rule.primary_pattern, {
+          PatternResolveInterface resolve_interface{
             .lookup_local = [&](std::uint64_t index) {
               return interface.arena.copy(locals.at(index).value);
             },
@@ -236,10 +236,46 @@ namespace solver::evaluator {
               interface.arena.drop(std::move(typed.type));
               return std::move(typed.value);
             }
-          });
-          auto folded = normalize_pattern(interface.arena, std::move(resolved), rule.capture_count);
+          };
+          auto resolved = resolve_pattern(rule.primary_pattern, resolve_interface);
+          std::vector<RawPatternShard> subpatterns;
+          for(auto const& submatch_generic : rule.submatches) {
+            auto const& submatch = submatch_generic.get_submatch();
+            subpatterns.push_back({
+              .used_captures = submatch.captures_used,
+              .pattern = resolve_pattern(submatch.pattern, resolve_interface)
+            });
+          }
+          auto folded = normalize_pattern(interface.arena, RawPattern{
+            .primary_pattern = std::move(resolved),
+            .subpatterns = std::move(subpatterns)
+          }, rule.capture_count);
           auto flat = flatten_pattern(interface.arena, std::move(folded));
-          auto executed = execute_pattern(interface.arena, local_context, interface.arrow, std::move(flat));
+          auto executed = execute_pattern({
+            .arena = interface.arena,
+            .arrow = interface.arrow,
+            .stack = local_context,
+            .get_subexpression = [&](std::size_t index, Stack expr_context, std::vector<OwnedExpression> requested_captures) {
+              auto locals_size_before = locals.size();
+              for(auto& capture : requested_captures) {
+                locals.push_back({
+                  std::move(capture),
+                  expr_context.type_of(capture)
+                });
+              }
+              auto const& inst = rule.submatches[index].get_submatch();
+              for(auto const& command : inst.matched_expression_commands) {
+                evaluate(command, expr_context);
+              }
+              auto value = evaluate(inst.matched_expression, expr_context);
+              for(std::size_t i = locals_size_before; i < locals.size(); ++i) {
+                destroy_from_arena(interface.arena, locals[i]);
+              }
+              locals.erase(locals.begin() + locals_size_before, locals.end());
+              interface.arena.drop(std::move(value.type));
+              return std::move(value.value);
+            }
+          }, std::move(flat));
           auto locals_size_before = locals.size();
           for(auto& capture : executed.captures) {
             locals.push_back({
@@ -257,7 +293,9 @@ namespace solver::evaluator {
           locals.erase(locals.begin() + locals_size_before, locals.end());
           new_expression::Rule proposed_rule{
             .pattern = std::move(executed.pattern),
-            .replacement = std::move(replacement.value)
+            .replacement = std::move(executed.pattern_stack.eliminate_conglomerates(
+              std::move(replacement.value)
+            ))
           };
           std::vector<std::pair<OwnedExpression, OwnedExpression> > checks = std::move(executed.checks);
           checks.emplace_back(std::move(executed.type_of_pattern), std::move(replacement.type));

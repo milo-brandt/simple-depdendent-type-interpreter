@@ -1,10 +1,20 @@
 #include <fstream>
 #include "User/interactive_environment.hpp"
+#include "User/debug_format.hpp"
+
+
+void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpression expr) {
+  std::cout << user::raw_format(arena, expr) << "\n";
+}
+void debug_print_expr(new_expression::Arena& arena, new_expression::OwnedExpression const& expr) {
+  std::cout << user::raw_format(arena, expr) << "\n";
+}
 
 #ifdef COMPILE_FOR_EMSCRIPTEN
 
 #include <emscripten/bind.h>
 #include <sstream>
+
 
 std::string replace_newlines_with_br(std::string input) {
   while(true) { //this isn't very efficient - but not a bottleneck either

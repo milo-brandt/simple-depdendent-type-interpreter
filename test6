@@ -1,0 +1,20 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare v : Nat;
+  v
+    where yes = no
+  = zero;
+  v
+    where no = no
+  = succ zero;
+
+
+  v
+}

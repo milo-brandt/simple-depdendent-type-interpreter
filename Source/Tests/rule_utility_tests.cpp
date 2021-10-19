@@ -327,6 +327,7 @@ TEST_CASE("Pattern flattening creates shards for nested checks.") {
 /*
   No tests for resolve_pattern yet
 */
+/*
 namespace {
   stack::Stack get_empty_stack_for(solver::BasicContext& context) {
     return stack::Stack::empty({
@@ -576,3 +577,4 @@ TEST_CASE("If f : (n : Nat) -> Family n -> Type and ax : Family zero, then f $0 
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+*/

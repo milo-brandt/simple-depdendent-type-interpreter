@@ -1,0 +1,32 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare last_nonzero_iterate : Nat -> (Nat -> Nat) -> Nat -> Nat;
+  last_nonzero_iterate zero f base = zero; # return zero as a placeholder for failure
+  last_nonzero_iterate (succ max_steps) f base = block {
+    let next_iterate = f base;
+    declare ret : Nat;
+    ret where next_iterate = zero = base;
+    ret where next_iterate = succ _ = last_nonzero_iterate max_steps f (f base);
+    ret
+  };
+
+  declare pred : Nat -> Nat;
+  pred zero = succ zero;
+  pred (succ n) = n;
+
+  declare pred_twice : Nat -> Nat;
+  pred_twice zero = zero;
+  pred_twice (succ zero) = zero;
+  pred_twice (succ (succ n)) = n;
+
+  let big = succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ zero;
+
+  last_nonzero_iterate big pred_twice (succ \\ succ \\ succ \\ succ \\ succ zero)
+}

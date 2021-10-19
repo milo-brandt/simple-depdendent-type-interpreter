@@ -32,6 +32,7 @@ namespace stack {
     new_expression::OwnedExpression type_of(new_expression::WeakExpression) const;
     new_expression::OwnedExpression apply_args(new_expression::OwnedExpression) const; //apply args up to depth
     new_expression::OwnedExpression reduce(new_expression::OwnedExpression) const;
+    new_expression::OwnedExpression eliminate_conglomerates(new_expression::OwnedExpression) const;
     Stack extend_by_assumption(new_expression::TypedValue, new_expression::TypedValue) const;
     Stack extend(new_expression::OwnedExpression type_family) const; //e.g. takes F $0 $1 to the context (x : Nat) -> (y : IsPrime x) -> (f : F x y) -> ...
     static Stack empty(StackInterface context);

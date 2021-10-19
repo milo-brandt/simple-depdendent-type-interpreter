@@ -1,0 +1,29 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Maybe : Type -> Type;
+  axiom some : (T : Type) -> T -> Maybe T;
+  axiom none : (T : Type) -> Maybe T;
+
+  axiom Fam : Bool -> Type;
+  axiom yes_fam : Fam yes;
+  axiom no_fam : Fam no;
+
+  declare weird : (f : Bool -> Bool) -> Fam (f (f yes)) -> Maybe (Fam yes);
+  weird f x = block {
+    declare ret : Maybe (Fam yes);
+    ret where f yes = yes = some _ x;
+    ret where f yes = no where f no = yes = some _ x;
+    ret where f yes = no where f no = no = none _;
+    ret
+  };
+
+  let id = \b:Bool.b;
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  weird (\b.yes) yes_fam
+}

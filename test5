@@ -1,0 +1,15 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom one : Nat;
+
+  axiom Wrap : Type -> Type;
+  axiom wrap : (T : Type) -> T -> Wrap T;
+
+  declare unwrap : (T : Type) -> Wrap T -> T;
+  unwrap T w
+    where w = wrap S x
+  = x;
+
+  unwrap Nat (wrap Nat zero)
+}

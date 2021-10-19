@@ -1,0 +1,26 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare count_steps_to_zero : Nat -> (Nat -> Nat) -> Nat -> Nat;
+  count_steps_to_zero zero f base = zero;
+  count_steps_to_zero (succ max_steps) f base = block {
+    declare ret : Nat;
+    ret where base = zero = zero;
+    ret where base = succ _ = succ \\ count_steps_to_zero max_steps f base;
+    ret
+  };
+
+  declare f : Nat -> Nat;
+  f zero = succ zero;
+  f (succ n) = n;
+
+  declare g : Nat;
+
+  count_steps_to_zero (succ \\ succ zero) f (succ \\ succ zero)
+}

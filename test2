@@ -1,0 +1,17 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare mul : Nat -> Nat -> Nat;
+
+  axiom Square : Nat -> Type;
+  axiom square : (n : Nat) -> Square (mul n n);
+
+  declare sqrt : (n : Nat) -> Square n -> Nat;
+  sqrt (mul n n) (square n) = n;
+
+  let one = succ zero;
+
+  sqrt _ (square one)
+}
