@@ -86,6 +86,83 @@ TEST_CASE("The expression parser matches various expressions.") {
     {
       .str = " ( x ) ",
       .expected_tree = output::Identifier{"x"}
+    },
+    {
+      .str = "block { f x = x; f }",
+      .expected_tree = output::Block {
+        .statements = {
+          output::Rule{
+            .pattern = output::PatternApply{
+              .lhs = output::PatternIdentifier{"f"},
+              .rhs = output::PatternIdentifier{"x"}
+            },
+            .replacement = output::Identifier{"x"}
+          }
+        },
+        .value = output::Identifier{"f"}
+      }
+    },
+    {
+      .str = "block { f x where x = ax y = y; f }",
+      .expected_tree = output::Block {
+        .statements = {
+          output::Rule{
+            .pattern = output::PatternApply{
+              .lhs = output::PatternIdentifier{"f"},
+              .rhs = output::PatternIdentifier{"x"}
+            },
+            .subclause_expressions = {
+              output::Identifier{"x"}
+            },
+            .subclause_patterns = {
+              output::PatternApply{
+                .lhs = output::PatternIdentifier{"ax"},
+                .rhs = output::PatternIdentifier{"y"}
+              }
+            },
+            .replacement = output::Identifier{"y"}
+          }
+        },
+        .value = output::Identifier{"f"}
+      }
+    },
+    {
+      .str = "block { f x where x = ax y where g x y = axx z w = w; f }",
+      .expected_tree = output::Block {
+        .statements = {
+          output::Rule{
+            .pattern = output::PatternApply{
+              .lhs = output::PatternIdentifier{"f"},
+              .rhs = output::PatternIdentifier{"x"}
+            },
+            .subclause_expressions = {
+              output::Identifier{"x"},
+              output::Apply{
+                output::Apply{
+                  output::Identifier{"g"},
+                  output::Identifier{"x"}
+                },
+                output::Identifier{"y"}
+              }
+            },
+            .subclause_patterns = {
+              output::PatternApply{
+                .lhs = output::PatternIdentifier{"ax"},
+                .rhs = output::PatternIdentifier{"y"}
+              },
+              output::PatternApply{
+                .lhs = output::PatternApply{
+                  .lhs = output::PatternIdentifier{"axx"},
+                  .rhs = output::PatternIdentifier{"z"}
+                },
+                .rhs = output::PatternIdentifier{"w"}
+              }
+            },
+            .replacement = output::Identifier{"w"}
+          }
+        },
+        .value = output::Identifier{"f"}
+      }
     }
   };
   auto format_stream = mdb::overloaded{
@@ -108,7 +185,8 @@ TEST_CASE("The expression parser matches various expressions.") {
       {"\\\\", 10},
       {".", 11},
       {"_", 12},
-      {",", 13}
+      {",", 13},
+      {"where", 14}
     }
   };
   for(auto const& test : test_cases) {

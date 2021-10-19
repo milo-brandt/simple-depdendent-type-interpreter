@@ -479,28 +479,81 @@ namespace expression_parser {
       return ret;
     }
     CommandResult parse_rule(LocatorInfo const& locator, LexerSpan& span) { //pointed *after* "rule"
-      auto equals_sign = find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
-        return term.holds_symbol() && term.get_symbol().symbol_index == symbols::equals;
+      auto primary_pattern_end = find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
+        return term.holds_symbol() && (
+           term.get_symbol().symbol_index == symbols::equals
+        || term.get_symbol().symbol_index == symbols::where
+        );
       });
-      if(equals_sign == span.end()) {
+      if(primary_pattern_end == span.end()) {
         return ParseError{
           .position = span.span_begin->index(),
           .message = "Rule declaration does not contain '='."
         };
       }
-      LexerSpan pattern_span{span.span_begin, equals_sign};
+      LexerSpan pattern_span{span.span_begin, primary_pattern_end};
       if(pattern_span.empty()) {
-        return ParseError{
-          .position = equals_sign->index(),
-          .message = "Expected pattern before '='."
-        };
+        if(primary_pattern_end->get_symbol().symbol_index == symbols::equals) {
+          return ParseError{
+            .position = primary_pattern_end->index(),
+            .message = "Expected pattern before '='."
+          };
+        } else {
+          return ParseError{
+            .position = primary_pattern_end->index(),
+            .message = "Expected pattern before 'where'."
+          };
+        }
       }
       auto pattern_result = parse_pattern(locator, pattern_span);
       if(pattern_result.holds_error()) return std::move(pattern_result.get_error());
-      LexerSpan replacement_span{equals_sign + 1, span.end()};
+      auto subclause_end = primary_pattern_end;
+      std::vector<located_output::Expression> subclause_expressions;
+      std::vector<located_output::Pattern> subclause_patterns;
+      while(subclause_end->get_symbol().symbol_index == symbols::where) {
+        auto subclause_begin = subclause_end + 1;
+        auto expr_end = find_if(subclause_begin, span.end(), [](lex_archive::Term const& term) {
+          return term.holds_symbol() && (
+             term.get_symbol().symbol_index == symbols::equals
+          || term.get_symbol().symbol_index == symbols::where
+          );
+        });
+        if(expr_end == span.end()) {
+          return ParseError{
+            .position = subclause_end->index(),
+            .message = "Expected '=' after 'where' in subclause."
+          };
+        }
+        if(expr_end->get_symbol().symbol_index == symbols::where) {
+          return ParseError{
+            .position = subclause_end->index(),
+            .message = "Expected '=' before 'where' in subclause."
+          };
+        }
+        subclause_end = find_if(expr_end + 1, span.end(), [](lex_archive::Term const& term) {
+          return term.holds_symbol() && (
+             term.get_symbol().symbol_index == symbols::equals
+          || term.get_symbol().symbol_index == symbols::where
+          );
+        });
+        if(subclause_end == span.end()) {
+          return ParseError{
+            .position = subclause_end->index(),
+            .message = "Expected another 'where' clause or '=' after subclause."
+          };
+        }
+        LexerSpan expr_span{subclause_begin, expr_end};
+        auto subclause_expr = parse_expression(locator, expr_span);
+        if(subclause_expr.holds_error()) return std::move(subclause_expr.get_error());
+        LexerSpan pattern_span{expr_end + 1, subclause_end};
+        auto subclause_pattern = parse_pattern(locator, pattern_span);
+        subclause_expressions.push_back(std::move(subclause_expr.get_value()));
+        subclause_patterns.push_back(std::move(subclause_pattern.get_value()));
+      }
+      LexerSpan replacement_span{subclause_end + 1, span.end()};
       if(replacement_span.empty()) {
         return ParseError{
-          .position = equals_sign->index(),
+          .position = subclause_end->index(),
           .message = "Expected expression after '='."
         };
       }
@@ -508,11 +561,12 @@ namespace expression_parser {
       if(replacement.holds_error()) return std::move(replacement.get_error());
       return located_output::Command{located_output::Rule{
         .pattern = std::move(pattern_result.get_value()),
+        .subclause_expressions = std::move(subclause_expressions),
+        .subclause_patterns = std::move(subclause_patterns),
         .replacement = std::move(replacement.get_value()),
         .position = locator.to_span(span)
       }};
     }
-
     CommandResult parse_statement(LocatorInfo const& locator, LexerSpan& span, bool final) { //must consume span
       if(auto* symbol = span.span_begin->get_if_symbol()) {
         switch(symbol->symbol_index) {

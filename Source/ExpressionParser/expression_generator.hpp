@@ -20,6 +20,7 @@ namespace expression_parser {
     constexpr std::uint64_t axiom = 2;
     constexpr std::uint64_t rule = 3;
     constexpr std::uint64_t let = 4;
+    constexpr std::uint64_t where = 14;
 
     constexpr std::uint64_t arrow = 5;
     constexpr std::uint64_t colon = 6;
