@@ -242,8 +242,91 @@ namespace compiler::new_instruction {
           }
           return ret;
         },
-        [&](resolved_archive::Match const&) -> located_output::Expression {
-          std::terminate();
+        [&](resolved_archive::Match const& match) -> located_output::Expression {
+          auto matched_expr = result_of(located_output::Let{
+            .value = compile(match.matched_expression),
+            .source = {ExplanationKind::matched_expression, match.index()}
+          }, {ExplanationKind::matched_expression_local, match.index()}); //it's possible that this explanation is never seen?
+          auto match_result = result_of(located_output::Declare{
+            .type = [&]() -> located_output::Expression {
+              if(match.output_type) {
+                return compile(*match.output_type);
+              } else {
+                return result_of(located_output::DeclareHole{
+                  .type = type({ExplanationKind::match_output_type_type, match.index()}),
+                  .source = {ExplanationKind::match_output_type, match.index()}
+                }, {ExplanationKind::match_output_type_local, match.index()});
+              }
+            }(),
+            .source = {ExplanationKind::match_result, match.index()}
+          }, {ExplanationKind::match_result_local, match.index()});
+          auto match_result_index = match_result.local_index;
+          for(std::size_t i = 0; i < match.arm_expressions.size(); ++i) {
+            struct Detail {
+              InstructionContext& me;
+              std::size_t local_base;
+              located_output::Pattern get_pattern(resolved_archive::Pattern const& pattern) {
+                return pattern.visit(mdb::overloaded{
+                  [&](resolved_archive::PatternApply const& apply) -> located_output::Pattern {
+                    return located_output::PatternApply{
+                      .lhs = get_pattern(apply.lhs),
+                      .rhs = get_pattern(apply.rhs),
+                      .source = {ExplanationKind::pattern_apply, pattern.index()}
+                    };
+                  },
+                  [&](resolved_archive::PatternIdentifier const& id) -> located_output::Pattern {
+                    if(id.is_local) {
+                      if(id.var_index >= local_base) {
+                        return located_output::PatternCapture{
+                          .capture_index = id.var_index - local_base,
+                          .source = {ExplanationKind::pattern_capture, pattern.index()}
+                        };
+                      } else {
+                        return located_output::PatternLocal{
+                          .local_index = me.locals_stack[id.var_index],
+                          .source = {ExplanationKind::pattern_local, pattern.index()}
+                        };
+                      }
+                    } else {
+                      return located_output::PatternEmbed{
+                        .embed_index = id.var_index,
+                        .source = {ExplanationKind::pattern_embed, pattern.index()}
+                      };
+                    }
+                  },
+                  [&](resolved_archive::PatternHole const& hole) -> located_output::Pattern {
+                    return located_output::PatternHole{
+                      .source = {ExplanationKind::pattern_hole, pattern.index()}
+                    };
+                  }
+                });
+              }
+            };
+            auto const& arm_pattern = match.arm_patterns[i];
+            auto const& arm_expression = match.arm_expressions[i];
+            auto const& capture_count = match.args_in_arm[i];
+            auto [arm_commands, arm] = sub_frame(capture_count, [&](std::size_t arg_index) {
+              return compile(arm_expression);
+            });
+            commands.push_back(located_output::Rule{
+              .primary_pattern = located_output::PatternLocal{
+                .local_index = match_result_index,
+                .source = {ExplanationKind::match_result_local, arm_pattern.index()}
+              },
+              .submatches = {
+                located_output::Submatch{
+                  .matched_expression = matched_expr,
+                  .pattern = Detail{*this, locals_stack.size()}.get_pattern(arm_pattern),
+                  .source = {ExplanationKind::match_arm_submatch, arm_pattern.index()}
+                }
+              },
+              .commands = std::move(arm_commands),
+              .replacement = std::move(arm),
+              .capture_count = capture_count,
+              .source = {ExplanationKind::match_arm_rule, arm_pattern.index()}
+            });
+          }
+          return match_result;
         }
       });
     }
