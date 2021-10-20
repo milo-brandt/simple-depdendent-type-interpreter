@@ -44,6 +44,13 @@ namespace solver::evaluator::error {
     archive_index::Rule rule;
     archive_index::Expression subclause;
   };
+  struct BadApplicationInPattern {
+    archive_index::Rule rule;
+  };
+  struct BadApplicationInSubclause {
+    archive_index::Rule rule;
+    archive_index::Pattern subclause;
+  };
   struct MissingCaptureInRule {
     archive_index::Rule rule;
   };
@@ -73,6 +80,8 @@ namespace solver::evaluator::error {
     MismatchedLetType,
     MissingCaptureInSubclause,
     MissingCaptureInRule,
+    BadApplicationInPattern,
+    BadApplicationInSubclause,
     InvalidDoubleCapture,
     InvalidNondestructurablePattern,
     MismatchedReplacementType

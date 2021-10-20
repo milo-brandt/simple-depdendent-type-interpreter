@@ -1,0 +1,16 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare pred : Nat -> Nat;
+  pred zero = zero;
+  pred (succ n) = n;
+
+  declare f : Nat -> Nat;
+  f x
+    where x = zero y
+  = y;
+
+  f zero
+}

@@ -272,8 +272,6 @@ namespace solver::evaluator {
           );
         },
         [&](instruction_archive::Rule const& rule) {
-          //if(rule.secondary_matches.begin() != rule.secondary_matches.end()) std::terminate();
-          //if(rule.secondary_patterns.begin() != rule.secondary_patterns.end()) std::terminate();
           PatternResolveInterface resolve_interface{
             .lookup_local = [&](std::uint64_t index) {
               return interface.arena.copy(locals.at(index).value);
@@ -303,7 +301,20 @@ namespace solver::evaluator {
           }, rule.capture_count);
           auto& folded = folded_result.output;
           auto flat_result = flatten_pattern(interface.arena, std::move(folded));
-          if(flat_result.holds_error()) std::terminate();
+          if(flat_result.holds_error()) {
+            auto& err = flat_result.get_error();
+            if(auto* subclause = std::get_if<FlatSubclauseMissingCapture>(&err)) {
+              interface.report_error(error::MissingCaptureInSubclause{
+                .rule = rule.index(),
+                .subclause = rule.submatches[subclause->subclause_index].get_submatch().matched_expression.index()
+              });
+            } else {
+              interface.report_error(error::MissingCaptureInRule{
+                .rule = rule.index()
+              });
+            }
+            return;
+          }
           auto& flat = flat_result.get_value().output;
           auto executed_result = execute_pattern({
             .arena = interface.arena,
@@ -330,7 +341,22 @@ namespace solver::evaluator {
               return std::move(value.value);
             }
           }, std::move(flat));
-          if(executed_result.holds_error()) std::terminate();
+          if(executed_result.holds_error()) {
+            auto& err = executed_result.get_error();
+            if(auto* shard = std::get_if<PatternExecuteShardNotFunction>(&err)) {
+              auto const& shard_explanation = flat_result.get_value().locator.shards[shard->shard_index];
+              auto subclause_index = std::get<FlatPatternMatchExplanation>(shard_explanation).source.part.index;
+              interface.report_error(error::BadApplicationInSubclause{
+                .rule = rule.index(),
+                .subclause = rule.submatches[subclause_index].get_submatch().pattern.index()
+              });
+            } else {
+              interface.report_error(error::BadApplicationInPattern{
+                .rule = rule.index()
+              });
+            }
+            return;
+          }
           auto& executed = executed_result.get_value();
           auto locals_size_before = locals.size();
           for(auto& capture : executed.captures) {

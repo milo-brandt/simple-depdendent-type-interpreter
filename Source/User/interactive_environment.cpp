@@ -298,8 +298,10 @@ namespace interactive {
             [&](BadAxiomType const& err) { report("Bad axiom type.", err.axiom); },
             [&](BadLetType const& err) { report("Bad let type.", err.let); },
             [&](MismatchedLetType const& err) { report("Mismatched let type.", err.let); },
-            [&](MissingCaptureInSubclause const& err) { /* ??? */ },
-            [&](MissingCaptureInRule const& err) { /* ??? */  },
+            [&](MissingCaptureInSubclause const& err) { report("Missing capture in subclause.", err.subclause); },
+            [&](MissingCaptureInRule const& err) { report("Missing capture in pattern.", err.rule);  },
+            [&](BadApplicationInPattern const& err) { report("Bad application in pattern.", err.rule); },
+            [&](BadApplicationInSubclause const& err) { report("Bad application in subclause.", err.subclause); },
             [&](InvalidDoubleCapture const& err) { report_double("Bad double capture.", err.primary_capture, err.secondary_capture); },
             [&](InvalidNondestructurablePattern const& err) { report("Bad non-destructible match.", err.pattern_part); },
             [&](MismatchedReplacementType const& err) { report("Mismatched replacement type.", err.rule); }

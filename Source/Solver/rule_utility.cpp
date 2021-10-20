@@ -306,6 +306,7 @@ namespace solver {
     std::size_t args_pulled = 0;
     auto pull_argument = [&] {
       detail.shards.push_back(FlatPatternPullArgument{});
+      detail.shard_explanations.push_back(FlatPatternPullArgumentExplanation{});
       auto index = args_pulled++;
       detail.process(
         FlatPatternPart{
