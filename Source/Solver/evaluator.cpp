@@ -237,20 +237,20 @@ namespace solver::evaluator {
               return std::move(typed.value);
             }
           };
-          auto resolved = resolve_pattern(rule.primary_pattern, resolve_interface);
+          auto resolved = resolve_pattern(rule.primary_pattern, resolve_interface).output;
           std::vector<RawPatternShard> subpatterns;
           for(auto const& submatch_generic : rule.submatches) {
             auto const& submatch = submatch_generic.get_submatch();
             subpatterns.push_back({
               .used_captures = submatch.captures_used,
-              .pattern = resolve_pattern(submatch.pattern, resolve_interface)
+              .pattern = resolve_pattern(submatch.pattern, resolve_interface).output
             });
           }
           auto folded = normalize_pattern(interface.arena, RawPattern{
             .primary_pattern = std::move(resolved),
             .subpatterns = std::move(subpatterns)
-          }, rule.capture_count);
-          auto flat = flatten_pattern(interface.arena, std::move(folded));
+          }, rule.capture_count).output;
+          auto flat = flatten_pattern(interface.arena, std::move(folded)).output;
           auto executed = execute_pattern({
             .arena = interface.arena,
             .arrow = interface.arrow,
