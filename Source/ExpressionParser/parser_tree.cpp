@@ -220,39 +220,37 @@ namespace expression_parser {
     mdb::Result<resolved::Command, ResolutionError> resolve_impl(CommandContext& command_context, output_archive::Command const& command);
     template<class Context>
     mdb::Result<resolved::Expression, ResolutionError> resolve_impl(Context& context, std::uint64_t stack_depth, output_archive::Expression const& expression);
-    mdb::Result<resolved::Command, ResolutionError> resolve_rule(CommandContext& context, std::uint64_t stack_depth, output_archive::Rule const& rule) {
-      struct Detail {
-        PatternContext pattern_context;
-        mdb::Result<resolved::Pattern, ResolutionError> resolve_pattern(output_archive::Pattern const& pattern, bool allow_wildcard) {
-          return pattern.visit(mdb::overloaded{
-            [&](output_archive::PatternApply const& apply) -> mdb::Result<resolved::Pattern, ResolutionError> {
-              auto lhs = resolve_pattern(apply.lhs, false);
-              auto rhs = resolve_pattern(apply.rhs, true);
-              return merged_result([&](auto lhs, auto rhs) -> resolved::Pattern {
-                return resolved::PatternApply{
-                  .lhs = std::move(lhs),
-                  .rhs = std::move(rhs)
-                };
-              }, std::move(lhs), std::move(rhs));
-            },
-            [&](output_archive::PatternIdentifier const& id) -> mdb::Result<resolved::Pattern, ResolutionError> {
-              if(auto ret = lookup_pattern(pattern_context, id.id, allow_wildcard)) {
-                return resolved::Pattern{std::move(*ret)};
-              } else {
-                return ResolutionError{
-                  .bad_pattern_ids = {id.index()}
-                };
-              }
-            },
-            [&](output_archive::PatternHole const& hole) -> mdb::Result<resolved::Pattern, ResolutionError> {
-              return resolved::Pattern{resolved::PatternHole {
-              //  .var_index = pattern_context.next_index++
-              }};
+    struct PatternResolver {
+      PatternContext pattern_context;
+      mdb::Result<resolved::Pattern, ResolutionError> resolve_pattern(output_archive::Pattern const& pattern, bool allow_wildcard) {
+        return pattern.visit(mdb::overloaded{
+          [&](output_archive::PatternApply const& apply) -> mdb::Result<resolved::Pattern, ResolutionError> {
+            auto lhs = resolve_pattern(apply.lhs, false);
+            auto rhs = resolve_pattern(apply.rhs, true);
+            return merged_result([&](auto lhs, auto rhs) -> resolved::Pattern {
+              return resolved::PatternApply{
+                .lhs = std::move(lhs),
+                .rhs = std::move(rhs)
+              };
+            }, std::move(lhs), std::move(rhs));
+          },
+          [&](output_archive::PatternIdentifier const& id) -> mdb::Result<resolved::Pattern, ResolutionError> {
+            if(auto ret = lookup_pattern(pattern_context, id.id, allow_wildcard)) {
+              return resolved::Pattern{std::move(*ret)};
+            } else {
+              return ResolutionError{
+                .bad_pattern_ids = {id.index()}
+              };
             }
-          });
-        }
-      };
-      Detail detail{
+          },
+          [&](output_archive::PatternHole const& hole) -> mdb::Result<resolved::Pattern, ResolutionError> {
+            return resolved::Pattern{resolved::PatternHole {}};
+          }
+        });
+      }
+    };
+    mdb::Result<resolved::Command, ResolutionError> resolve_rule(CommandContext& context, std::uint64_t stack_depth, output_archive::Rule const& rule) {
+      PatternResolver detail{
         .pattern_context = {
           .next_index = stack_depth,
           .root_index = stack_depth,
@@ -461,7 +459,56 @@ namespace expression_parser {
           }
         },
         [&](output_archive::Match const& match) -> mdb::Result<resolved::Expression, ResolutionError> {
-          std::terminate();
+          std::vector<ResolutionError> errors;
+          auto move_error = [&]<class T>(T value) {
+            if(value.holds_error()) errors.push_back(std::move(value.get_error()));
+            return value;
+          };
+          auto matched_expression = move_error(resolve_impl(context, stack_depth, match.matched_expression));
+          std::optional<resolved::Expression> output_type;
+          if(match.output_type) {
+            auto output_result = move_error(resolve_impl(context, stack_depth, *match.output_type));
+            if(output_result.holds_success()) {
+              output_type = std::move(output_result.get_value());
+            }
+          }
+          std::vector<resolved::Pattern> arm_patterns;
+          std::vector<resolved::Expression> arm_expressions;
+          std::vector<std::uint64_t> args_in_arm;
+          for(std::size_t i = 0; i < match.arm_patterns.size(); ++i) {
+            PatternResolver detail{
+              .pattern_context = {
+                .next_index = stack_depth,
+                .root_index = stack_depth,
+                .parent = &context
+              }
+            };
+            auto primary_pattern = move_error(detail.resolve_pattern(match.arm_patterns[i], false));
+            if(primary_pattern.holds_error()) continue;
+            auto arg_count = detail.pattern_context.declaration_vector.size();
+            auto arm_expression = move_error(std::visit([&](auto* inner_context) {
+              return resolve_impl(*inner_context, stack_depth + arg_count, match.arm_expressions[i]);
+            }, detail.pattern_context.link_vector()));
+            if(arm_expression.holds_error()) continue;
+            arm_patterns.push_back(std::move(primary_pattern.get_value()));
+            arm_expressions.push_back(std::move(arm_expression.get_value()));
+            args_in_arm.push_back(arg_count);
+          }
+          if(errors.empty()) {
+            return resolved::Expression{resolved::Match {
+              .matched_expression = std::move(matched_expression.get_value()),
+              .output_type = std::move(output_type),
+              .arm_patterns = std::move(arm_patterns),
+              .arm_expressions = std::move(arm_expressions),
+              .args_in_arm = std::move(args_in_arm)
+            }};
+          } else {
+            auto err = std::move(errors[0]);
+            for(std::size_t i = 1; i < errors.size(); ++i) {
+              err = merge_errors(std::move(err), std::move(errors[i]));
+            }
+            return err;
+          }
         }
       });
     }

@@ -169,7 +169,9 @@ resolution = shape.generate_instance(namespace = "expression_parser::resolved", 
         "Literal": [
             ("embed_index", "std::uint64_t")
         ],
-        "Match": []
+        "Match": [
+            ("args_in_arm", "std::vector<std::uint64_t>")
+        ]
     },
     "Pattern": {
         "PatternApply": [],
