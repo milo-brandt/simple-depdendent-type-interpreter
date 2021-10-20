@@ -1,0 +1,17 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  axiom Fam : Bool -> Type;
+  axiom fam : (b : Bool) -> Fam (not b);
+
+  declare f : (b : Bool) -> Fam b -> Bool;
+  f (not b) (fam b) = b;
+
+  f _ (fam yes)
+}

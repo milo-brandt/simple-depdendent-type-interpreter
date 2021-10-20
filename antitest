@@ -1,0 +1,10 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare f : Bool -> Bool -> Bool;
+  f x x = yes;
+
+  f yes yes
+}

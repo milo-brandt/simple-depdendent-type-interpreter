@@ -195,7 +195,7 @@ namespace solver {
     struct Detail {
       struct CaptureInfo {
         std::size_t arg_index;
-        pattern_node_archive_index::Capture primary_capture;
+        PatternNodeIndex<pattern_node_archive_index::Capture> primary_capture;
       };
       new_expression::Arena& arena;
       std::vector<std::optional<CaptureInfo> > capture_positions;
@@ -219,7 +219,7 @@ namespace solver {
           return arena.argument(position->arg_index);
         }, requested);
       }
-      void process(pattern_node::archive_part::PatternNode& node, FlatPatternMatchExpr subexpr) {
+      void process(FlatPatternPart subclause_index, pattern_node::archive_part::PatternNode& node, FlatPatternMatchExpr subexpr) {
         node.visit(mdb::overloaded{
           [&](pattern_node::archive_part::Apply& apply) {
             shards.push_back(FlatPatternMatch{
@@ -228,12 +228,15 @@ namespace solver {
               .capture_count = apply.args.size()
             });
             shard_explanations.push_back(FlatPatternMatchExplanation{
-              .source = apply.index()
+              .source = {
+                subclause_index,
+                apply.index()
+              }
             });
             auto arg_pos = next_arg;
             next_arg += apply.args.size();
             for(auto& arg : apply.args) {
-              process(arg, FlatPatternMatchArg{arg_pos++});
+              process(subclause_index, arg, FlatPatternMatchArg{arg_pos++});
             }
           },
           [&](pattern_node::archive_part::Capture& capture) {
@@ -248,12 +251,18 @@ namespace solver {
               });
               check_explanations.push_back(FlatPatternDoubleCaptureCheck{
                 .primary_capture = capture_positions[capture.capture_index]->primary_capture,
-                .secondary_capture = capture.index()
+                .secondary_capture = {
+                  subclause_index,
+                  capture.index()
+                }
               });
             } else {
               capture_positions[capture.capture_index] = CaptureInfo{
                 .arg_index = index,
-                .primary_capture = capture.index()
+                .primary_capture = {
+                  subclause_index,
+                  capture.index()
+                }
               };
             }
           },
@@ -264,7 +273,10 @@ namespace solver {
               .expected_value = std::move(check.desired_equality)
             });
             check_explanations.push_back(FlatPatternInlineCheck{
-              .source = check.index()
+              .source = {
+                subclause_index,
+                check.index()
+              }
             });
           },
           [&](pattern_node::archive_part::Ignore&) {
@@ -294,8 +306,13 @@ namespace solver {
     std::size_t args_pulled = 0;
     auto pull_argument = [&] {
       detail.shards.push_back(FlatPatternPullArgument{});
+      auto index = args_pulled++;
       detail.process(
-        folded.matches[args_pulled++].root(),
+        FlatPatternPart{
+          .primary = true,
+          .index = index
+        },
+        folded.matches[index].root(),
         FlatPatternMatchArg{detail.next_arg++}
       );
     };
@@ -306,11 +323,16 @@ namespace solver {
     for(auto& sub : folded.subclause_matches) {
     TRY_TO_INSTANTIATE_SUBCLAUSE:
       if(detail.has_needed_captures(sub.used_captures)) {
+        auto index = sub_index++;
         auto head = FlatPatternMatchSubexpression{
           .requested_captures = detail.get_captures_for(sub.used_captures),
-          .matched_subexpression = sub_index++
+          .matched_subexpression = index
         };
         detail.process(
+          FlatPatternPart{
+            .primary = false,
+            .index = index
+          },
           sub.node.root(),
           std::move(head)
         );

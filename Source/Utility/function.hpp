@@ -33,6 +33,8 @@ namespace mdb {
 
     template<class T> requires (can_call<T> /*&& std::is_move_constructible_v<T>*/)
     function(T value):data(new ImplSpecific<T>{std::move(value)}) {}
+    template<class T> requires (can_call<T> /*&& std::is_move_constructible_v<T>*/)
+    function(Ref<T> ref):data(new ImplSpecific<T&>{*ref.ptr}) {}
     template<class T, class... ConstructArgs> requires (can_call<T> && ... && std::is_constructible_v<T, ConstructArgs&&>)
     function(in_place_type_t<T>, ConstructArgs&&... args):data(new ImplSpecific<T>{std::forward<ConstructArgs>(args)...}) {}
 

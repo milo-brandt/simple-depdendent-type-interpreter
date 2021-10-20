@@ -67,17 +67,26 @@ namespace solver {
   };
   struct FlatPatternPullArgument {};
   using FlatPatternShard = std::variant<FlatPatternMatch, FlatPatternPullArgument>;
+  struct FlatPatternPart {
+    bool primary; //"true" if this is a match
+    std::size_t index; //either index of match or of subclause
+  };
+  template<class T>
+  struct PatternNodeIndex {
+    FlatPatternPart part;
+    T archive_index;
+  };
   struct FlatPatternMatchExplanation {
-    pattern_node_archive_index::Apply source;
+    PatternNodeIndex<pattern_node_archive_index::Apply> source;
   };
   struct FlatPatternPullArgumentExplanation {};
   using FlatPatternShardExplanation = std::variant<FlatPatternMatchExplanation, FlatPatternPullArgumentExplanation>;
   struct FlatPatternDoubleCaptureCheck {
-    pattern_node_archive_index::Capture primary_capture;
-    pattern_node_archive_index::Capture secondary_capture;
+    PatternNodeIndex<pattern_node_archive_index::Capture> primary_capture;
+    PatternNodeIndex<pattern_node_archive_index::Capture> secondary_capture;
   };
   struct FlatPatternInlineCheck {
-    pattern_node_archive_index::Check source;
+    PatternNodeIndex<pattern_node_archive_index::Check> source;
   };
   using FlatPatternCheckExplanation = std::variant<FlatPatternDoubleCaptureCheck, FlatPatternInlineCheck>;
   struct FlatPatternExplanation {

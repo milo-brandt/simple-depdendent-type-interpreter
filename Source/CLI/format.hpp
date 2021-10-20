@@ -123,6 +123,7 @@ inline auto format_info(std::string_view substring, std::string_view full) {
 }
 inline auto format_info_pair(std::string_view substring_1, std::string_view substring_2, std::string_view full) {
   //TODO: I don't know, but not this for sure
+  if(substring_1.data() > substring_2.data()) std::swap(substring_1, substring_2);
   std::string_view joined{substring_1.data(), (std::size_t)(&*substring_2.end() - substring_1.data())};
   std::string_view between{&*substring_1.end(), (std::size_t)(substring_2.data() - &*substring_1.end())};
   return Print {
@@ -180,6 +181,7 @@ inline auto format_info(std::string_view substring, std::string_view full) {
 }
 inline auto format_info_pair(std::string_view substring_1, std::string_view substring_2, std::string_view full) {
   //TODO: I don't know, but not this for sure
+  if(substring_1.data() > substring_2.data()) std::swap(substring_1, substring_2);
   std::string_view joined{substring_1.data(), (std::size_t)(&*substring_2.end() - substring_1.data())};
   std::string_view between{&*substring_1.end(), (std::size_t)(substring_2.data() - &*substring_1.end())};
   return Print {

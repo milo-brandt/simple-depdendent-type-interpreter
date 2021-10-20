@@ -2,8 +2,29 @@
 #define INTERFACE_TYPES_HPP
 
 #include "stack.hpp"
+#include "solver.hpp"
+#include "../Utility/async.hpp"
 
 namespace solver {
+  struct EquationErrorInfo{
+    Equation primary;
+    bool primary_failed;
+    std::vector<Equation> failures;
+    std::vector<Equation> stalls;
+  };
+
+  struct EquationSolved {};
+  struct EquationStalled {
+    EquationErrorInfo error;
+  };
+  struct EquationFailed {
+    mdb::Future<EquationErrorInfo> error;
+  };
+  using EquationResult = std::variant<EquationFailed, EquationStalled, EquationSolved>;
+
+/*
+  mdb::Future<EquationResult>
+
   struct Cast {
     stack::Stack stack;
     new_expression::OwnedExpression variable;
@@ -26,7 +47,7 @@ namespace solver {
     stack::Stack stack;
     new_expression::Rule rule;
     std::vector<std::pair<new_expression::OwnedExpression, new_expression::OwnedExpression> > checks;
-  };
+  };*/
 }
 
 #endif

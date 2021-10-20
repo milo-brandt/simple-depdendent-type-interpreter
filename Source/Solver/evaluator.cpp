@@ -1,6 +1,7 @@
 #include "evaluator.hpp"
 #include "../NewExpression/arena_utility.hpp"
 #include "rule_utility.hpp"
+#include "common_routines.hpp"
 
 namespace solver::evaluator {
   using TypedValue = new_expression::TypedValue;
@@ -42,7 +43,34 @@ namespace solver::evaluator {
       interface.arena.drop(std::move(typed.type));
       return std::move(typed.value);
     }
-    TypedValue cast_typed(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation) {
+    template<class Then>
+    auto call_on_error(EquationResult bad_result, Then&& then) {
+      if(auto* stall = std::get_if<EquationStalled>(&bad_result)) {
+        then(std::move(stall->error));
+      } else {
+        std::move(std::get<EquationFailed>(bad_result).error).listen(std::forward<Then>(then));
+      }
+    }
+    template<class ErrorType, class T>
+    auto error_listener(T first_arg) {
+      return [this, first_arg](EquationResult result) {
+        if(auto* stall = std::get_if<EquationStalled>(&result)) {
+          interface.report_error(ErrorType{
+            first_arg,
+            std::move(stall->error)
+          });
+        } else if(auto* fail = std::get_if<EquationFailed>(&result)) {
+          std::move(fail->error).listen([this, first_arg = std::move(first_arg)](EquationErrorInfo error) {
+            interface.report_error(ErrorType{
+              first_arg,
+              std::move(error)
+            });
+          });
+        }
+      };
+    }
+    template<class Listener>
+    TypedValue cast_typed(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation, Listener&& listener) {
       input.type = local_context.reduce(std::move(input.type));
       new_type = local_context.reduce(std::move(new_type));
       if(input.type == new_type) {
@@ -51,20 +79,24 @@ namespace solver::evaluator {
       }
       auto cast_var = make_variable<VariableKind::declaration>(interface.arena.copy(new_type), local_context, std::move(cast_var_explanation));
       auto var = new_expression::unfold(interface.arena, cast_var).head;
-      interface.cast({
+      routine::cast(routine::CastInfo{
         .stack = local_context,
         .variable = interface.arena.copy(var),
         .source_type = std::move(input.type),
         .source = std::move(input.value),
-        .target_type = interface.arena.copy(new_type)
-      });
+        .target_type = interface.arena.copy(new_type),
+        .arena = interface.arena,
+        .handle_equation = mdb::ref(interface.solve),
+        .add_rule = mdb::ref(interface.add_rule)
+      }).listen(std::forward<Listener>(listener));
       return {
         .value = std::move(cast_var),
         .type = std::move(new_type)
       };
     }
-    OwnedExpression cast(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation) {
-      auto typed = cast_typed(std::move(input), std::move(new_type), local_context, std::move(cast_var_explanation));
+    template<class Listener>
+    OwnedExpression cast(TypedValue input, OwnedExpression new_type, Stack& local_context, variable_explanation::Any cast_var_explanation, Listener&& listener) {
+      auto typed = cast_typed(std::move(input), std::move(new_type), local_context, std::move(cast_var_explanation), std::forward<Listener>(listener));
       interface.arena.drop(std::move(typed.type));
       return std::move(typed.value);
     }
@@ -87,7 +119,8 @@ namespace solver::evaluator {
                   std::move(rhs),
                   interface.arena.copy(lhs_unfolded.args[0]),
                   local_context,
-                  variable_explanation::ApplyRHSCast{apply.index()}
+                  variable_explanation::ApplyRHSCast{apply.index()},
+                  error_listener<error::MismatchedArgType>(apply.index())
                 )
               );
             }
@@ -121,7 +154,7 @@ namespace solver::evaluator {
             );
             auto func_var = unfold(interface.arena, func).head;
             auto arg_var = unfold(interface.arena, arg).head;
-            interface.function_cast({
+            routine::function_cast(routine::FunctionCastInfo{
               .stack = local_context,
               .function_variable = interface.arena.copy(func_var),
               .argument_variable = interface.arena.copy(arg_var),
@@ -130,7 +163,16 @@ namespace solver::evaluator {
               .expected_function_type = std::move(expected_function_type),
               .argument_value = std::move(rhs.value),
               .argument_type = std::move(rhs.type),
-              .expected_argument_type = std::move(domain)
+              .expected_argument_type = std::move(domain),
+              .arena = interface.arena,
+              .handle_equation = mdb::ref(interface.solve),
+              .add_rule = mdb::ref(interface.add_rule)
+            }).listen([this, index = apply.index()](routine::FunctionCastResult result) {
+              if(result.lhs_was_function) {
+                error_listener<error::MismatchedArgType>(index)(std::move(result.result));
+              } else {
+                error_listener<error::NotAFunction>(index)(std::move(result.result));
+              }
             });
             return std::make_tuple(
               std::move(func),
@@ -171,7 +213,8 @@ namespace solver::evaluator {
             std::move(type_family_type),
             interface.arena.copy(interface.type),
             local_context,
-            variable_explanation::TypeFamilyCast{type_family.index()}
+            variable_explanation::TypeFamilyCast{type_family.index()},
+            error_listener<error::BadTypeFamilyType>(type_family.index())
           );
           return {
             .value = interface.arena.apply(
@@ -183,15 +226,16 @@ namespace solver::evaluator {
         }
       });
     }
-    template<VariableKind kind>
-    void create_declaration(instruction_archive::Expression const& type, Stack& local_context, variable_explanation::Any cast_explanation, variable_explanation::Any var_explanation) {
+    template<VariableKind kind, class Listener>
+    void create_declaration(instruction_archive::Expression const& type, Stack& local_context, variable_explanation::Any cast_explanation, variable_explanation::Any var_explanation, Listener&& listener) {
       auto type_eval = evaluate(type, local_context);
       auto value = make_variable_typed<kind>(
         cast(
           std::move(type_eval),
           interface.arena.copy(interface.type),
           local_context,
-          std::move(cast_explanation)
+          std::move(cast_explanation),
+          std::forward<Listener>(listener)
         ),
         local_context,
         std::move(var_explanation)
@@ -205,7 +249,8 @@ namespace solver::evaluator {
             hole.type,
             local_context,
             variable_explanation::HoleTypeCast{hole.index()},
-            variable_explanation::ExplicitHole{hole.index()}
+            variable_explanation::ExplicitHole{hole.index()},
+            error_listener<error::BadHoleType>(hole.index())
           );
         },
         [&](instruction_archive::Declare const& declare) {
@@ -213,7 +258,8 @@ namespace solver::evaluator {
             declare.type,
             local_context,
             variable_explanation::DeclareTypeCast{declare.index()},
-            variable_explanation::Declaration{declare.index()}
+            variable_explanation::Declaration{declare.index()},
+            error_listener<error::BadDeclarationType>(declare.index())
           );
         },
         [&](instruction_archive::Axiom const& axiom) {
@@ -221,7 +267,8 @@ namespace solver::evaluator {
             axiom.type,
             local_context,
             variable_explanation::AxiomTypeCast{axiom.index()},
-            variable_explanation::Axiom{axiom.index()}
+            variable_explanation::Axiom{axiom.index()},
+            error_listener<error::BadAxiomType>(axiom.index())
           );
         },
         [&](instruction_archive::Rule const& rule) {
@@ -237,19 +284,24 @@ namespace solver::evaluator {
               return std::move(typed.value);
             }
           };
-          auto resolved = resolve_pattern(rule.primary_pattern, resolve_interface).output;
+          auto resolved_result = resolve_pattern(rule.primary_pattern, resolve_interface);
+          auto& resolved = resolved_result.output;
           std::vector<RawPatternShard> subpatterns;
+          std::vector<pattern_resolution_locator::archive_root::PatternExpr> subpattern_locators;
           for(auto const& submatch_generic : rule.submatches) {
             auto const& submatch = submatch_generic.get_submatch();
+            auto resolution = resolve_pattern(submatch.pattern, resolve_interface);
             subpatterns.push_back({
               .used_captures = submatch.captures_used,
-              .pattern = resolve_pattern(submatch.pattern, resolve_interface).output
+              .pattern = std::move(resolution.output)
             });
+            subpattern_locators.push_back(std::move(resolution.locator));
           }
-          auto folded = normalize_pattern(interface.arena, RawPattern{
+          auto folded_result = normalize_pattern(interface.arena, RawPattern{
             .primary_pattern = std::move(resolved),
             .subpatterns = std::move(subpatterns)
-          }, rule.capture_count).output;
+          }, rule.capture_count);
+          auto& folded = folded_result.output;
           auto flat_result = flatten_pattern(interface.arena, std::move(folded));
           if(flat_result.holds_error()) std::terminate();
           auto& flat = flat_result.get_value().output;
@@ -301,12 +353,93 @@ namespace solver::evaluator {
               std::move(replacement.value)
             ))
           };
-          std::vector<std::pair<OwnedExpression, OwnedExpression> > checks = std::move(executed.checks);
-          checks.emplace_back(std::move(executed.type_of_pattern), std::move(replacement.type));
-          interface.rule({
-            .stack = executed.pattern_stack,
-            .rule = std::move(proposed_rule),
-            .checks = std::move(checks)
+          struct BacktraceInfo {
+            instruction_archive::Rule const& rule;
+            pattern_resolution_locator::archive_root::PatternExpr primary_pattern_resolution_locator;
+            std::vector<pattern_resolution_locator::archive_root::PatternExpr> subclause_resolution_locators;
+            FoldedPatternBacktrace folded_locator;
+            FlatPatternExplanation flat_locator;
+            std::size_t equations_left;
+            new_expression::Rule proposed_rule;
+            error::Any get_error(std::size_t check_index, EquationErrorInfo error_info) {
+              auto lookup = [&]<class T>(PatternNodeIndex<T> index) -> decltype(auto) {
+                if(index.part.primary) {
+                  return primary_pattern_resolution_locator[folded_locator.matches.at(index.part.index)[index.archive_index].source];
+                } else {
+                  return subclause_resolution_locators[index.part.index][folded_locator.subclause_matches.at(index.part.index)[index.archive_index].source];
+                }
+              };
+              auto lookup_expr = [&]<class T>(PatternNodeIndex<T> index) -> decltype(auto) {
+                if(index.part.primary) {
+                  return primary_pattern_resolution_locator[index.archive_index].source;
+                } else {
+                  return subclause_resolution_locators[index.part.index][index.archive_index].source;
+                }
+              };
+              auto const& reason = flat_locator.checks[check_index];
+              return std::visit(mdb::overloaded{
+                [&](FlatPatternDoubleCaptureCheck const& double_capture) -> error::Any {
+                  return error::InvalidDoubleCapture {
+                    .rule = rule.index(),
+                    .primary_capture = lookup(double_capture.primary_capture).source,
+                    .secondary_capture = lookup(double_capture.secondary_capture).source,
+                    .equation = std::move(error_info)
+                  };
+                },
+                [&](FlatPatternInlineCheck const& inline_check) -> error::Any {
+                  return error::InvalidNondestructurablePattern {
+                    .rule = rule.index(),
+                    .pattern_part = lookup(inline_check.source).visit([&](auto const& x) -> compiler::new_instruction::archive_index::Pattern { return x.source; }),
+                    .equation = std::move(error_info)
+                  };
+                }
+              }, reason);
+            }
+          };
+          std::shared_ptr<BacktraceInfo> backtrace_info{new BacktraceInfo{
+            .rule = rule,
+            .primary_pattern_resolution_locator = std::move(resolved_result.locator),
+            .subclause_resolution_locators = std::move(subpattern_locators),
+            .folded_locator = std::move(folded_result.locator),
+            .flat_locator = std::move(flat_result.get_value().locator),
+            .equations_left = 1 + executed.checks.size(),
+            .proposed_rule = std::move(proposed_rule)
+          }};
+          std::size_t check_index = 0;
+          for(auto& check : executed.checks) {
+            interface.solve({
+              .lhs = std::move(check.first),
+              .rhs = std::move(check.second),
+              .stack = executed.pattern_stack
+            }).listen([this, index = check_index++, backtrace_info](EquationResult result) {
+              if(std::holds_alternative<EquationSolved>(result)) {
+                if(--backtrace_info->equations_left == 0) {
+                  interface.add_rule(std::move(backtrace_info->proposed_rule));
+                }
+              } else {
+                call_on_error(std::move(result), [this, index, backtrace_info](EquationErrorInfo error_info) {
+                  interface.report_error(backtrace_info->get_error(index, std::move(error_info)));
+                });
+              }
+            });
+          }
+          interface.solve({
+            .lhs = std::move(executed.type_of_pattern),
+            .rhs = std::move(replacement.type),
+            .stack = executed.pattern_stack
+          }).listen([this, backtrace_info](EquationResult result) {
+            if(std::holds_alternative<EquationSolved>(result)) {
+              if(--backtrace_info->equations_left == 0) {
+                interface.add_rule(std::move(backtrace_info->proposed_rule));
+              }
+            } else {
+              call_on_error(std::move(result), [this, backtrace_info](EquationErrorInfo error_info) {
+                interface.report_error(error::MismatchedReplacementType{
+                  .rule = backtrace_info->rule.index(),
+                  .equation = std::move(error_info)
+                });
+              });
+            }
           });
         },
         [&](instruction_archive::Let const& let) {
@@ -320,10 +453,12 @@ namespace solver::evaluator {
                 std::move(type),
                 interface.arena.copy(interface.type),
                 local_context,
-                variable_explanation::LetTypeCast{let.index()}
+                variable_explanation::LetTypeCast{let.index()},
+                error_listener<error::BadLetType>(let.index())
               ),
               local_context,
-              variable_explanation::LetCast{let.index()}
+              variable_explanation::LetCast{let.index()},
+              error_listener<error::MismatchedLetType>(let.index())
             );
             locals.push_back(std::move(result));
           } else {
@@ -357,6 +492,8 @@ namespace solver::evaluator {
     for(auto& local : detail.locals) {
       destroy_from_arena(detail.interface.arena, local);
     }
-    return detail.evaluate(root.value, local_context);
+    auto ret = detail.evaluate(root.value, local_context);
+    detail.interface.close_interface();
+    return ret;
   }
 }

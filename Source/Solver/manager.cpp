@@ -46,18 +46,29 @@ namespace solver {
     std::vector<EquationSolver> active_solvers;
     std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeySet definable_indeterminates;
+    std::optional<stack::Stack> cheating_stack;
     SegmentResult run(EquationSolver& eq) {
       auto made_progress = eq.solver.try_to_make_progress();
       if(eq.result) {
         if(eq.solver.solved()) {
-          eq.result->set_value(EquationResult::solved);
+          eq.result->set_value(EquationSolved{});
           eq.result = std::nullopt;
           return {
             .made_progress = true,
             .done = true
           };
         } else if(eq.solver.failed()) {
-          eq.result->set_value(EquationResult::failed);
+          auto [promise, future] = mdb::create_promise_future_pair<EquationErrorInfo>();
+          eq.result->set_value(EquationFailed{
+            std::move(future)
+          });
+          promise.set_value({
+            .primary = {
+              .lhs = arena.axiom(),
+              .rhs = arena.axiom(),
+              .stack = *cheating_stack
+            }
+          });
           eq.result = std::nullopt;
           return {
             .made_progress = true,
@@ -130,124 +141,12 @@ namespace solver {
       };
     }
     mdb::Future<EquationResult> register_equation(Equation equation) {
+      cheating_stack = equation.stack;
       auto [promise, future] = mdb::create_promise_future_pair<EquationResult>();
       active_solvers.push_back({
         .solver = Solver(get_solver_interface(), std::move(equation)),
         .result = std::move(promise)
       });
-      return std::move(future);
-    }
-    mdb::Future<EquationResult> register_cast(Cast cast) {
-      return register_equation({
-        .lhs = std::move(cast.source_type),
-        .rhs = std::move(cast.target_type),
-        .stack = cast.stack
-      }).then([
-        this,
-        depth = cast.stack.depth(),
-        variable = std::move(cast.variable),
-        source = std::move(cast.source)
-      ](EquationResult result) mutable {
-        if(result == EquationResult::solved) {
-          rule_collector.add_rule({
-            .pattern = new_expression::lambda_pattern(std::move(variable), depth),
-            .replacement = std::move(source)
-          });
-        } else {
-          destroy_from_arena(arena, variable, source);
-        }
-        return result;
-      });
-    }
-    mdb::Future<EquationResult> register_function_cast(FunctionCast cast) {
-      auto [promise, future] = mdb::create_promise_future_pair<EquationResult>();
-      register_equation({
-        .lhs = std::move(cast.function_type),
-        .rhs = std::move(cast.expected_function_type),
-        .stack = cast.stack
-      }).listen([
-        this,
-        function_variable = std::move(cast.function_variable),
-        argument_variable = std::move(cast.argument_variable),
-        function_value = std::move(cast.function_value),
-        argument_value = std::move(cast.argument_value),
-        argument_type = std::move(cast.argument_type),
-        expected_argument_type = std::move(cast.expected_argument_type),
-        stack = std::move(cast.stack),
-        promise = std::move(promise)
-      ](EquationResult result) mutable {
-        if(result == EquationResult::solved) {
-          rule_collector.add_rule({
-            .pattern = new_expression::lambda_pattern(std::move(function_variable), stack.depth()),
-            .replacement = std::move(function_value)
-          });
-          register_equation({
-            .lhs = std::move(argument_type),
-            .rhs = std::move(expected_argument_type),
-            .stack = stack
-          }).listen([
-            this,
-            argument_variable = std::move(argument_variable),
-            argument_value = std::move(argument_value),
-            stack = std::move(stack),
-            promise = std::move(promise)
-          ](EquationResult result) mutable {
-            if(result == EquationResult::solved) {
-              rule_collector.add_rule({
-                .pattern = new_expression::lambda_pattern(std::move(argument_variable), stack.depth()),
-                .replacement = std::move(argument_value)
-              });
-            } else {
-              destroy_from_arena(arena, argument_variable, argument_value);
-            }
-            promise.set_value(result);
-          });
-        } else {
-          destroy_from_arena(arena, function_variable, argument_variable, function_value,
-            argument_value, argument_type, expected_argument_type);
-          promise.set_value(result);
-        }
-      });
-      return std::move(future);
-    }
-    mdb::Future<bool> register_rule(Rule rule) {
-      struct SharedState {
-        Impl& me;
-        new_expression::Rule rule;
-        mdb::Promise<bool> promise;
-        std::size_t equations_left;
-        SharedState(Impl& me, new_expression::Rule rule, mdb::Promise<bool> promise, std::size_t equations_left):me(me), rule(std::move(rule)), promise(std::move(promise)), equations_left(equations_left) {}
-        void mark_solve() {
-          if(--equations_left == 0) {
-            me.rule_collector.add_rule(std::move(rule));
-            promise.set_value(true);
-          }
-        }
-        ~SharedState() {
-          if(equations_left > 0) {
-            destroy_from_arena(me.arena, rule);
-            promise.set_value(false);
-          }
-        }
-      };
-      auto [promise, future] = mdb::create_promise_future_pair<bool>();
-      if(rule.checks.empty()) {
-        rule_collector.add_rule(std::move(rule.rule));
-        promise.set_value(true);
-      } else {
-        auto shared = std::make_shared<SharedState>(*this, std::move(rule.rule), std::move(promise), rule.checks.size());
-        for(auto& check : rule.checks) {
-          register_equation({
-            .lhs = std::move(check.first),
-            .rhs = std::move(check.second),
-            .stack = rule.stack
-          }).listen([shared](EquationResult result) {
-            if(result == EquationResult::solved) {
-              shared->mark_solve();
-            }
-          });
-        }
-      }
       return std::move(future);
     }
     void run() {
@@ -269,7 +168,15 @@ namespace solver {
     void close() {
       mdb::erase_from_active_queue(active_solvers, [&](auto& eq) {
         if(eq.result) {
-          eq.result->set_value(EquationResult::stalled);
+          eq.result->set_value(EquationStalled{
+            .error = {
+              .primary = {
+                .lhs = arena.axiom(),
+                .rhs = arena.axiom(),
+                .stack = *cheating_stack
+              }
+            }
+          });
         }
         return true;
       });
@@ -281,7 +188,7 @@ namespace solver {
       });
     }
     evaluator::EvaluatorInterface get_evaluator_interface(ExternalInterfaceParts external_interface) {
-      return {
+      return evaluator::EvaluatorInterface{
         .arena = arena,
         .rule_collector = rule_collector,
         .type_collector = type_collector,
@@ -304,22 +211,14 @@ namespace solver {
           rule_collector.add_rule(std::move(rule));
         },
         .explain_variable = std::move(external_interface.explain_variable),
-        .reduce = [this](OwnedExpression in) {
-          return evaluation.reduce(std::move(in));
-        },
-        .cast = [this](Cast cast) {
-          register_cast(std::move(cast));
+        .solve = [this](Equation eq) {
+          auto ret = register_equation(std::move(eq));
           run();
+          return ret;
         },
-        .function_cast = [this](FunctionCast cast) {
-          register_function_cast(std::move(cast));
-          run();
-        },
-        .rule = [this](Rule rule) {
-          register_rule(std::move(rule));
-          run();
-        },
-        .embed = std::move(external_interface.embed)
+        .report_error = std::move(external_interface.report_error),
+        .embed = std::move(external_interface.embed),
+        .close_interface = [this]() { close(); }
       };
     }
     void register_definable_indeterminate(new_expression::OwnedExpression expr) {
@@ -344,10 +243,6 @@ namespace solver {
   void Manager::register_definable_indeterminate(OwnedExpression expr) {
     return impl->register_definable_indeterminate(std::move(expr));
   }
-  mdb::Future<EquationResult> Manager::register_equation(Equation eq) { return impl->register_equation(std::move(eq)); }
-  mdb::Future<EquationResult> Manager::register_cast(Cast cast) { return impl->register_cast(std::move(cast)); }
-  mdb::Future<EquationResult> Manager::register_function_cast(FunctionCast cast) { return impl->register_function_cast(std::move(cast)); }
-  mdb::Future<bool> Manager::register_rule(Rule rule) { return impl->register_rule(std::move(rule)); }
   void Manager::run() { return impl->run(); }
   void Manager::close() { return impl->close(); }
   evaluator::EvaluatorInterface Manager::get_evaluator_interface(ExternalInterfaceParts external_interface) { return impl->get_evaluator_interface(std::move(external_interface)); }

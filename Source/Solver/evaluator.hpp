@@ -7,6 +7,7 @@
 #include "../NewExpression/typed_value.hpp"
 #include "../NewExpression/type_utility.hpp"
 #include "interface_types.hpp"
+#include "evaluator_errors.hpp"
 
 namespace solver::evaluator {
   namespace variable_explanation {
@@ -71,11 +72,10 @@ namespace solver::evaluator {
     std::function<void(new_expression::OwnedExpression)> register_definable_indeterminate;
     std::function<void(new_expression::Rule)> add_rule;
     std::function<void(new_expression::WeakExpression, variable_explanation::Any)> explain_variable;
-    mdb::function<new_expression::OwnedExpression(new_expression::OwnedExpression)> reduce;
-    mdb::function<void(Cast)> cast;
-    mdb::function<void(FunctionCast)> function_cast;
-    mdb::function<void(Rule)> rule;
+    mdb::function<mdb::Future<EquationResult>(Equation)> solve;
+    mdb::function<void(error::Any)> report_error;
     mdb::function<new_expression::TypedValue(std::uint64_t)> embed;
+    mdb::function<void()> close_interface;
   };
   struct EvaluatorResult {
 

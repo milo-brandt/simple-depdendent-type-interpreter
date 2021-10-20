@@ -266,19 +266,48 @@ namespace interactive {
       auto instruction_locator = archive(std::move(instructions.locator));
       solver::Manager manager(context);
       new_expression::WeakKeyMap<solver::evaluator::variable_explanation::Any> variable_explanations(arena);
+      auto locate = [&](compiler::new_instruction::archive_index::PolymorphicKind index) {
+        auto parser_index = instruction_locator[index].visit([](auto const& locator) { return locator.source.index; });
+        auto lexer_span = input.parser_locator[parser_index].visit([](auto const& locator) { return locator.position; });
+        return expression_parser::position_of(expression_parser::LexerLocatorSpan{
+          lexer_span,
+          input.lexer_locator
+        });
+      };
+      auto report = [&](std::string_view text, compiler::new_instruction::archive_index::PolymorphicKind index) {
+        std::cout << "Error: " << text << "\n" << format_error(locate(index), input.source) << "\n";
+      };
+      auto report_double = [&](std::string_view text, compiler::new_instruction::archive_index::PolymorphicKind index, compiler::new_instruction::archive_index::PolymorphicKind index2) {
+        std::cout << "Error: " << text << "\n" << format_info_pair(locate(index), locate(index2), input.source) << "\n";
+      };
       auto interface = manager.get_evaluator_interface({
         .explain_variable = [&](new_expression::WeakExpression primitive, solver::evaluator::variable_explanation::Any explanation) {
           variable_explanations.set(primitive, explanation);
         },
         .embed = [&](std::uint64_t embed_index) {
           return copy_on_arena(arena, input.embeds[embed_index]);
+        },
+        .report_error = [&](solver::evaluator::error::Any error) {
+          using namespace solver::evaluator::error;
+          std::visit(mdb::overloaded{
+            [&](NotAFunction const& err) { report("Not a function.", err.apply); },
+            [&](MismatchedArgType const& err) { report("Mismatched arg type.", err.apply); },
+            [&](BadTypeFamilyType const& err) { report("Bad type family type.", err.type_family); },
+            [&](BadHoleType const& err) { report("Bad hole type.", err.hole); },
+            [&](BadDeclarationType const& err) { report("Bad declaration type.", err.declaration); },
+            [&](BadAxiomType const& err) { report("Bad axiom type.", err.axiom); },
+            [&](BadLetType const& err) { report("Bad let type.", err.let); },
+            [&](MismatchedLetType const& err) { report("Mismatched let type.", err.let); },
+            [&](MissingCaptureInSubclause const& err) { /* ??? */ },
+            [&](MissingCaptureInRule const& err) { /* ??? */  },
+            [&](InvalidDoubleCapture const& err) { report_double("Bad double capture.", err.primary_capture, err.secondary_capture); },
+            [&](InvalidNondestructurablePattern const& err) { report("Bad non-destructible match.", err.pattern_part); },
+            [&](MismatchedReplacementType const& err) { report("Mismatched replacement type.", err.rule); }
+          }, error);
         }
       });
       auto eval_result = solver::evaluator::evaluate(instruction_output.root().get_program_root(), std::move(interface));
       manager.run();
-      if(!manager.solved()) {
-        std::cout << "Not solved. :(\n";
-      }
       manager.close();
 
       return EvaluateInfo{

@@ -8,11 +8,6 @@
 #include "solver.hpp"
 
 namespace solver {
-  enum class EquationResult {
-    failed,
-    stalled,
-    solved
-  };
   struct BasicContext {
     new_expression::Arena& arena;
     new_expression::RuleCollector rule_collector;
@@ -26,6 +21,7 @@ namespace solver {
   struct ExternalInterfaceParts {
     std::function<void(new_expression::WeakExpression, evaluator::variable_explanation::Any)> explain_variable;
     mdb::function<new_expression::TypedValue(std::uint64_t)> embed;
+    mdb::function<void(evaluator::error::Any)> report_error;
   };
   class Manager {
     struct Impl;
@@ -37,10 +33,6 @@ namespace solver {
     ~Manager();
     void register_definable_indeterminate(new_expression::OwnedExpression);
     new_expression::OwnedExpression reduce(new_expression::OwnedExpression);
-    mdb::Future<EquationResult> register_equation(Equation);
-    mdb::Future<EquationResult> register_cast(Cast);
-    mdb::Future<EquationResult> register_function_cast(FunctionCast);
-    mdb::Future<bool> register_rule(Rule);
     void run();
     void close();
     bool solved(); //returns true if nothing is waiting
