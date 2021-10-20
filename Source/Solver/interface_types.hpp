@@ -6,13 +6,6 @@
 #include "../Utility/async.hpp"
 
 namespace solver {
-  struct EquationErrorInfo{
-    Equation primary;
-    bool primary_failed;
-    std::vector<Equation> failures;
-    std::vector<Equation> stalls;
-  };
-
   struct EquationSolved {};
   struct EquationStalled {
     EquationErrorInfo error;

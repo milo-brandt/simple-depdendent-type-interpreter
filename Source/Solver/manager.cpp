@@ -29,7 +29,11 @@ namespace solver {
     };
     struct EquationSolver {
       Solver solver;
-      std::optional<mdb::Promise<EquationResult> > result;
+      mdb::Promise<EquationResult> result;
+    };
+    struct EquationFailedSolver {
+      Solver solver;
+      mdb::Promise<EquationErrorInfo> result;
     };
     struct RuleBuilder {
       new_expression::OwnedExpression pattern;
@@ -44,37 +48,31 @@ namespace solver {
     new_expression::TypeTheoryPrimitives& primitives;
     new_expression::PrimitiveTypeCollector& type_collector;
     std::vector<EquationSolver> active_solvers;
+    std::vector<EquationFailedSolver> failed_solvers;
     std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeySet definable_indeterminates;
     std::optional<stack::Stack> cheating_stack;
     SegmentResult run(EquationSolver& eq) {
       auto made_progress = eq.solver.try_to_make_progress();
-      if(eq.result) {
-        if(eq.solver.solved()) {
-          eq.result->set_value(EquationSolved{});
-          eq.result = std::nullopt;
-          return {
-            .made_progress = true,
-            .done = true
-          };
-        } else if(eq.solver.failed()) {
-          auto [promise, future] = mdb::create_promise_future_pair<EquationErrorInfo>();
-          eq.result->set_value(EquationFailed{
-            std::move(future)
-          });
-          promise.set_value({
-            .primary = {
-              .lhs = arena.axiom(),
-              .rhs = arena.axiom(),
-              .stack = *cheating_stack
-            }
-          });
-          eq.result = std::nullopt;
-          return {
-            .made_progress = true,
-            .done = false
-          };
-        }
+      if(eq.solver.solved()) {
+        eq.result.set_value(EquationSolved{});
+        return {
+          .made_progress = true,
+          .done = true
+        };
+      } else if(eq.solver.failed()) {
+        auto [promise, future] = mdb::create_promise_future_pair<EquationErrorInfo>();
+        eq.result.set_value(EquationFailed{
+          std::move(future)
+        });
+        failed_solvers.push_back({
+          std::move(eq.solver),
+          std::move(promise)
+        });
+        return {
+          .made_progress = true,
+          .done = true
+        };
       }
       return {
         .made_progress = made_progress,
@@ -160,6 +158,9 @@ namespace solver {
         mdb::erase_from_active_queue(active_solvers, [&](auto& eq) {
           return extract_done(run(eq));
         });
+        for(auto& failed : failed_solvers) {
+          failed.solver.try_to_make_progress();
+        }
         mdb::erase_from_active_queue(active_rule_builders, [&](auto& rule) {
           return extract_done(run(rule));
         });
@@ -167,17 +168,13 @@ namespace solver {
     }
     void close() {
       mdb::erase_from_active_queue(active_solvers, [&](auto& eq) {
-        if(eq.result) {
-          eq.result->set_value(EquationStalled{
-            .error = {
-              .primary = {
-                .lhs = arena.axiom(),
-                .rhs = arena.axiom(),
-                .stack = *cheating_stack
-              }
-            }
-          });
-        }
+        eq.result.set_value(EquationStalled{
+          .error = std::move(eq.solver).get_error_info()
+        });
+        return true;
+      });
+      mdb::erase_from_active_queue(failed_solvers, [&](auto& eq) {
+        eq.result.set_value(std::move(eq.solver).get_error_info());
         return true;
       });
       mdb::erase_from_active_queue(active_rule_builders, [&](auto& eq) {

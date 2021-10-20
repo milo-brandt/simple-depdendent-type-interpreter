@@ -1,0 +1,33 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Witness : Bool -> Type;
+  axiom witness : Witness yes;
+
+  declare no_witness : (T : Type) -> Witness no -> T;
+
+  declare even : Nat -> Bool;
+  even zero = yes;
+  even (succ zero) = no;
+  even (succ (succ n)) = even n;
+
+  declare div_2 : (n : Nat) -> Witness (even n) -> Nat;
+  div_2 zero w = zero;
+  div_2 (succ zero) w = no_witness Nat w;
+  div_2 (succ (succ n)) w = succ (div_2 n w);
+
+  declare div_2_if_possible : Nat -> Nat;
+  div_2_if_possible n = match (even n) -> Nat {
+    yes -> div_2 n witness;
+    no -> n;
+  };
+
+  div_2_if_possible (succ \\ succ \\ succ \\ succ zero)
+
+}

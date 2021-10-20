@@ -325,6 +325,25 @@ namespace solver {
     void close() {
       //nothing to do
     }
+    EquationErrorInfo get_error_info() {
+      EquationErrorInfo info {
+        .primary = std::move(equations[0].equation)
+      };
+      info.primary_failed = equations[0].failed;
+      bool first = true;
+      for(auto& eq : equations) {
+        if(first) {
+          first = false;
+          continue;
+        }
+        if(eq.failed) {
+          info.failures.push_back(std::move(eq.equation));
+        } else if(!eq.handled) {
+          info.stalls.push_back(std::move(eq.equation));
+        }
+      }
+      return info;
+    }
     ~Impl() {
       destroy_from_arena(interface.arena, equations);
     }
@@ -350,5 +369,8 @@ namespace solver {
   }
   bool Solver::failed() {
     return impl->failed();
+  }
+  EquationErrorInfo Solver::get_error_info() && {
+    return impl->get_error_info();
   }
 }

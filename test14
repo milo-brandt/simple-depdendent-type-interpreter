@@ -1,0 +1,12 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let pred = \n.match(n) -> Nat {
+    zero -> zero;
+    succ m -> m;
+  };
+
+  pred (succ \\ succ \\ succ zero)
+}

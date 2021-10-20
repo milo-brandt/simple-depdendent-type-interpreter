@@ -79,6 +79,12 @@ namespace solver {
     stack::Stack stack;
     static constexpr auto part_info = mdb::parts::simple<3>;
   };
+  struct EquationErrorInfo{
+    Equation primary;
+    bool primary_failed;
+    std::vector<Equation> failures;
+    std::vector<Equation> stalls;
+  };
   struct IndeterminateDefinition {
     new_expression::WeakExpression head;
     std::size_t arg_count;
@@ -107,6 +113,7 @@ namespace solver {
     void close();
     bool solved();
     bool failed();
+    EquationErrorInfo get_error_info() &&;
   };
 }
 

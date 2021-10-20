@@ -275,11 +275,51 @@ namespace interactive {
           input.lexer_locator
         });
       };
+      std::vector<mdb::function<void(EvaluateInfo&)> > to_print;
       auto report = [&](std::string_view text, compiler::new_instruction::archive_index::PolymorphicKind index) {
-        std::cout << "Error: " << text << "\n" << format_error(locate(index), input.source) << "\n";
+        std::stringstream o;
+        o << "Error: " << text << "\n" << format_error(locate(index), input.source) << "\n";
+        to_print.push_back([str = o.str()](auto&) {
+          std::cout << str;
+        });
       };
       auto report_double = [&](std::string_view text, compiler::new_instruction::archive_index::PolymorphicKind index, compiler::new_instruction::archive_index::PolymorphicKind index2) {
-        std::cout << "Error: " << text << "\n" << format_info_pair(locate(index), locate(index2), input.source) << "\n";
+        std::stringstream o;
+        o << "Error: " << text << "\n" << format_info_pair(locate(index), locate(index2), input.source) << "\n";
+        to_print.push_back([str = o.str()](auto&) {
+          std::cout << str;
+        });
+      };
+      auto report_bad_eq_printer = [&](EvaluateInfo& info, solver::EquationErrorInfo const& err) {
+        auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
+          if(auto name = info.get_explicit_name(expr)) {
+            o << *name;
+          } else if(externals_to_names.contains(expr)) {
+            o << externals_to_names.at(expr);
+          } else if(arena.holds_declaration(expr)) {
+            o << "decl_" << expr.index();
+          } else if(arena.holds_axiom(expr)) {
+            o << "ax_" << expr.index();
+          } else {
+            o << "???";
+          }
+        };
+        auto format_expr = [&](new_expression::WeakExpression expr) {
+          return user::raw_format(arena, expr, namer);
+        };
+        auto print_eq = [&](solver::Equation const& eq, bool fail) {
+          if(fail) std::cout << "Failed:\n";
+          else std::cout << "Stalled:\n";
+          std::cout << format_expr(eq.lhs) << " =?= " << format_expr(eq.rhs) << "\n";
+        };
+        print_eq(err.primary, err.primary_failed);
+        for(auto const& eq : err.failures) print_eq(eq, true);
+        for(auto const& eq : err.stalls) print_eq(eq, false);
+      };
+      auto report_eq = [&](solver::EquationErrorInfo& err) {
+        to_print.push_back([&, err = std::move(err)](EvaluateInfo& info) {
+          report_bad_eq_printer(info, err);
+        });
       };
       auto interface = manager.get_evaluator_interface({
         .explain_variable = [&](new_expression::WeakExpression primitive, solver::evaluator::variable_explanation::Any explanation) {
@@ -291,21 +331,21 @@ namespace interactive {
         .report_error = [&](solver::evaluator::error::Any error) {
           using namespace solver::evaluator::error;
           std::visit(mdb::overloaded{
-            [&](NotAFunction const& err) { report("Not a function.", err.apply); },
-            [&](MismatchedArgType const& err) { report("Mismatched arg type.", err.apply); },
-            [&](BadTypeFamilyType const& err) { report("Bad type family type.", err.type_family); },
-            [&](BadHoleType const& err) { report("Bad hole type.", err.hole); },
-            [&](BadDeclarationType const& err) { report("Bad declaration type.", err.declaration); },
-            [&](BadAxiomType const& err) { report("Bad axiom type.", err.axiom); },
-            [&](BadLetType const& err) { report("Bad let type.", err.let); },
-            [&](MismatchedLetType const& err) { report("Mismatched let type.", err.let); },
-            [&](MissingCaptureInSubclause const& err) { report("Missing capture in subclause.", err.subclause); },
-            [&](MissingCaptureInRule const& err) { report("Missing capture in pattern.", err.rule);  },
-            [&](BadApplicationInPattern const& err) { report("Bad application in pattern.", err.rule); },
-            [&](BadApplicationInSubclause const& err) { report("Bad application in subclause.", err.subclause); },
-            [&](InvalidDoubleCapture const& err) { report_double("Bad double capture.", err.primary_capture, err.secondary_capture); },
-            [&](InvalidNondestructurablePattern const& err) { report("Bad non-destructible match.", err.pattern_part); },
-            [&](MismatchedReplacementType const& err) { report("Mismatched replacement type.", err.rule); }
+            [&](NotAFunction& err) { report("Not a function.", err.apply); report_eq(err.equation); },
+            [&](MismatchedArgType& err) { report("Mismatched arg type.", err.apply); report_eq(err.equation); },
+            [&](BadTypeFamilyType& err) { report("Bad type family type.", err.type_family); report_eq(err.equation); },
+            [&](BadHoleType& err) { report("Bad hole type.", err.hole); report_eq(err.equation); },
+            [&](BadDeclarationType& err) { report("Bad declaration type.", err.declaration); report_eq(err.equation); },
+            [&](BadAxiomType& err) { report("Bad axiom type.", err.axiom); report_eq(err.equation); },
+            [&](BadLetType& err) { report("Bad let type.", err.let); report_eq(err.equation); },
+            [&](MismatchedLetType& err) { report("Mismatched let type.", err.let); report_eq(err.equation); },
+            [&](MissingCaptureInSubclause& err) { report("Missing capture in subclause.", err.subclause); },
+            [&](MissingCaptureInRule& err) { report("Missing capture in pattern.", err.rule);  },
+            [&](BadApplicationInPattern& err) { report("Bad application in pattern.", err.rule); },
+            [&](BadApplicationInSubclause& err) { report("Bad application in subclause.", err.subclause); },
+            [&](InvalidDoubleCapture& err) { report_double("Bad double capture.", err.primary_capture, err.secondary_capture); report_eq(err.equation); },
+            [&](InvalidNondestructurablePattern& err) { report("Bad non-destructible match.", err.pattern_part); report_eq(err.equation); },
+            [&](MismatchedReplacementType& err) { report("Mismatched replacement type.", err.rule); report_eq(err.equation); }
           }, error);
         }
       });
@@ -313,13 +353,17 @@ namespace interactive {
       manager.run();
       manager.close();
 
-      return EvaluateInfo{
+      auto ret = EvaluateInfo{
         std::move(input),
         std::move(eval_result),
         std::move(variable_explanations),
         std::move(instruction_output),
         std::move(instruction_locator)
       };
+      for(auto& er : to_print) {
+        er(ret);
+      }
+      return std::move(ret);
     }
     mdb::Result<EvaluateInfo, std::string> full_compile(std::string_view str) {
       return map(bind(
