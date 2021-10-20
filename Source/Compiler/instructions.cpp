@@ -219,6 +219,9 @@ namespace compiler::instruction {
             {ExplanationKind::arrow_arrow_complete, arrow.index()}
           );
         },
+        [&](resolved_archive::Match const&) -> located_output::Expression {
+          std::terminate();
+        },
         [&](resolved_archive::Block const& block) -> located_output::Expression {
           for(auto const& command : block.statements) {
             compile(command);

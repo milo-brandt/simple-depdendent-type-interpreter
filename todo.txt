@@ -1,3 +1,8 @@
+Need to ensure that indeterminates are not defined from contexts with more assumptions.
+Need to re-add support for U64s, Strings, Vectors.
+
+
+
 *************
 High priority
 *************

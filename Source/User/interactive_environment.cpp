@@ -138,6 +138,7 @@ namespace interactive {
           {"rule", 3},
           {"let", 4},
           {"where", 14},
+          {"match", 15},
           {"->", 5},
           {":", 6},
           {";", 7},

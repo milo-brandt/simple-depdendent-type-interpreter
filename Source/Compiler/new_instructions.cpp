@@ -241,6 +241,9 @@ namespace compiler::new_instruction {
             };
           }
           return ret;
+        },
+        [&](resolved_archive::Match const&) -> located_output::Expression {
+          std::terminate();
         }
       });
     }

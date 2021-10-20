@@ -179,6 +179,14 @@ namespace expression_parser {
         [&](output_archive::Literal const&) {
           return false;
         },
+        [&](output_archive::Match const& match) {
+          if(expression_uses_identifier(match.matched_expression, id)) return true;
+          if(match.output_type && expression_uses_identifier(*match.output_type, id)) return true;
+          for(auto const& arm_expression : match.arm_expressions) {
+            if(expression_uses_identifier(arm_expression, id)) return true;
+          }
+          return false;
+        },
         [&](output_archive::Block const& block) {
           for(auto const& statement : block.statements) {
             bool shadowed = false;
@@ -451,6 +459,9 @@ namespace expression_parser {
             }
             return std::move(err);
           }
+        },
+        [&](output_archive::Match const& match) -> mdb::Result<resolved::Expression, ResolutionError> {
+          std::terminate();
         }
       });
     }
