@@ -615,7 +615,9 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
   };
   {%- endmacro %}
   {%- for component in tree.components %}
+  {%- if tree.copyable %}
   {{ define_component_writer(component, "cref", reference.cref) }}
+  {%- endif %}
   {{ define_component_writer(component, "rref", reference.rref) }}
   {%- endfor %}
   {% endcall %}
@@ -641,12 +643,16 @@ std::common_type_t<{%- for component in components -%}std::invoke_result_t<Visit
     explicit {{classname}}(std::pair<std::size_t, void*> pair_data):node_count(pair_data.first), data(pair_data.second) {}
   public:
     {%- for kind in kinds %}
-    {%- for ref in [reference.cref, reference.rref] %}
-    {{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}});
+    {%- if tree.copyable %}
+    {{classname}}({{tree.namespace}}::{{kind.name}} const&);
     {%- call in_extension("cpp") %}
-  {{classname}}::{{classname}}({{tree.namespace}}::{{kind.name}}{{ref.suffix}} target):{{classname}}(archive_detail::Detail::allocate_and_fill_{{kind.name|underscore}}_{{ref.name}}({% call ref.forward() %}target{% endcall %})) {}
+  {{classname}}::{{classname}}({{tree.namespace}}::{{kind.name}} const& target):{{classname}}(archive_detail::Detail::allocate_and_fill_{{kind.name|underscore}}_cref(target)) {}
     {%- endcall %}
-    {%- endfor %}
+    {%- endif %}
+    {{classname}}({{tree.namespace}}::{{kind.name}}&&);
+    {%- call in_extension("cpp") %}
+  {{classname}}::{{classname}}({{tree.namespace}}::{{kind.name}}&& target):{{classname}}(archive_detail::Detail::allocate_and_fill_{{kind.name|underscore}}_rref(std::move(target))) {}
+    {%- endcall %}
     {%- endfor %}
     {%- if is_poly %}
     {%- for kind in kinds %}
@@ -747,9 +753,10 @@ void archive_indices_of({{kind.name}} const& target, Callback&& callback) {
   {{ archive_part_definition(tree, archive) }}
   {{ archive_unique_definition(tree, archive) }}
 {%- for kind in tree.kinds %}
-{%- for ref in [reference.cref, reference.rref] %}
-  inline archive_root::{{kind.name}} archive({{kind.name}}{{ref.suffix}} target) { return archive_root::{{kind.name}}{ {%- call ref.forward() %}target{% endcall -%} }; }
-{%- endfor %}
+{%- if tree.copyable %}
+  inline archive_root::{{kind.name}} archive({{kind.name}} const& target) { return archive_root::{{kind.name}}{target}; }
+{%- endif %}
+  inline archive_root::{{kind.name}} archive({{kind.name}}&& target) { return archive_root::{{kind.name}}{std::move(target)}; }
 {%- endfor %}
 {{ index_generation_for_tree(tree, archive) }}
 {%- endmacro %}
