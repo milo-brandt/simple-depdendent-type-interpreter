@@ -250,8 +250,10 @@ namespace solver::evaluator {
             .primary_pattern = std::move(resolved),
             .subpatterns = std::move(subpatterns)
           }, rule.capture_count).output;
-          auto flat = flatten_pattern(interface.arena, std::move(folded)).output;
-          auto executed = execute_pattern({
+          auto flat_result = flatten_pattern(interface.arena, std::move(folded));
+          if(flat_result.holds_error()) std::terminate();
+          auto& flat = flat_result.get_value().output;
+          auto executed_result = execute_pattern({
             .arena = interface.arena,
             .arrow = interface.arrow,
             .stack = local_context,
@@ -276,6 +278,8 @@ namespace solver::evaluator {
               return std::move(value.value);
             }
           }, std::move(flat));
+          if(executed_result.holds_error()) std::terminate();
+          auto& executed = executed_result.get_value();
           auto locals_size_before = locals.size();
           for(auto& capture : executed.captures) {
             locals.push_back({

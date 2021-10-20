@@ -46,6 +46,11 @@ namespace solver {
     std::vector<FoldedSubclause> subclause_matches;
     //represents pattern head arg_0 arg_1 ... arg_n matches[0] ... matches[m-1]
   };
+  struct FlatSubclauseMissingCapture {
+    std::size_t subclause_index;
+  };
+  struct FlatGlobalMissingCapture {};
+  using FlatError = std::variant<FlatSubclauseMissingCapture, FlatGlobalMissingCapture>;
   struct FlatPatternMatchArg {
     std::size_t matched_arg_index; //in "true" indexing of pattern args
   };
@@ -93,6 +98,14 @@ namespace solver {
     std::vector<FlatPatternCheck> checks;
     static constexpr auto part_info = mdb::parts::simple<6>;
   };
+  struct PatternExecuteShardNotFunction {
+    std::size_t shard_index;
+    std::size_t args_applied;
+  };
+  struct PatternExecuteGlobalNotFunction {
+    std::size_t args_applied;
+  };
+  using PatternExecuteError = std::variant<PatternExecuteShardNotFunction, PatternExecuteGlobalNotFunction>;
   struct PatternExecutionResult {
     new_expression::Pattern pattern;
     new_expression::OwnedExpression type_of_pattern;
@@ -120,14 +133,14 @@ namespace solver {
     FlatPattern output;
     FlatPatternExplanation locator;
   };
-  FlatResult flatten_pattern(new_expression::Arena&, FoldedPattern);
+  mdb::Result<FlatResult, FlatError> flatten_pattern(new_expression::Arena&, FoldedPattern);
   struct PatternExecuteInterface {
     new_expression::Arena& arena;
     new_expression::WeakExpression arrow;
     stack::Stack stack;
     mdb::function<new_expression::OwnedExpression(std::uint64_t, stack::Stack, std::vector<new_expression::OwnedExpression>)> get_subexpression;
   };
-  PatternExecutionResult execute_pattern(PatternExecuteInterface, FlatPattern);
+  mdb::Result<PatternExecutionResult, PatternExecuteError> execute_pattern(PatternExecuteInterface, FlatPattern);
 }
 
 #endif
