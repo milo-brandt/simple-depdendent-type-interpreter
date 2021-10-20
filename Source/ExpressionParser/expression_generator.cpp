@@ -51,6 +51,7 @@ namespace expression_parser {
     }
     ExprResult parse_expression(LocatorInfo const&, LexerSpan& span);
     ExprResult parse_block(LexerSpanIndex position, lex_archive::BraceExpression const& braces);
+    ExprResult parse_match(LocatorInfo const&, LexerSpan& span);
     ExprResult parse_vector_literal(LexerSpanIndex position, lex_archive::BracketExpression const& bracket) {
       LexerSpan span = bracket;
       LocatorInfo locator = bracket;
@@ -241,6 +242,8 @@ namespace expression_parser {
             return located_output::Expression{located_output::Hole{
               .position = locator.to_span(span.span_begin - 1, span.span_begin)
             }};
+          case symbols::match:
+            return parse_match(locator, span);
           default:
             return ParseError{
               .position = head.index(),
@@ -604,6 +607,153 @@ namespace expression_parser {
           .message = "Expected statement. Did not find a command nor an equals sign."
         };
       }
+    }
+    struct InnerMatchInfo {
+      std::vector<located_output::Pattern> arm_patterns;
+      std::vector<located_output::Expression> arm_expressions;
+    };
+    mdb::Result<std::pair<located_output::Pattern, located_output::Expression>, ParseError> parse_match_arm(LocatorInfo const& locator, LexerSpan& span) {
+      //span is assumed non-empty
+      auto mid_arrow = find_if(span.begin(), span.end(), [&](lex_archive::Term const& term) {
+        return term.holds_symbol() && term.get_symbol().symbol_index == symbols::arrow;
+      });
+      if(mid_arrow == span.end()) {
+        return ParseError{
+          .position = span.span_begin->index(),
+          .message = "Expected '->' in match arm."
+        };
+      }
+      if(mid_arrow == span.span_begin) {
+        return ParseError{
+          .position = span.span_begin->index(),
+          .message = "Expected pattern before '->' in match arm."
+        };
+      }
+      LexerSpan pattern_span{span.span_begin, mid_arrow};
+      auto pat = parse_pattern(locator, pattern_span);
+      if(pat.holds_error()) return std::move(pat.get_error());
+      LexerSpan expr_span{mid_arrow + 1, span.span_end};
+      if(expr_span.empty()) {
+        return ParseError {
+          .position = mid_arrow->index(),
+          .message = "Expected expression after '->' in match arm."
+        };
+      }
+      auto expr = parse_expression(locator, expr_span);
+      if(expr.holds_error()) return std::move(expr.get_error());
+      return std::make_pair(
+        std::move(pat.get_value()),
+        std::move(expr.get_value())
+      );
+    }
+    mdb::Result<InnerMatchInfo, ParseError> parse_match_body(lex_archive::BraceExpression const& braces) {
+      LexerSpan span = braces;
+      LocatorInfo locator = braces;
+      /*if(span.empty()) {
+        return ParseError{
+          .position = braces.index(),
+          .message = "Expected statements and expression in block."
+        };
+      }*/ //Technically, there are types that can be matched with no arms.
+      InnerMatchInfo ret;
+      while(true) {
+        auto next_semi = find_if(span.begin(), span.end(), [&](lex_archive::Term const& term) {
+          return term.holds_symbol() && term.get_symbol().symbol_index == symbols::semicolon;
+        });
+        if(next_semi == span.end()) {
+          if(span.empty()) {
+            return std::move(ret);
+          } else {
+            return ParseError {
+              .position = span.span_begin->index(),
+              .message = "Unexpected token between last semicolon of match statement and closing brace."
+            };
+          }
+        }
+        LexerSpan arm_span{span.span_begin, next_semi};
+        if(arm_span.empty()) {
+          return ParseError {
+            .position = next_semi->index(),
+            .message = "Expected match arm before ';'."
+          };
+        }
+        auto arm = parse_match_arm(locator, arm_span);
+        if(arm.holds_error()) return std::move(arm.get_error());
+        auto& [arm_pattern, arm_expression] = arm.get_value();
+        ret.arm_patterns.push_back(std::move(arm_pattern));
+        ret.arm_expressions.push_back(std::move(arm_expression));
+        span.span_begin = next_semi + 1;
+      }
+    }
+
+    ExprResult parse_match(LocatorInfo const& locator, LexerSpan& span) { //span starts after "match" symbol
+      auto match_begin = span.begin() - 1;
+      if(span.empty() || !span.span_begin->holds_parenthesized_expression()) {
+        return ParseError{
+          .position = (span.span_begin - 1)->index(),
+          .message = "Expected parenthesized expression after 'match'."
+        };
+      }
+      auto& parenthesized_expr = span.span_begin->get_parenthesized_expression();
+      LexerSpan parens_span = parenthesized_expr;
+      auto matched_expr_result = parse_expression(parenthesized_expr, parens_span);
+      if(matched_expr_result.holds_error()) return std::move(matched_expr_result.get_error());
+      auto& matched_expr = matched_expr_result.get_value();
+      ++span.span_begin;
+      bool holds_arrow = !span.empty() && span.span_begin->holds_symbol() && span.span_begin->get_symbol().symbol_index == symbols::arrow;
+      bool holds_brace = !span.empty() && span.span_begin->holds_brace_expression();
+      if(span.empty() || !(holds_arrow || holds_brace)) {
+        return ParseError{
+          .position = (span.span_begin - 1)->index(),
+          .message = "Expected '->' or '{' after matched expression."
+        };
+      }
+
+      std::optional<located_output::Expression> type_of_match;
+      if(holds_arrow) {
+        ++span.span_begin;
+        bool was_block = false;
+        auto match_brace = find_if(span.begin(), span.end(), [&](lex_archive::Term const& term) {
+          if(was_block) {
+            was_block = false;
+            return false;
+          } else {
+            was_block = term.holds_symbol() && term.get_symbol().symbol_index == symbols::block;
+            return term.holds_brace_expression();
+          }
+        });
+        if(match_brace == span.begin()) {
+          return ParseError{
+            .position = (span.span_begin - 1)->index(),
+            .message = "Expected type after '->' in match statement."
+          };
+        }
+        if(match_brace == span.end()) {
+          return ParseError{
+            .position = (span.span_begin - 1)->index(),
+            .message = "Expected '{' after type declaration of match."
+          };
+        }
+        LexerSpan type_span{span.span_begin, match_brace};
+        auto type_result = parse_expression(locator, type_span);
+        if(type_result.holds_error()) return std::move(type_result.get_error());
+        type_of_match = std::move(type_result.get_value());
+        span.span_begin = match_brace;
+      }
+      //span.begin() must point at a brace expression now.
+      auto const& brace = span.span_begin->get_brace_expression();
+      ++span.span_begin; //consume brace.
+      auto body = parse_match_body(brace);
+      if(body.holds_error()) return std::move(body.get_error());
+      auto& [arm_patterns, arm_expressions] = body.get_value();
+
+      return located_output::Expression{located_output::Match{
+        .matched_expression = std::move(matched_expr),
+        .output_type = std::move(type_of_match),
+        .arm_patterns = std::move(arm_patterns),
+        .arm_expressions = std::move(arm_expressions),
+        .position = locator.to_span(match_begin, span.span_begin)
+      }};
     }
     ExprResult parse_block(LexerSpanIndex position, lex_archive::BraceExpression const& braces) {
       LexerSpan span = braces;
