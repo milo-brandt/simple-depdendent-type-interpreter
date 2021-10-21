@@ -27,32 +27,75 @@ namespace solver {
       return result != AttemptResult::nothing;
     }
     struct DefinitionFormData {
-      WeakExpression head;                              //checked to be variable
-      std::vector<std::uint64_t> arg_list;                              //argument at each index
-      std::unordered_map<std::uint64_t, std::uint64_t> arg_to_index;    //which arguments appear at which indices
+      WeakExpression head;
+      std::size_t arg_count;
+      std::unordered_map<std::uint64_t, OwnedExpression> arg_map;
+      std::unordered_map<std::uint64_t, OwnedExpression> conglomerate_map;
+      Stack target_stack;
+      static constexpr auto part_info = mdb::parts::simple<5>;
     };
-    template<class IndeterminateCheck>
-    std::optional<DefinitionFormData> is_term_in_definition_form(Arena& arena, WeakExpression term, IndeterminateCheck&& is_indeterminate) {
+    std::optional<DefinitionFormData> is_term_in_definition_form(Arena& arena, WeakExpression term, Stack stack, mdb::function<std::optional<DefinableInfo>(new_expression::WeakExpression)>& get_definable_info) {
       auto unfolded = unfold(arena, term);
-      if(is_indeterminate(unfolded.head)) {
-        DefinitionFormData ret{
-          .head = unfolded.head
-        };
-        for(std::uint64_t index = 0; index < unfolded.args.size(); ++index) {
-          if(auto const* arg_data = arena.get_if_argument(unfolded.args[index])) {
-            if(ret.arg_to_index.contains(arg_data->index)) {
-              return std::nullopt; //a single argument is applied twice
+      if(auto definable_info = get_definable_info(unfolded.head)) {
+        struct Detail {
+          Arena& arena;
+          Stack target_stack;
+          std::unordered_map<std::uint64_t, OwnedExpression> arg_map;
+          std::unordered_map<std::uint64_t, OwnedExpression> conglomerate_map;
+          bool match_pieces(WeakExpression initial_part, WeakExpression target_part) {
+            if(auto* arg = arena.get_if_argument(initial_part)) {
+              if(arg_map.contains(arg->index)) {
+                return arg_map.at(arg->index) == target_part;
+              } else {
+                arg_map.insert(std::make_pair(arg->index, arena.copy(target_part)));
+                return true;
+              }
+            } else if(auto* conglom = arena.get_if_conglomerate(initial_part)) {
+              if(conglomerate_map.contains(conglom->index)) {
+                return conglomerate_map.at(conglom->index) == target_part;
+              } else {
+                conglomerate_map.insert(std::make_pair(conglom->index, arena.copy(target_part)));
+                return true;
+              }
             } else {
-              ret.arg_list.push_back(arg_data->index);
-              ret.arg_to_index.insert(std::make_pair(arg_data->index, index));
+              auto initial_unfolded = unfold(arena, initial_part);
+              auto target_unfolded = unfold(arena, target_part);
+              if(initial_unfolded.head == target_unfolded.head && initial_unfolded.args.size() == target_unfolded.args.size() && arena.holds_axiom(initial_unfolded.head)) {
+                for(std::size_t i = 0; i < initial_unfolded.args.size(); ++i) {
+                  if(!match_pieces(initial_unfolded.args[i], target_unfolded.args[i])) return false;
+                }
+                return true;
+              } else {
+                return false;
+              }
             }
-          } else {
-            return std::nullopt; //applied value is not argument
+          }
+          bool match_to_arg(WeakExpression initial_arg, std::size_t target_arg) {
+            OwnedExpression output = target_stack.reduce(arena.argument(target_arg));
+            new_expression::RAIIDestroyer destroyer{arena, output};
+            return match_pieces(initial_arg, output);
+          }
+        };
+        Detail detail{
+          .arena = arena,
+          .target_stack = std::move(definable_info->stack)
+        };
+        for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
+          if(!detail.match_to_arg(unfolded.args[i], i)) {
+            destroy_from_arena(arena, detail.arg_map, detail.conglomerate_map);
+            return std::nullopt;
           }
         }
-        return std::move(ret);
+        return DefinitionFormData{
+          .head = unfolded.head,
+          .arg_count = unfolded.args.size(),
+          .arg_map = std::move(detail.arg_map),
+          .conglomerate_map = std::move(detail.conglomerate_map),
+          .target_stack = std::move(detail.target_stack)
+        };
+      } else {
+        return std::nullopt;
       }
-      return std::nullopt;
     }
     OwnedExpression apply_args_enumerated(Arena& arena, OwnedExpression head, std::uint64_t arg_count) {
       auto ret = std::move(head);
@@ -71,12 +114,10 @@ namespace solver {
     /*
       Utilities for (I)
     */
-    std::optional<OwnedExpression> get_replacement_from(std::unordered_map<std::uint64_t, std::uint64_t> const& arg_map, WeakExpression term, SolverInterface& interface, WeakExpression head) {
+    std::optional<OwnedExpression> get_replacement_from(DefinitionFormData& definition_form, WeakExpression term, SolverInterface& interface) {
       struct Detail {
         SolverInterface& interface;
-        std::unordered_map<std::uint64_t, std::uint64_t> const& arg_map;
-        WeakExpression head;
-        std::uint64_t arg_end = 0;
+        DefinitionFormData& definition_form;
         bool is_acceptable(WeakExpression expr) {
           return interface.arena.visit(expr, mdb::overloaded{
             [&](new_expression::Apply const& apply) {
@@ -86,34 +127,48 @@ namespace solver {
               return true;
             },
             [&](new_expression::Declaration const&) {
-              return !interface.term_depends_on(expr, head);
+              return !interface.term_depends_on(expr, definition_form.head);
             },
             [&](new_expression::Argument const& arg) {
-              if(arg_end <= arg.index) arg_end = arg.index + 1;
-              return arg_map.contains(arg.index);
+              return definition_form.arg_map.contains(arg.index);
             },
-            [&](auto const& conglomerate) -> bool {
+            [&](new_expression::Conglomerate const& conglomerate) {
+              return definition_form.conglomerate_map.contains(conglomerate.index);
+            },
+            [&](auto const&) -> bool {
+              std::terminate();
+            }
+          });
+        }
+        OwnedExpression remap(WeakExpression expr) {
+          return interface.arena.visit(expr, mdb::overloaded{
+            [&](new_expression::Apply const& apply) {
+              return interface.arena.apply(
+                remap(apply.lhs),
+                remap(apply.rhs)
+              );
+            },
+            [&](new_expression::Axiom const&) {
+              return interface.arena.copy(expr);
+            },
+            [&](new_expression::Declaration const&) {
+              return interface.arena.copy(expr);
+            },
+            [&](new_expression::Argument const& arg) {
+              return interface.arena.copy(definition_form.arg_map.at(arg.index));
+            },
+            [&](new_expression::Conglomerate const& conglomerate) {
+              return interface.arena.copy(definition_form.conglomerate_map.at(conglomerate.index));
+            },
+            [&](auto const&) -> OwnedExpression {
               std::terminate();
             }
           });
         }
       };
-      Detail detail{interface, arg_map, head};
+      Detail detail{interface, definition_form};
       if(detail.is_acceptable(term)) {
-        std::vector<OwnedExpression> arg_remapping;
-        new_expression::RAIIDestroyer arg_destroyer{
-          interface.arena, arg_remapping
-        };
-        for(std::size_t i = 0; i < detail.arg_end; ++i) {
-          arg_remapping.push_back([&] {
-            if(arg_map.contains(i)) {
-              return interface.arena.argument(arg_map.at(i));
-            } else {
-              return interface.arena.argument(1000);
-            }
-          }());
-        }
-        return substitute_into(interface.arena, term, mdb::as_span(arg_remapping));
+        return detail.remap(term);
       }
       else return std::nullopt;
     }
@@ -123,26 +178,29 @@ namespace solver {
       OwnedExpression replacement;
       static constexpr auto part_info = mdb::parts::simple<3>;
     };
-    std::optional<ExtractedRule> get_rule_from_equation_lhs(WeakExpression lhs, WeakExpression rhs, SolverInterface& interface) {
-      if(auto map = is_term_in_definition_form(interface.arena, lhs, interface.is_definable_indeterminate)) {
-        if(auto replacement = get_replacement_from(map->arg_to_index, rhs, interface, map->head)) {
+    std::optional<ExtractedRule> get_rule_from_equation_lhs(WeakExpression lhs, WeakExpression rhs, Stack stack, SolverInterface& interface) {
+      if(auto map = is_term_in_definition_form(interface.arena, lhs, stack, interface.get_definable_info)) {
+        if(auto replacement = get_replacement_from(*map, rhs, interface)) {
+          destroy_from_arena(interface.arena, *map);
           return ExtractedRule{
             .head = map->head,
-            .arg_count = map->arg_to_index.size(),
+            .arg_count = map->arg_count,
             .replacement = std::move(*replacement)
           };
+        } else {
+          destroy_from_arena(interface.arena, *map);
         }
       }
       return std::nullopt;
     }
-    std::optional<ExtractedRule> get_rule_from_equation(WeakExpression lhs, WeakExpression rhs, SolverInterface& interface) {
-      if(auto ret = get_rule_from_equation_lhs(lhs, rhs, interface)) return ret;
-      else return get_rule_from_equation_lhs(rhs, lhs, interface);
+    std::optional<ExtractedRule> get_rule_from_equation(WeakExpression lhs, WeakExpression rhs, Stack stack, SolverInterface& interface) {
+      if(auto ret = get_rule_from_equation_lhs(lhs, rhs, stack, interface)) return ret;
+      else return get_rule_from_equation_lhs(rhs, lhs, stack, interface);
     }
     /*
       Utilities for asymmetric explosion
     */
-    struct AsymmetricExplodeSpec {
+    /*struct AsymmetricExplodeSpec {
       WeakExpression pattern_head;
       std::vector<std::uint64_t> pattern_args;
       std::variant<WeakExpression, new_expression::Argument> irreducible_head;
@@ -171,13 +229,13 @@ namespace solver {
         return ret;
       }
       return std::monostate{};
-    }
+    }*/
   }
   struct Solver::Impl {
     SolverInterface interface;
     std::vector<EquationInfo> equations;
     AttemptResult try_to_extract_rule(std::uint64_t index, EquationInfo const& eq) {
-      if(auto extracted_rule = get_rule_from_equation(eq.equation.lhs, eq.equation.rhs, interface)) {
+      if(auto extracted_rule = get_rule_from_equation(eq.equation.lhs, eq.equation.rhs, eq.equation.stack, interface)) {
         interface.make_definition({
           .head = extracted_rule->head,
           .arg_count = extracted_rule->arg_count,

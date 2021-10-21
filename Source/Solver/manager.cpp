@@ -7,7 +7,7 @@ namespace solver {
   using WeakExpression = new_expression::WeakExpression;
   using Arena = new_expression::Arena;
   using RuleCollector = new_expression::RuleCollector;
-
+  using Stack = stack::Stack;
   BasicContext::BasicContext(new_expression::Arena& arena):
     arena(arena),
     rule_collector(arena),
@@ -50,7 +50,7 @@ namespace solver {
     std::vector<EquationSolver> active_solvers;
     std::vector<EquationFailedSolver> failed_solvers;
     std::vector<RuleBuilder> active_rule_builders;
-    new_expression::OwnedKeySet definable_indeterminates;
+    new_expression::OwnedKeyMap<solver::DefinableInfo> definable_indeterminates;
     std::optional<stack::Stack> cheating_stack;
     SegmentResult run(EquationSolver& eq) {
       auto made_progress = eq.solver.try_to_make_progress();
@@ -116,8 +116,12 @@ namespace solver {
         .term_depends_on = [this](WeakExpression base, WeakExpression possible_dependency) {
           return base == possible_dependency;
         },
-        .is_definable_indeterminate = [this](WeakExpression indeterminate) {
-          return definable_indeterminates.contains(indeterminate);
+        .get_definable_info = [this](WeakExpression indeterminate) -> std::optional<solver::DefinableInfo> {
+          if(definable_indeterminates.contains(indeterminate)) {
+            return definable_indeterminates.at(indeterminate);
+          } else {
+            return std::nullopt;
+          }
         },
         .is_lambda_like = [this](WeakExpression expr) {
           return evaluation.is_lambda_like(expr);
@@ -201,8 +205,8 @@ namespace solver {
         .register_declaration = [this](WeakExpression expr) {
           rule_collector.register_declaration(expr);
         },
-        .register_definable_indeterminate = [this](OwnedExpression expr) {
-          definable_indeterminates.insert(std::move(expr));
+        .register_definable_indeterminate = [this](OwnedExpression expr, Stack stack) {
+          definable_indeterminates.set(std::move(expr), solver::DefinableInfo{std::move(stack)});
         },
         .add_rule = [this](new_expression::Rule rule) {
           rule_collector.add_rule(std::move(rule));
@@ -218,8 +222,8 @@ namespace solver {
         .close_interface = [this]() { close(); }
       };
     }
-    void register_definable_indeterminate(new_expression::OwnedExpression expr) {
-      definable_indeterminates.insert(std::move(expr));
+    void register_definable_indeterminate(new_expression::OwnedExpression expr, Stack stack) {
+      definable_indeterminates.set(std::move(expr), solver::DefinableInfo{std::move(stack)});
     }
     bool solved() {
       return active_solvers.empty();
@@ -237,8 +241,8 @@ namespace solver {
   Manager& Manager::operator=(Manager&&) = default;
   Manager::~Manager() = default;
 
-  void Manager::register_definable_indeterminate(OwnedExpression expr) {
-    return impl->register_definable_indeterminate(std::move(expr));
+  void Manager::register_definable_indeterminate(OwnedExpression expr, Stack stack) {
+    return impl->register_definable_indeterminate(std::move(expr), std::move(stack));
   }
   void Manager::run() { return impl->run(); }
   void Manager::close() { return impl->close(); }

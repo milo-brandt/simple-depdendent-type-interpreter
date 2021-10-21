@@ -31,7 +31,7 @@ namespace solver {
     Manager(Manager&&);
     Manager& operator=(Manager&&);
     ~Manager();
-    void register_definable_indeterminate(new_expression::OwnedExpression);
+    void register_definable_indeterminate(new_expression::OwnedExpression, stack::Stack);
     new_expression::OwnedExpression reduce(new_expression::OwnedExpression);
     void run();
     void close();

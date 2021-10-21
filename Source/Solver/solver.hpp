@@ -93,10 +93,13 @@ namespace solver {
   struct StackHandle {
     std::size_t index;
   };
+  struct DefinableInfo {
+    stack::Stack stack;
+  };
   struct SolverInterface {
     new_expression::Arena& arena;
     mdb::function<bool(new_expression::WeakExpression, new_expression::WeakExpression)> term_depends_on;
-    mdb::function<bool(new_expression::WeakExpression)> is_definable_indeterminate;
+    mdb::function<std::optional<DefinableInfo>(new_expression::WeakExpression)> get_definable_info;
     mdb::function<bool(new_expression::WeakExpression)> is_lambda_like;
     mdb::function<bool(new_expression::WeakExpression)> is_head_closed;
     mdb::function<void(IndeterminateDefinition)> make_definition;

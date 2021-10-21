@@ -25,7 +25,10 @@ namespace new_expression {
     bool operator()(S const& lhs, T const& rhs) const { return lhs.index() == rhs.index(); }
     using is_transparent = int;
   };
-  struct TrivialOnArenaDestructor {};
+  struct TrivialOnArenaDestructor {
+    template<class T>
+    void operator()(Arena&, T&&) {}
+  };
   template<class T, class OnArenaDestructor = TrivialOnArenaDestructor>
   class WeakKeyMap {
     Arena* arena;
@@ -146,7 +149,7 @@ namespace new_expression {
         entry = std::move(value);
         arena->drop(std::move(key));
       } else {
-        underlying_map.insert(std::make_pair(key, std::move(value)));
+        underlying_map.insert(std::make_pair(std::move(key), std::move(value)));
         //keep extra reference to key
       }
     }

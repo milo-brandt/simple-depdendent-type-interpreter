@@ -33,7 +33,7 @@ namespace solver::evaluator {
       interface.register_declaration(var);
       interface.explain_variable(var, std::move(explanation));
       if constexpr(kind == VariableKind::indeterminate) {
-        interface.register_definable_indeterminate(interface.arena.copy(var));
+        interface.register_definable_indeterminate(interface.arena.copy(var), local_context);
       }
       return {.value = local_context.apply_args(std::move(var)), .type = std::move(type)};
     }

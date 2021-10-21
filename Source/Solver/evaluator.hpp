@@ -69,7 +69,7 @@ namespace solver::evaluator {
     new_expression::WeakExpression constant;
     std::function<void(new_expression::WeakExpression, new_expression::OwnedExpression)> register_type;
     std::function<void(new_expression::WeakExpression)> register_declaration;
-    std::function<void(new_expression::OwnedExpression)> register_definable_indeterminate;
+    std::function<void(new_expression::OwnedExpression, stack::Stack)> register_definable_indeterminate;
     std::function<void(new_expression::Rule)> add_rule;
     std::function<void(new_expression::WeakExpression, variable_explanation::Any)> explain_variable;
     mdb::function<mdb::Future<EquationResult>(Equation)> solve;
