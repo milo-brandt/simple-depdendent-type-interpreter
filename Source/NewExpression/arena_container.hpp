@@ -74,7 +74,12 @@ namespace new_expression {
     bool contains(WeakExpression key) const { return underlying_map.contains(key); }
     T& at(WeakExpression key) { return underlying_map.at(key); }
     T const& at(WeakExpression key) const { return underlying_map.at(key); }
-    void erase(WeakExpression key) { underlying_map.erase(key); }
+    void erase(WeakExpression key) {
+      if(underlying_map.contains(key)) {
+        on_arena_destructor(*arena, underlying_map.at(key));
+        underlying_map.erase(key);
+      }
+    }
     std::size_t size() const { return underlying_map.size(); }
     void set(WeakExpression key, T value) {
       if constexpr(!std::is_same_v<OnArenaDestructor, TrivialOnArenaDestructor>) {
@@ -90,6 +95,62 @@ namespace new_expression {
       }
     }
     ~WeakKeyMap() {
+      clear_map();
+    }
+  };
+  template<class T, class OnArenaDestructor = TrivialOnArenaDestructor>
+  class OwnedKeyMap {
+    Arena* arena;
+    OnArenaDestructor on_arena_destructor;
+    std::unordered_map<WeakExpression, T, ExpressionHasher> underlying_map;
+    void clear_map() {
+      if constexpr(!std::is_same_v<OnArenaDestructor, TrivialOnArenaDestructor>) {
+        for(auto& term : underlying_map) {
+          arena->deref_weak(term.first);
+          on_arena_destructor(*arena, term.second);
+        }
+      }
+      underlying_map.clear();
+    }
+  public:
+    OwnedKeyMap(Arena& arena):arena(&arena) {}
+    OwnedKeyMap(Arena& arena, OnArenaDestructor on_arena_destructor):arena(&arena), on_arena_destructor(std::move(on_arena_destructor)) {}
+
+    OwnedKeyMap(OwnedKeyMap&& other):arena(other.arena), underlying_map(std::move(other.underlying_map)) {
+      other.underlying_map.clear(); //just in case the move constructor is defined weirdly
+    }
+    OwnedKeyMap& operator=(OwnedKeyMap&& other) {
+      if(&other == this) return *this;
+      clear_map();
+      on_arena_destructor = std::move(other.on_arena_destructor);
+      arena = other.arena;
+      underlying_map = std::move(other.underlying_map);
+      other.underlying_map.clear();
+      return *this;
+    }
+    bool contains(WeakExpression key) const { return underlying_map.contains(key); }
+    T& at(WeakExpression key) { return underlying_map.at(key); }
+    T const& at(WeakExpression key) const { return underlying_map.at(key); }
+    void erase(WeakExpression key) {
+      if(underlying_map.contains(key)) {
+        arena->deref_weak(key);
+        on_arena_destructor(*arena, underlying_map.at(key));
+        underlying_map.erase(key);
+      }
+    }
+    std::size_t size() const { return underlying_map.size(); }
+    void set(OwnedExpression key, T value) {
+      if(underlying_map.contains(key)) {
+        auto& entry = underlying_map.at(key);
+        on_arena_destructor(*arena, entry);
+        entry = std::move(value);
+        arena->drop(std::move(key));
+      } else {
+        underlying_map.insert(std::make_pair(key, std::move(value)));
+        //keep extra reference to key
+      }
+    }
+    ~OwnedKeyMap() {
       clear_map();
     }
   };
