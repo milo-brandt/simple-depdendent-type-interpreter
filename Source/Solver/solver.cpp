@@ -168,7 +168,7 @@ namespace solver {
       };
       Detail detail{interface, definition_form};
       if(detail.is_acceptable(term)) {
-        return detail.remap(term);
+        return definition_form.target_stack.eliminate_conglomerates(detail.remap(term));
       }
       else return std::nullopt;
     }
