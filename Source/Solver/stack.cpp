@@ -263,4 +263,7 @@ namespace stack {
       return ret;
     }
   }
+  new_expression::AssumptionInfo Stack::list_assumptions() const {
+    return impl->evaluation->list_assumptions();
+  }
 }

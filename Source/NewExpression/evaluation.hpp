@@ -14,6 +14,15 @@ namespace new_expression {
     OwnedExpression reduce_head(OwnedExpression);
   };
   struct EvaluationError{};
+  struct AssumptionClass {
+    OwnedExpression representative;
+    std::vector<OwnedExpression> terms;
+    static constexpr auto part_info = mdb::parts::simple<2>;
+  };
+  struct AssumptionInfo {
+    std::vector<AssumptionClass> assumptions;
+    static constexpr auto part_info = mdb::parts::simple<1>;
+  };
   class EvaluationContext {
     struct Impl;
     std::unique_ptr<Impl> impl;
@@ -29,6 +38,7 @@ namespace new_expression {
     bool is_lambda_like(WeakExpression); //should only be used on things that have already been reduced.
     std::optional<EvaluationError> assume_equal(OwnedExpression lhs, OwnedExpression rhs);
     std::optional<EvaluationError> canonicalize_context();
+    AssumptionInfo list_assumptions();
   };
 }
 

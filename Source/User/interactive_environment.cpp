@@ -307,10 +307,22 @@ namespace interactive {
         auto format_expr = [&](new_expression::WeakExpression expr) {
           return user::raw_format(arena, expr, namer);
         };
+        auto print_stack = [&](stack::Stack const& stack) {
+          auto assumptions = stack.list_assumptions();
+          for(auto const& assumption : assumptions.assumptions) {
+            std::cout << "Given " << format_expr(assumption.representative);
+            for(auto const& term : assumption.terms) {
+              std::cout << " = " << format_expr(term);
+            }
+            std::cout << "\n";
+          }
+          destroy_from_arena(arena, assumptions);
+        };
         auto print_eq = [&](solver::Equation const& eq, bool fail) {
           if(fail) std::cout << "Failed:\n";
           else std::cout << "Stalled:\n";
           std::cout << format_expr(eq.lhs) << " =?= " << format_expr(eq.rhs) << "\n";
+          print_stack(eq.stack);
         };
         print_eq(err.primary, err.primary_failed);
         for(auto const& eq : err.failures) print_eq(eq, true);

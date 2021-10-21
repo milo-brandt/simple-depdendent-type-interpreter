@@ -390,6 +390,18 @@ namespace new_expression {
       OwnedExpression get_conglomerate_elimination_replacement(std::size_t index) {
         return get_conglomerate_class_elimination_replacement(conglomerate_to_class[index]);
       }
+      AssumptionInfo list_assumptions() {
+        AssumptionInfo ret;
+        for(std::size_t class_index = 0; class_index < conglomerate_class_info.size(); ++class_index) {
+          auto const& c = conglomerate_class_info[class_index];
+          if(c.reducers.active.empty()) continue; //ignore empty classes.
+          ret.assumptions.push_back({
+            .representative = get_conglomerate_class_replacement(class_index),
+            .terms = copy_on_arena(arena, c.reducers.active)
+          });
+        }
+        return ret;
+      };
 
     };
     template<class Base>
@@ -765,6 +777,9 @@ namespace new_expression {
       }
       return std::nullopt;
     }
+    AssumptionInfo list_assumptions() {
+      return solve_state.list_assumptions();
+    }
   };
   EvaluationContext::EvaluationContext(Arena& arena, RuleCollector& rule_collector):impl(std::make_unique<Impl>(arena, rule_collector)) {}
   EvaluationContext::EvaluationContext(EvaluationContext const& other):impl(std::make_unique<Impl>(*other.impl)) {}
@@ -797,5 +812,8 @@ namespace new_expression {
   }
   std::optional<EvaluationError> EvaluationContext::canonicalize_context() {
     return impl->canonicalize_context();
+  }
+  AssumptionInfo EvaluationContext::list_assumptions() {
+    return impl->list_assumptions();
   }
 }
