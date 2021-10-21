@@ -196,8 +196,8 @@ namespace new_expression {
         struct Detail {
           ConglomerateSolveState& me;
           std::vector<std::pair<std::size_t, std::size_t> > further_combines;
-          void combine(std::size_t target, std::size_t source) {
-            if(target == source) return;
+          bool combine(std::size_t target, std::size_t source) {
+            if(target == source) return true;
             if(target > source) std::swap(target, source); //swap into lower index to maintain representative invariant
             auto& target_class = me.conglomerate_class_info[target];
             auto& source_class = me.conglomerate_class_info[source];
@@ -209,7 +209,9 @@ namespace new_expression {
             }
             if(auto* source_axiomatic = std::get_if<conglomerate_status::Axiomatic>(&source_class.status)) {
               if(auto* target_axiomatic = std::get_if<conglomerate_status::Axiomatic>(&target_class.status)) {
-                if(source_axiomatic->head != target_axiomatic->head) std::terminate();
+                if(source_axiomatic->head != target_axiomatic->head) {
+                  return false;
+                }
                 if(source_axiomatic->applied_conglomerates.size() != target_axiomatic->applied_conglomerates.size()) std::terminate();
                 me.arena.drop(std::move(target_axiomatic->head)); //target will be destroyed
                 for(std::size_t i = 0; i < source_axiomatic->applied_conglomerates.size(); ++i) {
@@ -252,6 +254,7 @@ namespace new_expression {
               entry.first = new_index(entry.first);
               entry.second = new_index(entry.second);
             }
+            return true;
           }
         };
         Detail detail{*this};
@@ -259,7 +262,7 @@ namespace new_expression {
         while(!detail.further_combines.empty()) {
           auto [top_source, top_target] = detail.further_combines.back();
           detail.further_combines.pop_back();
-          detail.combine(top_source, top_target);
+          if(!detail.combine(top_source, top_target)) return false;
         }
         return !exists_axiomatic_cycle(); //succeeds so long as no cycle is created.
       }
