@@ -1,0 +1,160 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  axiom Or : (S : Type) -> (T : Type) -> Type;
+  axiom inl : (S : Type) -> (T : Type) -> S -> Or S T;
+  axiom inr : (S : Type) -> (T : Type) -> T -> Or S T;
+
+  let Relation = \T:Type.T -> T -> Type;
+
+  axiom WellFoundedBeneath : (T : Type) -> Relation T -> T -> Type;
+  axiom well_founded_witness : (T : Type) -> (ord : Relation T) -> (x : T) -> ((y : T) -> ord y x -> WellFoundedBeneath T ord y) -> WellFoundedBeneath T ord x;
+
+  let WellFounded = \T:Type.\ord:Relation T.(x : T) -> WellFoundedBeneath T ord x;
+
+  declare wf_induct_below : (T : Type) -> (ord : Relation T) -> (x : T) -> WellFoundedBeneath T ord x
+                   -> (P : T -> Type)
+                   -> (f : (x : T)
+                        -> ((y : T) -> ord y x -> P y)
+                        -> P x)
+                   -> P x;
+  wf_induct_below T ord x (well_founded_witness T ord x children) P f = f x \y.\lt.wf_induct_below T ord y (children y lt) P f;
+
+  declare wf_induct : (T : Type) -> (ord : Relation T) -> WellFounded T ord
+                   -> (P : T -> Type)
+                   -> (f : (x : T)
+                        -> ((y : T) -> ord y x -> P y)
+                        -> P x)
+                   -> (x : T)
+                   -> P x;
+  wf_induct T ord wf P f x = wf_induct_below T ord x (wf x) P f;
+
+  axiom Contradiction : Type;
+  declare ex_falso : (T : Type) -> Contradiction -> T;
+
+  axiom Unit : Type;
+  axiom unit : Unit;
+
+  axiom Comparison : Type;
+  axiom less : Comparison;
+  axiom same : Comparison;
+  axiom more : Comparison;
+
+  declare ComparisonEqFamily : Comparison -> Comparison -> Type;
+  ComparisonEqFamily less less = Unit;
+  ComparisonEqFamily less same = Contradiction;
+  ComparisonEqFamily less more = Contradiction;
+  ComparisonEqFamily same less = Contradiction;
+  ComparisonEqFamily same same = Unit;
+  ComparisonEqFamily same more = Contradiction;
+  ComparisonEqFamily more less = Contradiction;
+  ComparisonEqFamily more same = Contradiction;
+  ComparisonEqFamily more more = Unit;
+
+  declare as_family : (x : Comparison) -> (y : Comparison) -> Id _ x y -> ComparisonEqFamily x y;
+  as_family less less (refl _ _) = unit;
+  as_family same same (refl _ _) = unit;
+  as_family more more (refl _ _) = unit;
+
+  declare cmp : Nat -> Nat -> Comparison;
+  cmp zero zero = same;
+  cmp zero (succ n) = less;
+  cmp (succ n) zero = more;
+  cmp (succ n) (succ m) = cmp n m;
+
+
+
+  declare cmp_same : (n : Nat) -> (m : Nat) -> Id _ (cmp n m) same -> Id _ n m;
+  cmp_same zero zero _ = refl _ _;
+  cmp_same (succ n) zero equality = match(equality) {
+    refl _ _ -> _; # unreachable
+  };
+  cmp_same zero (succ n) equality = match(equality) {
+    refl _ _ -> _; # unreachable
+  };
+  cmp_same (succ n) (succ m) equality = match(cmp_same n m equality) {
+    refl _ _ -> refl _ _;
+  };
+
+  declare opposite : Comparison -> Comparison;
+  opposite less = more;
+  opposite same = same;
+  opposite more = less;
+
+  declare rev : (n : Nat) -> (m : Nat) -> Id _ (opposite (cmp n m)) (cmp m n);
+  rev zero zero = refl _ _;
+  rev zero (succ n) = refl _ _;
+  rev (succ n) zero = refl _ _;
+  rev (succ n) (succ m) = rev n m;
+
+  declare zero_least : (n : Nat) -> Or (Id _ (cmp zero n) same) (Id _ (cmp zero n) less);
+  zero_least zero = inl _ _ (refl _ _);
+  zero_least (succ n) = inr _ _ (refl _ _);
+
+  declare succ_less : (n : Nat) -> (m : Nat)
+                   -> Id _ (cmp n m) less
+                   -> Or (Id _ (cmp (succ n) m) same) (Id _ (cmp (succ n) m) less);
+  succ_less zero zero pf = ex_falso _ (as_family _ _ pf);
+  succ_less zero (succ n) pf = match(n) {
+    zero -> inl _ _ (refl _ _);
+    succ m -> inr _ _ (refl _ _);
+  };
+  succ_less (succ n) zero pf = ex_falso _ (as_family _ _ pf);
+  succ_less (succ n) (succ m) pf = succ_less n m pf;
+
+  declare lt_ord : Nat -> Nat -> Type;
+  lt_ord x y = Id _ (cmp x y) less;
+
+  declare lt_wf : (n : Nat) -> (m : Nat) -> lt_ord m n -> WellFoundedBeneath Nat lt_ord m;
+  lt_wf zero zero pf = ex_falso _ (as_family _ _ pf);
+  lt_wf zero (succ n) pf = ex_falso _ (as_family _ _ pf);
+  lt_wf (succ n) m pf = match(succ_less m (succ n) pf) {
+    inl _ _ same_pf -> match(cmp_same (succ m) (succ n) same_pf) {
+      refl _ _ -> well_founded_witness _ _ m (lt_wf m);
+    };
+    inr _ _ lt_pf -> lt_wf n m lt_pf;
+  };
+  declare lt_well_founded : WellFounded Nat lt_ord;
+  lt_well_founded n = well_founded_witness Nat lt_ord n (lt_wf n);
+
+  declare mod : Nat -> Nat -> Nat;
+  mod zero x = zero;
+  mod (succ y) x = block {
+    let n = mod y x;
+    match(cmp (succ n) x) {
+      more -> zero;
+      same -> zero;
+      less -> succ n;
+    }
+  };
+
+  declare mod_less : (n : Nat) -> (m : Nat) -> Id _ (cmp (mod n (succ m)) (succ m)) less;
+  mod_less zero m = refl _ _;
+  mod_less (succ n) m = block {
+    let x = mod n (succ m);
+    match(cmp x m) -> Id _ (cmp (mod (succ n) (succ m)) (succ m)) less {
+      more -> refl _ _;
+      same -> refl _ _;
+      less -> refl _ _;
+    }
+  };
+
+  declare gcd : Nat -> Nat -> Nat;
+  gcd = wf_induct Nat lt_ord lt_well_founded (\.Nat -> Nat) (\x.\prev.match(x) {
+    zero -> \y.y;
+    succ m -> \y.prev (mod y (succ m)) (mod_less y m) (succ m);
+  });
+
+
+  gcd (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) (succ \\ succ \\ succ \\ succ zero)
+
+}

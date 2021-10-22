@@ -1,0 +1,61 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Contradiction : Type;
+  declare ex_falso : (T : Type) -> Contradiction -> T;
+
+  axiom Witness : Bool -> Type;
+  axiom witness : Witness yes;
+
+  declare not_witness : Witness no -> Contradiction;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare eq : Nat -> Nat -> Bool;
+  eq zero zero = yes;
+  eq (succ n) zero = no;
+  eq zero (succ m) = no;
+  eq (succ n) (succ m) = eq n m;
+
+  declare lte : Nat -> Nat -> Bool;
+  lte zero x = yes;
+  lte (succ n) zero = no;
+  lte (succ n) (succ m) = lte n m;
+
+  declare transitivity : (n : Nat) -> (m : Nat) -> (o : Nat) -> Witness (lte n m) -> Witness (lte m o) -> Witness (lte n o);
+  transitivity zero m o _ _ = witness;
+  transitivity (succ n) zero o w1 w2 = ex_falso _ (not_witness w1);
+  transitivity (succ n) (succ m) zero w1 w2 = ex_falso _ (not_witness w2);
+  transitivity (succ n) (succ m) (succ o) w1 w2 = transitivity n m o w1 w2;
+
+  declare sub : Nat -> Nat -> Nat;
+  sub x zero = x;
+  sub zero y = zero;
+  sub (succ n) (succ m) = sub n m;
+
+  declare mod : Nat -> Nat -> Nat;
+  mod zero x = zero;
+  mod (succ y) x = block {
+    let n = mod y x;
+    match(eq (succ n) x) {
+      yes -> zero;
+      no -> succ n;
+    }
+  };
+
+  declare mod_lte : (n : Nat) -> (m : Nat) -> Witness (lte (mod n m) n);
+  mod_lte zero m = witness;
+  mod_lte (succ y) x = block {
+    let n = mod y x;
+    match(eq (succ n) x) -> Witness (lte (mod (succ y) x) (succ y)) { # need to avoid bad deduction here...
+      yes -> witness;
+      no -> mod_lte y x;
+    }
+  };
+
+  mod (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) (succ \\ succ zero)
+}
