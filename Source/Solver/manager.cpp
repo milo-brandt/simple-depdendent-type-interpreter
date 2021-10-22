@@ -52,6 +52,7 @@ namespace solver {
     std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeyMap<solver::DefinableInfo> definable_indeterminates;
     std::optional<stack::Stack> cheating_stack;
+    bool is_running = false;
     SegmentResult run(EquationSolver& eq) {
       auto made_progress = eq.solver.try_to_make_progress();
       if(eq.solver.solved()) {
@@ -152,6 +153,8 @@ namespace solver {
       return std::move(future);
     }
     void run() {
+      if(is_running) return; //hack to avoid recursive calls
+      is_running = true;
       bool progress_made = true;
       while(progress_made) {
         progress_made = false;
@@ -169,6 +172,7 @@ namespace solver {
           return extract_done(run(rule));
         });
       }
+      is_running = false;
     }
     void close() {
       mdb::erase_from_active_queue(active_solvers, [&](auto& eq) {
