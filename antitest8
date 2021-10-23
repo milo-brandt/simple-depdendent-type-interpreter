@@ -1,0 +1,16 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  let fn = \x:Bool.match(x) { # we expect this match to fail - the equations
+                              # only tell us the return type at x = yes or x = no
+    yes -> refl _ yes;
+    no -> refl _ yes;
+  };
+
+  fn yes
+}

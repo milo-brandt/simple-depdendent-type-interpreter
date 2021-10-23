@@ -405,6 +405,172 @@ namespace new_expression {
         }
         return ret;
       };
+      std::optional<PartialMap> try_to_map_to(EvaluationContext& target, MapRequest request) {
+        struct Detail {
+          ConglomerateSolveState& me;
+          EvaluationContext& target;
+          PartialMap ret;
+          std::vector<MapRequestConstraint> unchecked_constraints;
+          std::vector<MapRequestConstraint> map_only_constraints;
+          std::vector<std::size_t> waiting_conglomerates;
+          std::vector<std::pair<std::size_t, std::size_t> > remaining_class_constraints;
+          std::vector<std::pair<OwnedExpression, std::size_t> > waiting_match_mapped_expression_to_class;
+          Detail(ConglomerateSolveState& me, EvaluationContext& target, MapRequest request):me(me), target(target), unchecked_constraints(std::move(request.constraints)) {
+            for(auto& constraint : unchecked_constraints) {
+              constraint.target = target.reduce(std::move(constraint.target));
+            }
+            for(std::size_t class_index = 0; class_index < me.conglomerate_class_info.size(); ++class_index) {
+              for(std::size_t reducer_index = 0; reducer_index < me.conglomerate_class_info[class_index].reducers.active.size(); ++reducer_index) {
+                remaining_class_constraints.emplace_back(class_index, reducer_index);
+              }
+            }
+            for(std::size_t conglomerate = 0; conglomerate < me.conglomerate_to_class.size(); ++conglomerate) {
+              if(me.conglomerate_index_of_class(me.conglomerate_to_class[conglomerate]) == conglomerate) continue; //don't worry about principal representatives
+              waiting_conglomerates.push_back(conglomerate);
+            }
+          }
+          //This function should be called to express that we want the mapping #<class_index> -> mapped_expr.
+          //mapped_expr should be in the codomain and already reduced.
+          bool match_mapped_expression_to_class(OwnedExpression mapped_expr, std::size_t class_index) {
+            auto const& class_info = me.conglomerate_class_info[class_index];
+            auto class_representative = me.conglomerate_index_of_class(class_index);
+            if(ret.conglomerate_map.contains(class_representative)) {
+              return ret.conglomerate_map.at(class_representative) == mapped_expr;
+            } else {
+              RAIIDestroyer mapped_destroyer{me.arena, mapped_expr};
+              ret.conglomerate_map.insert(std::make_pair(class_representative, me.arena.copy(mapped_expr)));
+              if(auto const* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&class_info.status)) {
+                auto unfolded = unfold(me.arena, mapped_expr);
+                if(unfolded.head != axiomatic->head || unfolded.args.size() != axiomatic->applied_conglomerates.size()) {
+                  return false;
+                }
+                for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
+                  waiting_match_mapped_expression_to_class.emplace_back(me.arena.copy(unfolded.args[i]), axiomatic->applied_conglomerates[i]);
+                }
+              }
+              return true;
+            }
+          }
+          enum class ProgressResult {
+            nothing,
+            finished,
+            failed
+          };
+          ProgressResult check_map_constraint(MapRequestConstraint& constraint) { //destroys constraint if it makes progress
+            if(ret.can_map(me.arena, constraint.source)) {
+              auto output = target.reduce(ret.map(me.arena, constraint.source));
+              RAIIDestroyer destroyer{me.arena, output};
+              if(output == constraint.target) {
+                destroy_from_arena(me.arena, constraint);
+                return ProgressResult::finished;
+              } else {
+                destroy_from_arena(me.arena, constraint);
+                return ProgressResult::failed;
+              }
+            }
+            return ProgressResult::nothing;
+          }
+          bool check_initial_constraint(MapRequestConstraint&& constraint) { //return false for failure. should consume request
+            auto map_result = check_map_constraint(constraint);
+            if(map_result == ProgressResult::finished) return true;
+            if(map_result == ProgressResult::failed) return false;
+            if(auto* arg = me.arena.get_if_argument(constraint.source)) {
+              ret.arg_map.insert(std::make_pair(arg->index, me.arena.copy(constraint.target)));
+              destroy_from_arena(me.arena, constraint);
+              return true;
+            } else if(auto* conglomerate = me.arena.get_if_conglomerate(constraint.source)) {
+              waiting_match_mapped_expression_to_class.emplace_back(me.arena.copy(constraint.target), me.conglomerate_to_class[conglomerate->index]);
+              destroy_from_arena(me.arena, constraint);
+              return true;
+            } else {
+              auto unfolded = unfold(me.arena, constraint.source);
+              if(me.arena.holds_axiom(unfolded.head)) {
+                auto unfolded_target = unfold(me.arena, constraint.target);
+                if(unfolded.head != unfolded_target.head || unfolded.args.size() != unfolded_target.args.size()) return false;
+                for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
+                  unchecked_constraints.push_back({
+                    .source = me.arena.copy(unfolded.args[i]),
+                    .target = me.arena.copy(unfolded_target.args[i])
+                  });
+                }
+                destroy_from_arena(me.arena, constraint);
+                return true;
+              } else {
+                map_only_constraints.push_back(std::move(constraint));
+                return true;
+              }
+            }
+          }
+          ProgressResult check_reducer(std::size_t class_index, std::size_t reducer_index) {
+            auto const& reducer = me.conglomerate_class_info[class_index].reducers.active[reducer_index];
+            auto class_representative = me.conglomerate_index_of_class(class_index);
+            if(ret.can_map(me.arena, reducer)) {
+              auto output = target.reduce(ret.map(me.arena, reducer));
+              waiting_match_mapped_expression_to_class.emplace_back(std::move(output), class_index);
+              return ProgressResult::finished;
+            } else if(ret.conglomerate_map.contains(class_representative)) {
+              if(auto* arg = me.arena.get_if_argument(reducer)) {
+                ret.arg_map.insert(std::make_pair(arg->index, me.arena.copy(ret.conglomerate_map.at(class_representative))));
+                return ProgressResult::finished;
+              }
+            }
+            return ProgressResult::nothing;
+          }
+          bool run() {
+            bool made_progress = true;
+            bool failed = false;
+            while(made_progress && !failed) {
+              made_progress = false;
+              while(!unchecked_constraints.empty()) {
+                made_progress = true;
+                MapRequestConstraint constraint= std::move(unchecked_constraints.back());
+                unchecked_constraints.pop_back();
+                if(!check_initial_constraint(std::move(constraint))) return false;
+              }
+              while(!waiting_match_mapped_expression_to_class.empty()) {
+                made_progress = true;
+                auto back = std::move(waiting_match_mapped_expression_to_class.back());
+                waiting_match_mapped_expression_to_class.pop_back();
+                if(!match_mapped_expression_to_class(std::move(back.first), back.second)) return false;
+              }
+              mdb::erase_from_active_queue(remaining_class_constraints, [&](auto const& pair) {
+                auto ret = check_reducer(pair.first, pair.second);
+                if(ret == ProgressResult::failed) failed = true;
+                if(ret == ProgressResult::finished) made_progress = true;
+                return ret != ProgressResult::nothing;
+              });
+              mdb::erase_from_active_queue(map_only_constraints, [&](auto& constraint) {
+                auto ret = check_map_constraint(constraint);
+                if(ret == ProgressResult::failed) failed = true;
+                if(ret == ProgressResult::finished) made_progress = true;
+                return ret != ProgressResult::nothing;
+              });
+              mdb::erase_from_active_queue(waiting_conglomerates, [&](std::size_t conglomerate) { //propagate classes of conglomerates
+                auto class_index = me.conglomerate_to_class[conglomerate];
+                auto class_representative = me.conglomerate_index_of_class(class_index);
+                if(ret.conglomerate_map.contains(class_representative)) {
+                  if(ret.conglomerate_map.contains(conglomerate)) {
+                    std::terminate(); //unreachable - no one sets these entries on non-principal conglomerates.
+                  } else {
+                    ret.conglomerate_map.insert(std::make_pair(conglomerate, me.arena.copy(ret.conglomerate_map.at(class_representative))));
+                    return true;
+                  }
+                }
+                return false;
+              });
+            }
+            return !failed && map_only_constraints.empty();
+          }
+        };
+        Detail detail{*this, target, std::move(request)};
+        RAIIDestroyer destroyer{arena, detail.map_only_constraints};
+        if(detail.run()) {
+          return std::move(detail.ret);
+        } else {
+          destroy_from_arena(arena, detail.ret);
+          return std::nullopt;
+        }
+      }
 
     };
     template<class Base>
@@ -783,6 +949,9 @@ namespace new_expression {
     AssumptionInfo list_assumptions() {
       return solve_state.list_assumptions();
     }
+    std::optional<PartialMap> try_to_map_to(EvaluationContext& target, MapRequest request) {
+      return solve_state.try_to_map_to(target, std::move(request));
+    }
   };
   EvaluationContext::EvaluationContext(Arena& arena, RuleCollector& rule_collector):impl(std::make_unique<Impl>(arena, rule_collector)) {}
   EvaluationContext::EvaluationContext(EvaluationContext const& other):impl(std::make_unique<Impl>(*other.impl)) {}
@@ -818,5 +987,55 @@ namespace new_expression {
   }
   AssumptionInfo EvaluationContext::list_assumptions() {
     return impl->list_assumptions();
+  }
+  std::optional<PartialMap> EvaluationContext::try_to_map_to(EvaluationContext& target, MapRequest request) {
+    return impl->try_to_map_to(target, std::move(request));
+  }
+  bool PartialMap::can_map(Arena& arena, WeakExpression expr) {
+    return arena.visit(expr, mdb::overloaded{
+      [&](Apply const& apply) {
+        return can_map(arena, apply.lhs) && can_map(arena, apply.rhs);
+      },
+      [&](Argument const& arg) {
+        return arg_map.contains(arg.index);
+      },
+      [&](Conglomerate const& conglom) {
+        return conglomerate_map.contains(conglom.index);
+      },
+      [&](Axiom const&) {
+        return true;
+      },
+      [&](Declaration const&) {
+        return true;
+      },
+      [&](Data const&) -> bool {
+        std::terminate();
+      }
+    });
+  }
+  OwnedExpression PartialMap::map(Arena& arena, WeakExpression expr) {
+    return arena.visit(expr, mdb::overloaded{
+      [&](Apply const& apply) {
+        return arena.apply(
+          map(arena, apply.lhs),
+          map(arena, apply.rhs)
+        );
+      },
+      [&](Argument const& arg) {
+        return arena.copy(arg_map.at(arg.index));
+      },
+      [&](Conglomerate const& conglom) {
+        return arena.copy(conglomerate_map.at(conglom.index));
+      },
+      [&](Axiom const&) {
+        return arena.copy(expr);
+      },
+      [&](Declaration const&) {
+        return arena.copy(expr);
+      },
+      [&](Data const&) -> OwnedExpression {
+        std::terminate();
+      }
+    });
   }
 }

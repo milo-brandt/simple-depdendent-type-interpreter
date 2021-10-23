@@ -51,11 +51,13 @@ block {
   mod_lte zero m = witness;
   mod_lte (succ y) x = block {
     let n = mod y x;
-    match(eq (succ n) x) -> Witness (lte (mod (succ y) x) (succ y)) { # need to avoid bad deduction here...
+    match(eq (succ n) x) {
       yes -> witness;
       no -> mod_lte y x;
     }
   };
+
+
 
   mod (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) (succ \\ succ zero)
 }

@@ -141,7 +141,7 @@ block {
   mod_less zero m = refl _ _;
   mod_less (succ n) m = block {
     let x = mod n (succ m);
-    match(cmp x m) -> Id _ (cmp (mod (succ n) (succ m)) (succ m)) less {
+    match(cmp x m) {
       more -> refl _ _;
       same -> refl _ _;
       less -> refl _ _;
@@ -155,6 +155,9 @@ block {
   });
 
 
-  gcd (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) (succ \\ succ \\ succ \\ succ zero)
+  gcd
+    (succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) #24
+    (succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) #9
+  # should give 3
 
 }

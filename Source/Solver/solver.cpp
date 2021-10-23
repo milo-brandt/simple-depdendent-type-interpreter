@@ -29,70 +29,30 @@ namespace solver {
     struct DefinitionFormData {
       WeakExpression head;
       std::size_t arg_count;
-      std::unordered_map<std::uint64_t, OwnedExpression> arg_map;
-      std::unordered_map<std::uint64_t, OwnedExpression> conglomerate_map;
+      new_expression::PartialMap map;
       Stack target_stack;
-      static constexpr auto part_info = mdb::parts::simple<5>;
+      static constexpr auto part_info = mdb::parts::simple<4>;
     };
     std::optional<DefinitionFormData> is_term_in_definition_form(Arena& arena, WeakExpression term, Stack stack, mdb::function<std::optional<DefinableInfo>(new_expression::WeakExpression)>& get_definable_info) {
       auto unfolded = unfold(arena, term);
       if(auto definable_info = get_definable_info(unfolded.head)) {
-        struct Detail {
-          Arena& arena;
-          Stack target_stack;
-          std::unordered_map<std::uint64_t, OwnedExpression> arg_map;
-          std::unordered_map<std::uint64_t, OwnedExpression> conglomerate_map;
-          bool match_pieces(WeakExpression initial_part, WeakExpression target_part) {
-            if(auto* arg = arena.get_if_argument(initial_part)) {
-              if(arg_map.contains(arg->index)) {
-                return arg_map.at(arg->index) == target_part;
-              } else {
-                arg_map.insert(std::make_pair(arg->index, arena.copy(target_part)));
-                return true;
-              }
-            } else if(auto* conglom = arena.get_if_conglomerate(initial_part)) {
-              if(conglomerate_map.contains(conglom->index)) {
-                return conglomerate_map.at(conglom->index) == target_part;
-              } else {
-                conglomerate_map.insert(std::make_pair(conglom->index, arena.copy(target_part)));
-                return true;
-              }
-            } else {
-              auto initial_unfolded = unfold(arena, initial_part);
-              auto target_unfolded = unfold(arena, target_part);
-              if(initial_unfolded.head == target_unfolded.head && initial_unfolded.args.size() == target_unfolded.args.size() && arena.holds_axiom(initial_unfolded.head)) {
-                for(std::size_t i = 0; i < initial_unfolded.args.size(); ++i) {
-                  if(!match_pieces(initial_unfolded.args[i], target_unfolded.args[i])) return false;
-                }
-                return true;
-              } else {
-                return false;
-              }
-            }
-          }
-          bool match_to_arg(WeakExpression initial_arg, std::size_t target_arg) {
-            OwnedExpression output = target_stack.reduce(arena.argument(target_arg));
-            new_expression::RAIIDestroyer destroyer{arena, output};
-            return match_pieces(initial_arg, output);
-          }
-        };
-        Detail detail{
-          .arena = arena,
-          .target_stack = std::move(definable_info->stack)
-        };
+        new_expression::MapRequest request;
         for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
-          if(!detail.match_to_arg(unfolded.args[i], i)) {
-            destroy_from_arena(arena, detail.arg_map, detail.conglomerate_map);
-            return std::nullopt;
-          }
+          request.constraints.push_back({
+            .source = arena.copy(unfolded.args[i]),
+            .target = definable_info->stack.reduce(arena.argument(i))
+          });
         }
-        return DefinitionFormData{
-          .head = unfolded.head,
-          .arg_count = unfolded.args.size(),
-          .arg_map = std::move(detail.arg_map),
-          .conglomerate_map = std::move(detail.conglomerate_map),
-          .target_stack = std::move(detail.target_stack)
-        };
+        if(auto map = stack.try_to_map_to(definable_info->stack, std::move(request))) {
+          return DefinitionFormData{
+            .head = unfolded.head,
+            .arg_count = unfolded.args.size(),
+            .map = std::move(*map),
+            .target_stack = std::move(definable_info->stack)
+          };
+        } else {
+          return std::nullopt;
+        }
       } else {
         return std::nullopt;
       }
@@ -130,45 +90,20 @@ namespace solver {
               return !interface.term_depends_on(expr, definition_form.head);
             },
             [&](new_expression::Argument const& arg) {
-              return definition_form.arg_map.contains(arg.index);
+              return true;
             },
             [&](new_expression::Conglomerate const& conglomerate) {
-              return definition_form.conglomerate_map.contains(conglomerate.index);
+              return true;
             },
             [&](auto const&) -> bool {
               std::terminate();
             }
           });
         }
-        OwnedExpression remap(WeakExpression expr) {
-          return interface.arena.visit(expr, mdb::overloaded{
-            [&](new_expression::Apply const& apply) {
-              return interface.arena.apply(
-                remap(apply.lhs),
-                remap(apply.rhs)
-              );
-            },
-            [&](new_expression::Axiom const&) {
-              return interface.arena.copy(expr);
-            },
-            [&](new_expression::Declaration const&) {
-              return interface.arena.copy(expr);
-            },
-            [&](new_expression::Argument const& arg) {
-              return interface.arena.copy(definition_form.arg_map.at(arg.index));
-            },
-            [&](new_expression::Conglomerate const& conglomerate) {
-              return interface.arena.copy(definition_form.conglomerate_map.at(conglomerate.index));
-            },
-            [&](auto const&) -> OwnedExpression {
-              std::terminate();
-            }
-          });
-        }
       };
       Detail detail{interface, definition_form};
-      if(detail.is_acceptable(term)) {
-        return definition_form.target_stack.eliminate_conglomerates(detail.remap(term));
+      if(detail.is_acceptable(term) && definition_form.map.can_map(interface.arena, term)) {
+        return definition_form.target_stack.eliminate_conglomerates(definition_form.map.map(interface.arena, term));
       }
       else return std::nullopt;
     }

@@ -1,0 +1,22 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  let hole : Bool -> Bool = _;
+  let fn = \x:Bool.block {
+    match(not x) -> Id Bool x x {
+      yes -> refl _ (hole x); # This tells us "For all x such that not x = yes, hole x = x"
+      no -> refl _ x;
+    }
+  };
+
+  hole no
+}
