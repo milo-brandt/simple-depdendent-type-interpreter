@@ -345,11 +345,18 @@ namespace solver::evaluator {
             auto& err = executed_result.get_error();
             if(auto* shard = std::get_if<PatternExecuteShardNotFunction>(&err)) {
               auto const& shard_explanation = flat_result.get_value().locator.shards[shard->shard_index];
+              auto const& part = std::get<FlatPatternMatchExplanation>(shard_explanation).source.part;
               auto subclause_index = std::get<FlatPatternMatchExplanation>(shard_explanation).source.part.index;
-              interface.report_error(error::BadApplicationInSubclause{
-                .rule = rule.index(),
-                .subclause = rule.submatches[subclause_index].get_submatch().pattern.index()
-              });
+              if(part.primary) {
+                interface.report_error(error::BadApplicationInPattern{
+                  .rule = rule.index()
+                });
+              } else {
+                interface.report_error(error::BadApplicationInSubclause{
+                  .rule = rule.index(),
+                  .subclause = rule.submatches[part.index].get_submatch().pattern.index()
+                });
+              }
             } else {
               interface.report_error(error::BadApplicationInPattern{
                 .rule = rule.index()
