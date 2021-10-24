@@ -5,9 +5,9 @@ namespace user {
   RawFormat raw_format(new_expression::Arena& arena, new_expression::WeakExpression expression) {
     return raw_format(arena, expression, [&arena](std::ostream& o, new_expression::WeakExpression expr) {
       if(arena.holds_declaration(expr)) {
-        o << "decl_" << expr.index();
+        o << "decl_" << expr.data();
       } else if(arena.holds_axiom(expr)) {
-        o << "ax_" << expr.index();
+        o << "ax_" << expr.data();
       } else {
         o << "???";
       }

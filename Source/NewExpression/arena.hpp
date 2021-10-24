@@ -19,8 +19,8 @@ namespace new_expression {
   class WeakExpression;
   struct UniqueExpression;
   class OwnedExpression { //an expression that we own, but which is not automatically deref'd
-    std::size_t p_index;
-    explicit OwnedExpression(std::size_t index):p_index(index) {}
+    void const* p_data;
+    explicit OwnedExpression(void const* p_data):p_data(p_data) {}
     friend Arena;
     friend UniqueExpression;
   public:
@@ -29,47 +29,28 @@ namespace new_expression {
     OwnedExpression& operator=(OwnedExpression&&) noexcept = default;
     OwnedExpression& operator=(OwnedExpression const&) = delete;
 
-    std::size_t index() const { return p_index; }
+    void const* data() const { return p_data; }
     friend bool operator==(OwnedExpression const& lhs, OwnedExpression const& rhs) {
-      return lhs.p_index == rhs.p_index;
+      return lhs.p_data == rhs.p_data;
     }
     friend bool operator!=(OwnedExpression const& lhs, OwnedExpression const& rhs) {
-      return lhs.p_index != rhs.p_index;
+      return lhs.p_data != rhs.p_data;
     }
   };
   class WeakExpression {
-    std::size_t p_index;
-    explicit WeakExpression(std::size_t index):p_index(index) {}
+    void const* p_data;
+    explicit WeakExpression(void const* p_data):p_data(p_data) {}
     friend Arena;
   public:
-    WeakExpression(OwnedExpression const& expr) noexcept:p_index(expr.index()) {}
+    WeakExpression(OwnedExpression const& expr) noexcept:p_data(expr.data()) {}
     WeakExpression(OwnedExpression&&) = delete;
-    std::size_t index() const { return p_index; }
+    void const* data() const { return p_data; }
     friend bool operator==(WeakExpression const& lhs, WeakExpression const& rhs) {
-      return lhs.p_index == rhs.p_index;
+      return lhs.p_data == rhs.p_data;
     }
     friend bool operator!=(WeakExpression const& lhs, WeakExpression const& rhs) {
-      return lhs.p_index != rhs.p_index;
+      return lhs.p_data != rhs.p_data;
     }
-  };
-  struct UniqueExpression { //A RAII wrapper for expressions.
-    Arena* p_arena;
-    OwnedExpression p_expression;
-  public:
-    UniqueExpression():p_arena{nullptr}, p_expression{(std::size_t)-1} {}
-    UniqueExpression(std::nullptr_t):UniqueExpression() {}
-    UniqueExpression(Arena* arena, OwnedExpression expression):p_arena(arena), p_expression(std::move(expression)) {}
-    UniqueExpression(UniqueExpression&& other);
-    UniqueExpression& operator=(UniqueExpression&&);
-    Arena* arena() const { return p_arena; }
-    WeakExpression get() const { return p_expression; }
-    friend bool operator==(UniqueExpression const& lhs, UniqueExpression const& rhs) {
-      return lhs.p_expression == rhs.p_expression;
-    }
-    friend bool operator!=(UniqueExpression const& lhs, UniqueExpression const& rhs) {
-      return lhs.p_expression != rhs.p_expression;
-    }
-    ~UniqueExpression();
   };
   using Buffer = std::aligned_storage_t<24,8>;
   class DataType {
@@ -166,12 +147,12 @@ namespace new_expression {
     decltype(auto) visit(WeakExpression expr, Visitor&& visitor) const {
       auto [index, data] = visit_data(expr);
       switch(index) { //force passing by value - references can expire when the arena is interacted with.
-        case 0: return std::forward<Visitor>(visitor)((Apply)*(Apply const*)data);
-        case 1: return std::forward<Visitor>(visitor)((Axiom)*(Axiom const*)data);
-        case 2: return std::forward<Visitor>(visitor)((Declaration)*(Declaration const*)data);
-        case 3: return std::forward<Visitor>(visitor)((Data)*(Data const*)data);
-        case 4: return std::forward<Visitor>(visitor)((Argument)*(Argument const*)data);
-        case 5: return std::forward<Visitor>(visitor)((Conglomerate)*(Conglomerate const*)data);
+        case 0: return std::forward<Visitor>(visitor)(*(Apply const*)data);
+        case 1: return std::forward<Visitor>(visitor)(*(Axiom const*)data);
+        case 2: return std::forward<Visitor>(visitor)(*(Declaration const*)data);
+        case 3: return std::forward<Visitor>(visitor)(*(Data const*)data);
+        case 4: return std::forward<Visitor>(visitor)(*(Argument const*)data);
+        case 5: return std::forward<Visitor>(visitor)(*(Conglomerate const*)data);
         default: std::terminate();
       }
     }

@@ -297,9 +297,9 @@ namespace interactive {
           } else if(externals_to_names.contains(expr)) {
             o << externals_to_names.at(expr);
           } else if(arena.holds_declaration(expr)) {
-            o << "decl_" << expr.index();
+            o << "decl_" << expr.data();
           } else if(arena.holds_axiom(expr)) {
-            o << "ax_" << expr.index();
+            o << "ax_" << expr.data();
           } else {
             o << "???";
           }
@@ -713,9 +713,9 @@ namespace interactive {
         } else if(externals_to_names.contains(expr)) {
           o << externals_to_names.at(expr);
         } else if(arena.holds_declaration(expr)) {
-          o << "decl_" << expr.index();
+          o << "decl_" << expr.data();
         } else if(arena.holds_axiom(expr)) {
-          o << "ax_" << expr.index();
+          o << "ax_" << expr.data();
         } else {
           o << "???";
         }

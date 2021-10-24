@@ -14,10 +14,9 @@
 */
 namespace new_expression {
   struct ExpressionHasher {
-    std::hash<std::size_t> hash;
-    auto operator()(WeakExpression const& expr) const noexcept { return hash(expr.index()); }
-    auto operator()(UniqueExpression const& expr) const noexcept { return hash(expr.get().index()); }
-    auto operator()(OwnedExpression const& expr) const noexcept { return hash(expr.index()); }
+    std::hash<void const*> hash;
+    auto operator()(WeakExpression const& expr) const noexcept { return hash(expr.data()); }
+    auto operator()(OwnedExpression const& expr) const noexcept { return hash(expr.data()); }
     using is_transparent = int;
   };
   struct ExpressionComparer {
