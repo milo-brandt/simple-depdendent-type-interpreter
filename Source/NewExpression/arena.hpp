@@ -85,8 +85,8 @@ namespace new_expression {
     ~DataType() = default;
   };
   struct Apply {
-    OwnedExpression lhs;
-    OwnedExpression rhs;
+    WeakExpression lhs;
+    WeakExpression rhs;
   };
   struct Axiom {};
   struct Declaration {};
@@ -165,13 +165,13 @@ namespace new_expression {
     template<class Visitor>
     decltype(auto) visit(WeakExpression expr, Visitor&& visitor) const {
       auto [index, data] = visit_data(expr);
-      switch(index) {
-        case 0: return std::forward<Visitor>(visitor)(*(Apply const*)data);
-        case 1: return std::forward<Visitor>(visitor)(*(Axiom const*)data);
-        case 2: return std::forward<Visitor>(visitor)(*(Declaration const*)data);
-        case 3: return std::forward<Visitor>(visitor)(*(Data const*)data);
-        case 4: return std::forward<Visitor>(visitor)(*(Argument const*)data);
-        case 5: return std::forward<Visitor>(visitor)(*(Conglomerate const*)data);
+      switch(index) { //force passing by value - references can expire when the arena is interacted with.
+        case 0: return std::forward<Visitor>(visitor)((Apply)*(Apply const*)data);
+        case 1: return std::forward<Visitor>(visitor)((Axiom)*(Axiom const*)data);
+        case 2: return std::forward<Visitor>(visitor)((Declaration)*(Declaration const*)data);
+        case 3: return std::forward<Visitor>(visitor)((Data)*(Data const*)data);
+        case 4: return std::forward<Visitor>(visitor)((Argument)*(Argument const*)data);
+        case 5: return std::forward<Visitor>(visitor)((Conglomerate)*(Conglomerate const*)data);
         default: std::terminate();
       }
     }

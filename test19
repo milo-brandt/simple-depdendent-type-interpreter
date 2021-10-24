@@ -1,0 +1,137 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare add : Nat -> Nat -> Nat;
+  add zero x = x;
+  add (succ x) y = succ (add x y);
+
+  axiom Fin : Nat -> Type;
+  axiom fzero : (n : Nat) -> Fin (succ n);
+  axiom fsucc : (n : Nat) -> Fin n -> Fin (succ n);
+
+  axiom Transition : (n : Nat) -> (state_size : Fin n -> Nat) -> (input_state_size : Nat) -> Type;
+  axiom repush :
+      (n : Nat)
+   -> (state_size : Fin n -> Nat)
+   -> (input_state_size : Nat)
+   -> (stack_index : Fin input_state_size)
+   -> (output_state : Fin n)
+   -> Id _ (state_size output_state) (succ input_state_size)
+   -> Transition n state_size input_state_size;
+  axiom drop :
+      (n : Nat)
+   -> (state_size : Fin n -> Nat)
+   -> (input_state_size : Nat)
+   -> (stack_index : Fin input_state_size)
+   -> (output_state : Fin n)
+   -> Id _ (succ \\ state_size output_state) input_state_size
+   -> Transition n state_size input_state_size;
+  axiom sum_top :
+      (n : Nat)
+   -> (state_size : Fin n -> Nat)
+   -> (input_ignore_size : Nat)
+   -> (output_state : Fin n)
+   -> Id _ (state_size output_state) (succ input_ignore_size)
+   -> Transition n state_size (succ \\ succ input_ignore_size);
+
+  axiom StackProgram : Type;
+  axiom stack_program :
+      (n           : Nat)       # number of states
+   -> (state_size  : Fin n -> Nat)  # number of args in nth state
+   -> (transition  : (x : Fin n) -> Transition n state_size (state_size x))
+   -> StackProgram;
+
+   axiom State : StackProgram -> Type;
+   axiom state :
+      (n           : Nat)       # number of states
+   -> (state_size  : Fin n -> Nat)  # number of args in nth state
+   -> (transition  : (x : Fin n) -> Transition n state_size (state_size x))
+   -> (state : Fin n)
+   -> (values : Fin (state_size state) -> Nat)
+   -> State (stack_program n state_size transition);
+
+   declare avoid_fin : (n : Nat) -> (m : Fin (succ n)) -> Fin n -> Fin (succ n);
+   avoid_fin n (fzero _) x = fsucc _ x;
+   avoid_fin n (fsucc _ prev) (fzero _) = fzero _;
+   avoid_fin (succ m) (fsucc _ prev) (fsucc _ prev_x) = fsucc _ (avoid_fin m prev prev_x);
+
+   declare Stack : Nat -> Type;
+   Stack n = Fin n -> Nat;
+
+   declare drop_stack : (n : Nat) -> Stack (succ n) -> Fin (succ n) -> Stack n;
+   drop_stack n stack dropped_index = \i.stack (avoid_fin _ dropped_index i);
+
+   declare repush_stack : (n : Nat) -> Stack n -> Fin n -> Stack (succ n);
+   repush_stack n stack pushed_index = \i.match(i) {
+     fzero _ -> stack pushed_index;
+     fsucc _ prev -> stack prev;
+   };
+
+   declare sum_stack : (n : Nat) -> Stack (succ \\ succ n) -> Stack (succ n);
+   sum_stack n stack = \i.match(i) {
+     fzero _ -> add (stack \\ fzero _) (stack \\ fsucc _ \\ fzero _);
+     fsucc _ prev -> stack (fsucc _ \\ fsucc _ \\ prev);
+   };
+
+
+
+   declare advance : (program : StackProgram) -> State program -> State program;
+   advance
+    (stack_program _ _ transition)
+    (state _ _ _ state_index values)
+   = match(transition state_index) {
+      repush _ _ _ index next (refl _ _) ->
+        state _ _ _ next (repush_stack _ values index);
+      drop _ _ _ index next (refl _ _) ->
+        state _ _ _ next (drop_stack _ values index);
+      sum_top _ _ _ next (refl _ _) ->
+        state _ _ _ next (sum_stack _ values);
+   };
+
+   let multiples_program = stack_program
+      (succ \\ succ zero)
+      (\i.match(i) {
+        fzero _ -> succ \\ succ zero;
+        fsucc _ prev -> succ \\ succ \\ succ zero;
+      })
+      (\i.match(i) {
+        fzero _ -> repush _ _ _ (fsucc _ \\ fzero _) (fsucc _ \\ fzero _) (refl _ _);
+        fsucc _ prev -> sum_top _ _ _ (fzero _) (refl _ _);
+      });
+
+   let odd_stack : Stack (succ \\ succ zero) = \i.match(i) {
+     fzero _ -> succ zero;
+     fsucc _ prev -> succ \\ succ zero;
+   };
+   let odd_state : State multiples_program = state _ _ _ (fzero _) odd_stack;
+
+   let next_state = advance _ odd_state;
+
+   declare program_size_of : StackProgram -> Nat;
+   program_size_of (stack_program n _ _) = n;
+
+   declare stack_size_of : (program : StackProgram) -> (m : Fin \\ program_size_of program) -> Nat;
+   stack_size_of (stack_program _ stack_size _) = stack_size;
+
+   declare current_state : (program : StackProgram) -> (state : State program) -> Fin \\ program_size_of program;
+   current_state _ (state _ _ _ v _) = v;
+
+   declare stack_of : (program : StackProgram) -> (state : State program) -> Stack (stack_size_of program \\ current_state _ state);
+   stack_of _ (state _ _ _ _ stack) = stack;
+
+   declare mul : Nat -> Nat -> Nat;
+   mul zero x = zero;
+   mul (succ x) y = add y (mul x y);
+
+   stack_of multiples_program (advance _ \\ advance _ \\ advance _ \\ advance _ odd_state) (fzero _)
+   # a very slow way to calculate 5. :)
+}

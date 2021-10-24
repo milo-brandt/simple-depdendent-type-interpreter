@@ -1,0 +1,623 @@
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare a : Nat -> Nat -> Nat;
+  a zero x = x;
+  a (succ x) y = succ (a x y);
+
+  declare b : Nat -> Nat -> Nat;
+  b zero x = x;
+  b (succ x) y = succ (b x y);
+
+  declare c : Nat -> Nat -> Nat;
+  c zero x = x;
+  c (succ x) y = succ (c x y);
+
+  declare d : Nat -> Nat -> Nat;
+  d zero x = x;
+  d (succ x) y = succ (d x y);
+
+  declare e : Nat -> Nat -> Nat;
+  e zero x = x;
+  e (succ x) y = succ (e x y);
+
+  declare f : Nat -> Nat -> Nat;
+  f zero x = x;
+  f (succ x) y = succ (f x y);
+
+  declare g : Nat -> Nat -> Nat;
+  g zero x = x;
+  g (succ x) y = succ (g x y);
+
+  declare h : Nat -> Nat -> Nat;
+  h zero x = x;
+  h (succ x) y = succ (h x y);
+
+  declare i : Nat -> Nat -> Nat;
+  i zero x = x;
+  i (succ x) y = succ (i x y);
+
+  declare j : Nat -> Nat -> Nat;
+  j zero x = x;
+  j (succ x) y = succ (j x y);
+
+  declare k : Nat -> Nat -> Nat;
+  k zero x = x;
+  k (succ x) y = succ (k x y);
+
+  declare aa : Nat -> Nat -> Nat;
+  aa zero x = x;
+  aa (succ x) y = succ (aa x y);
+
+  declare ab : Nat -> Nat -> Nat;
+  ab zero x = x;
+  ab (succ x) y = succ (ab x y);
+
+  declare ac : Nat -> Nat -> Nat;
+  ac zero x = x;
+  ac (succ x) y = succ (ac x y);
+
+  declare ad : Nat -> Nat -> Nat;
+  ad zero x = x;
+  ad (succ x) y = succ (ad x y);
+
+  declare ae : Nat -> Nat -> Nat;
+  ae zero x = x;
+  ae (succ x) y = succ (ae x y);
+
+  declare af : Nat -> Nat -> Nat;
+  af zero x = x;
+  af (succ x) y = succ (af x y);
+
+  declare ag : Nat -> Nat -> Nat;
+  ag zero x = x;
+  ag (succ x) y = succ (ag x y);
+
+  declare ah : Nat -> Nat -> Nat;
+  ah zero x = x;
+  ah (succ x) y = succ (ah x y);
+
+  declare ai : Nat -> Nat -> Nat;
+  ai zero x = x;
+  ai (succ x) y = succ (ai x y);
+
+  declare aj : Nat -> Nat -> Nat;
+  aj zero x = x;
+  aj (succ x) y = succ (aj x y);
+
+  declare ak : Nat -> Nat -> Nat;
+  ak zero x = x;
+  ak (succ x) y = succ (ak x y);
+
+  declare ba : Nat -> Nat -> Nat;
+  ba zero x = x;
+  ba (succ x) y = succ (ba x y);
+
+  declare bb : Nat -> Nat -> Nat;
+  bb zero x = x;
+  bb (succ x) y = succ (bb x y);
+
+  declare bc : Nat -> Nat -> Nat;
+  bc zero x = x;
+  bc (succ x) y = succ (bc x y);
+
+  declare bd : Nat -> Nat -> Nat;
+  bd zero x = x;
+  bd (succ x) y = succ (bd x y);
+
+  declare be : Nat -> Nat -> Nat;
+  be zero x = x;
+  be (succ x) y = succ (be x y);
+
+  declare bf : Nat -> Nat -> Nat;
+  bf zero x = x;
+  bf (succ x) y = succ (bf x y);
+
+  declare bg : Nat -> Nat -> Nat;
+  bg zero x = x;
+  bg (succ x) y = succ (bg x y);
+
+  declare bh : Nat -> Nat -> Nat;
+  bh zero x = x;
+  bh (succ x) y = succ (bh x y);
+
+  declare bi : Nat -> Nat -> Nat;
+  bi zero x = x;
+  bi (succ x) y = succ (bi x y);
+
+  declare bj : Nat -> Nat -> Nat;
+  bj zero x = x;
+  bj (succ x) y = succ (bj x y);
+
+  declare bk : Nat -> Nat -> Nat;
+  bk zero x = x;
+  bk (succ x) y = succ (bk x y);
+
+  declare ca : Nat -> Nat -> Nat;
+  ca zero x = x;
+  ca (succ x) y = succ (ca x y);
+
+  declare cb : Nat -> Nat -> Nat;
+  cb zero x = x;
+  cb (succ x) y = succ (cb x y);
+
+  declare cc : Nat -> Nat -> Nat;
+  cc zero x = x;
+  cc (succ x) y = succ (cc x y);
+
+  declare cd : Nat -> Nat -> Nat;
+  cd zero x = x;
+  cd (succ x) y = succ (cd x y);
+
+  declare ce : Nat -> Nat -> Nat;
+  ce zero x = x;
+  ce (succ x) y = succ (ce x y);
+
+  declare cf : Nat -> Nat -> Nat;
+  cf zero x = x;
+  cf (succ x) y = succ (cf x y);
+
+  declare cg : Nat -> Nat -> Nat;
+  cg zero x = x;
+  cg (succ x) y = succ (cg x y);
+
+  declare ch : Nat -> Nat -> Nat;
+  ch zero x = x;
+  ch (succ x) y = succ (ch x y);
+
+  declare ci : Nat -> Nat -> Nat;
+  ci zero x = x;
+  ci (succ x) y = succ (ci x y);
+
+  declare cj : Nat -> Nat -> Nat;
+  cj zero x = x;
+  cj (succ x) y = succ (cj x y);
+
+  declare ck : Nat -> Nat -> Nat;
+  ck zero x = x;
+  ck (succ x) y = succ (ck x y);
+
+  declare da : Nat -> Nat -> Nat;
+  da zero x = x;
+  da (succ x) y = succ (da x y);
+
+  declare db : Nat -> Nat -> Nat;
+  db zero x = x;
+  db (succ x) y = succ (db x y);
+
+  declare dc : Nat -> Nat -> Nat;
+  dc zero x = x;
+  dc (succ x) y = succ (dc x y);
+
+  declare dd : Nat -> Nat -> Nat;
+  dd zero x = x;
+  dd (succ x) y = succ (dd x y);
+
+  declare de : Nat -> Nat -> Nat;
+  de zero x = x;
+  de (succ x) y = succ (de x y);
+
+  declare df : Nat -> Nat -> Nat;
+  df zero x = x;
+  df (succ x) y = succ (df x y);
+
+  declare dg : Nat -> Nat -> Nat;
+  dg zero x = x;
+  dg (succ x) y = succ (dg x y);
+
+  declare dh : Nat -> Nat -> Nat;
+  dh zero x = x;
+  dh (succ x) y = succ (dh x y);
+
+  declare di : Nat -> Nat -> Nat;
+  di zero x = x;
+  di (succ x) y = succ (di x y);
+
+  declare dj : Nat -> Nat -> Nat;
+  dj zero x = x;
+  dj (succ x) y = succ (dj x y);
+
+  declare dk : Nat -> Nat -> Nat;
+  dk zero x = x;
+  dk (succ x) y = succ (dk x y);
+
+  declare ea : Nat -> Nat -> Nat;
+  ea zero x = x;
+  ea (succ x) y = succ (ea x y);
+
+  declare eb : Nat -> Nat -> Nat;
+  eb zero x = x;
+  eb (succ x) y = succ (eb x y);
+
+  declare ec : Nat -> Nat -> Nat;
+  ec zero x = x;
+  ec (succ x) y = succ (ec x y);
+
+  declare ed : Nat -> Nat -> Nat;
+  ed zero x = x;
+  ed (succ x) y = succ (ed x y);
+
+  declare ee : Nat -> Nat -> Nat;
+  ee zero x = x;
+  ee (succ x) y = succ (ee x y);
+
+  declare ef : Nat -> Nat -> Nat;
+  ef zero x = x;
+  ef (succ x) y = succ (ef x y);
+
+  declare eg : Nat -> Nat -> Nat;
+  eg zero x = x;
+  eg (succ x) y = succ (eg x y);
+
+  declare eh : Nat -> Nat -> Nat;
+  eh zero x = x;
+  eh (succ x) y = succ (eh x y);
+
+  declare ei : Nat -> Nat -> Nat;
+  ei zero x = x;
+  ei (succ x) y = succ (ei x y);
+
+  declare ej : Nat -> Nat -> Nat;
+  ej zero x = x;
+  ej (succ x) y = succ (ej x y);
+
+  declare ek : Nat -> Nat -> Nat;
+  ek zero x = x;
+  ek (succ x) y = succ (ek x y);
+
+  declare fa : Nat -> Nat -> Nat;
+  fa zero x = x;
+  fa (succ x) y = succ (fa x y);
+
+  declare fb : Nat -> Nat -> Nat;
+  fb zero x = x;
+  fb (succ x) y = succ (fb x y);
+
+  declare fc : Nat -> Nat -> Nat;
+  fc zero x = x;
+  fc (succ x) y = succ (fc x y);
+
+  declare fd : Nat -> Nat -> Nat;
+  fd zero x = x;
+  fd (succ x) y = succ (fd x y);
+
+  declare fe : Nat -> Nat -> Nat;
+  fe zero x = x;
+  fe (succ x) y = succ (fe x y);
+
+  declare ff : Nat -> Nat -> Nat;
+  ff zero x = x;
+  ff (succ x) y = succ (ff x y);
+
+  declare fg : Nat -> Nat -> Nat;
+  fg zero x = x;
+  fg (succ x) y = succ (fg x y);
+
+  declare fh : Nat -> Nat -> Nat;
+  fh zero x = x;
+  fh (succ x) y = succ (fh x y);
+
+  declare fi : Nat -> Nat -> Nat;
+  fi zero x = x;
+  fi (succ x) y = succ (fi x y);
+
+  declare fj : Nat -> Nat -> Nat;
+  fj zero x = x;
+  fj (succ x) y = succ (fj x y);
+
+  declare fk : Nat -> Nat -> Nat;
+  fk zero x = x;
+  fk (succ x) y = succ (fk x y);
+
+  declare ga : Nat -> Nat -> Nat;
+  ga zero x = x;
+  ga (succ x) y = succ (ga x y);
+
+  declare gb : Nat -> Nat -> Nat;
+  gb zero x = x;
+  gb (succ x) y = succ (gb x y);
+
+  declare gc : Nat -> Nat -> Nat;
+  gc zero x = x;
+  gc (succ x) y = succ (gc x y);
+
+  declare gd : Nat -> Nat -> Nat;
+  gd zero x = x;
+  gd (succ x) y = succ (gd x y);
+
+  declare ge : Nat -> Nat -> Nat;
+  ge zero x = x;
+  ge (succ x) y = succ (ge x y);
+
+  declare gf : Nat -> Nat -> Nat;
+  gf zero x = x;
+  gf (succ x) y = succ (gf x y);
+
+  declare gg : Nat -> Nat -> Nat;
+  gg zero x = x;
+  gg (succ x) y = succ (gg x y);
+
+  declare gh : Nat -> Nat -> Nat;
+  gh zero x = x;
+  gh (succ x) y = succ (gh x y);
+
+  declare gi : Nat -> Nat -> Nat;
+  gi zero x = x;
+  gi (succ x) y = succ (gi x y);
+
+  declare gj : Nat -> Nat -> Nat;
+  gj zero x = x;
+  gj (succ x) y = succ (gj x y);
+
+  declare gk : Nat -> Nat -> Nat;
+  gk zero x = x;
+  gk (succ x) y = succ (gk x y);
+
+  declare ha : Nat -> Nat -> Nat;
+  ha zero x = x;
+  ha (succ x) y = succ (ha x y);
+
+  declare hb : Nat -> Nat -> Nat;
+  hb zero x = x;
+  hb (succ x) y = succ (hb x y);
+
+  declare hc : Nat -> Nat -> Nat;
+  hc zero x = x;
+  hc (succ x) y = succ (hc x y);
+
+  declare hd : Nat -> Nat -> Nat;
+  hd zero x = x;
+  hd (succ x) y = succ (hd x y);
+
+  declare he : Nat -> Nat -> Nat;
+  he zero x = x;
+  he (succ x) y = succ (he x y);
+
+  declare hf : Nat -> Nat -> Nat;
+  hf zero x = x;
+  hf (succ x) y = succ (hf x y);
+
+  declare hg : Nat -> Nat -> Nat;
+  hg zero x = x;
+  hg (succ x) y = succ (hg x y);
+
+  declare hh : Nat -> Nat -> Nat;
+  hh zero x = x;
+  hh (succ x) y = succ (hh x y);
+
+  declare hi : Nat -> Nat -> Nat;
+  hi zero x = x;
+  hi (succ x) y = succ (hi x y);
+
+  declare hj : Nat -> Nat -> Nat;
+  hj zero x = x;
+  hj (succ x) y = succ (hj x y);
+
+  declare hk : Nat -> Nat -> Nat;
+  hk zero x = x;
+  hk (succ x) y = succ (hk x y);
+
+  declare ia : Nat -> Nat -> Nat;
+  ia zero x = x;
+  ia (succ x) y = succ (ia x y);
+
+  declare ib : Nat -> Nat -> Nat;
+  ib zero x = x;
+  ib (succ x) y = succ (ib x y);
+
+  declare ic : Nat -> Nat -> Nat;
+  ic zero x = x;
+  ic (succ x) y = succ (ic x y);
+
+  declare id : Nat -> Nat -> Nat;
+  id zero x = x;
+  id (succ x) y = succ (id x y);
+
+  declare ie : Nat -> Nat -> Nat;
+  ie zero x = x;
+  ie (succ x) y = succ (ie x y);
+
+  declare if : Nat -> Nat -> Nat;
+  if zero x = x;
+  if (succ x) y = succ (if x y);
+
+  declare ig : Nat -> Nat -> Nat;
+  ig zero x = x;
+  ig (succ x) y = succ (ig x y);
+
+  declare ih : Nat -> Nat -> Nat;
+  ih zero x = x;
+  ih (succ x) y = succ (ih x y);
+
+  declare ii : Nat -> Nat -> Nat;
+  ii zero x = x;
+  ii (succ x) y = succ (ii x y);
+
+  declare ij : Nat -> Nat -> Nat;
+  ij zero x = x;
+  ij (succ x) y = succ (ij x y);
+
+  declare ik : Nat -> Nat -> Nat;
+  ik zero x = x;
+  ik (succ x) y = succ (ik x y);
+
+  declare ja : Nat -> Nat -> Nat;
+  ja zero x = x;
+  ja (succ x) y = succ (ja x y);
+
+  declare jb : Nat -> Nat -> Nat;
+  jb zero x = x;
+  jb (succ x) y = succ (jb x y);
+
+  declare jc : Nat -> Nat -> Nat;
+  jc zero x = x;
+  jc (succ x) y = succ (jc x y);
+
+  declare jd : Nat -> Nat -> Nat;
+  jd zero x = x;
+  jd (succ x) y = succ (jd x y);
+
+  declare je : Nat -> Nat -> Nat;
+  je zero x = x;
+  je (succ x) y = succ (je x y);
+
+  declare jf : Nat -> Nat -> Nat;
+  jf zero x = x;
+  jf (succ x) y = succ (jf x y);
+
+  declare jg : Nat -> Nat -> Nat;
+  jg zero x = x;
+  jg (succ x) y = succ (jg x y);
+
+  declare jh : Nat -> Nat -> Nat;
+  jh zero x = x;
+  jh (succ x) y = succ (jh x y);
+
+  declare ji : Nat -> Nat -> Nat;
+  ji zero x = x;
+  ji (succ x) y = succ (ji x y);
+
+  declare jj : Nat -> Nat -> Nat;
+  jj zero x = x;
+  jj (succ x) y = succ (jj x y);
+
+  declare jk : Nat -> Nat -> Nat;
+  jk zero x = x;
+  jk (succ x) y = succ (jk x y);
+
+  declare ka : Nat -> Nat -> Nat;
+  ka zero x = x;
+  ka (succ x) y = succ (ka x y);
+
+  declare kb : Nat -> Nat -> Nat;
+  kb zero x = x;
+  kb (succ x) y = succ (kb x y);
+
+  declare kc : Nat -> Nat -> Nat;
+  kc zero x = x;
+  kc (succ x) y = succ (kc x y);
+
+  declare kd : Nat -> Nat -> Nat;
+  kd zero x = x;
+  kd (succ x) y = succ (kd x y);
+
+  declare ke : Nat -> Nat -> Nat;
+  ke zero x = x;
+  ke (succ x) y = succ (ke x y);
+
+  declare kf : Nat -> Nat -> Nat;
+  kf zero x = x;
+  kf (succ x) y = succ (kf x y);
+
+  declare kg : Nat -> Nat -> Nat;
+  kg zero x = x;
+  kg (succ x) y = succ (kg x y);
+
+  declare kh : Nat -> Nat -> Nat;
+  kh zero x = x;
+  kh (succ x) y = succ (kh x y);
+
+  declare ki : Nat -> Nat -> Nat;
+  ki zero x = x;
+  ki (succ x) y = succ (ki x y);
+
+  declare kj : Nat -> Nat -> Nat;
+  kj zero x = x;
+  kj (succ x) y = succ (kj x y);
+
+  declare kk : Nat -> Nat -> Nat;
+  kk zero x = x;
+  kk (succ x) y = succ (kk x y);
+
+  declare la : Nat -> Nat -> Nat;
+  la zero x = x;
+  la (succ x) y = succ (la x y);
+
+  declare lb : Nat -> Nat -> Nat;
+  lb zero x = x;
+  lb (succ x) y = succ (lb x y);
+
+  declare lc : Nat -> Nat -> Nat;
+  lc zero x = x;
+  lc (succ x) y = succ (lc x y);
+
+  declare ld : Nat -> Nat -> Nat;
+  ld zero x = x;
+  ld (succ x) y = succ (ld x y);
+
+  declare le : Nat -> Nat -> Nat;
+  le zero x = x;
+  le (succ x) y = succ (le x y);
+
+  declare lf : Nat -> Nat -> Nat;
+  lf zero x = x;
+  lf (succ x) y = succ (lf x y);
+
+  declare lg : Nat -> Nat -> Nat;
+  lg zero x = x;
+  lg (succ x) y = succ (lg x y);
+
+  declare lh : Nat -> Nat -> Nat;
+  lh zero x = x;
+  lh (succ x) y = succ (lh x y);
+
+  declare li : Nat -> Nat -> Nat;
+  li zero x = x;
+  li (succ x) y = succ (li x y);
+
+  declare lj : Nat -> Nat -> Nat;
+  lj zero x = x;
+  lj (succ x) y = succ (lj x y);
+
+  declare lk : Nat -> Nat -> Nat;
+  lk zero x = x;
+  lk (succ x) y = succ (lk x y);
+
+  declare ma : Nat -> Nat -> Nat;
+  ma zero x = x;
+  ma (succ x) y = succ (ma x y);
+
+  declare mb : Nat -> Nat -> Nat;
+  mb zero x = x;
+  mb (succ x) y = succ (mb x y);
+
+  declare mc : Nat -> Nat -> Nat;
+  mc zero x = x;
+  mc (succ x) y = succ (mc x y);
+
+  declare md : Nat -> Nat -> Nat;
+  md zero x = x;
+  md (succ x) y = succ (md x y);
+
+  declare me : Nat -> Nat -> Nat;
+  me zero x = x;
+  me (succ x) y = succ (me x y);
+
+  declare mf : Nat -> Nat -> Nat;
+  mf zero x = x;
+  mf (succ x) y = succ (mf x y);
+
+  declare mg : Nat -> Nat -> Nat;
+  mg zero x = x;
+  mg (succ x) y = succ (mg x y);
+
+  declare mh : Nat -> Nat -> Nat;
+  mh zero x = x;
+  mh (succ x) y = succ (mh x y);
+
+  declare mi : Nat -> Nat -> Nat;
+  mi zero x = x;
+  mi (succ x) y = succ (mi x y);
+
+  declare mj : Nat -> Nat -> Nat;
+  mj zero x = x;
+  mj (succ x) y = succ (mj x y);
+
+  declare mk : Nat -> Nat -> Nat;
+  mk zero x = x;
+  mk (succ x) y = succ (mk x y);
+
+  a
+}

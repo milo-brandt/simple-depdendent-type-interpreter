@@ -109,9 +109,10 @@ namespace new_expression {
         auto index = next_writable_entry();
         entries[index].discriminator = discriminator_apply;
         entries[index].data.apply = Apply{
-          .lhs = std::move(lhs),
-          .rhs = std::move(rhs)
+          .lhs = lhs,
+          .rhs = rhs
         };
+        //hold on to references to lhs and rhs
         existing_apply.insert(std::make_pair(key, WeakExpression{index}));
         return OwnedExpression{index};
       }
