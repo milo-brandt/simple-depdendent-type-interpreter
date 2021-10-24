@@ -35,11 +35,6 @@ namespace solver {
       Solver solver;
       mdb::Promise<EquationErrorInfo> result;
     };
-    struct RuleBuilder {
-      new_expression::OwnedExpression pattern;
-      new_expression::OwnedExpression replacement;
-      std::optional<mdb::Promise<bool> > result;
-    };
   }
   struct Manager::Impl {
     Arena& arena;
@@ -49,9 +44,7 @@ namespace solver {
     new_expression::PrimitiveTypeCollector& type_collector;
     std::vector<EquationSolver> active_solvers;
     std::vector<EquationFailedSolver> failed_solvers;
-    std::vector<RuleBuilder> active_rule_builders;
     new_expression::OwnedKeyMap<solver::DefinableInfo> definable_indeterminates;
-    std::optional<stack::Stack> cheating_stack;
     bool is_running = false;
     SegmentResult run(EquationSolver& eq) {
       auto made_progress = eq.solver.try_to_make_progress();
@@ -77,37 +70,6 @@ namespace solver {
       }
       return {
         .made_progress = made_progress,
-        .done = false
-      };
-    }
-    SegmentResult run(RuleBuilder& rule) {
-      //just handle lambdas for now.
-      rule.pattern = evaluation.reduce(std::move(rule.pattern));
-      auto unfolded = unfold(arena, rule.pattern);
-      if(arena.holds_declaration(unfolded.head)) {
-        for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
-          if(auto* arg = arena.get_if_argument(unfolded.args[i])) {
-            if(arg->index != i) {
-              return {
-                .made_progress = false,
-                .done = false
-              };
-            }
-          }
-        }
-        rule_collector.add_rule({
-          .pattern = new_expression::lambda_pattern(arena.copy(unfolded.head), unfolded.args.size()),
-          .replacement = std::move(rule.replacement)
-        });
-        destroy_from_arena(arena, rule.pattern);
-        rule.result->set_value(true);
-        return {
-          .made_progress = true,
-          .done = true
-        };
-      }
-      return {
-        .made_progress = false,
         .done = false
       };
     }
@@ -144,7 +106,6 @@ namespace solver {
       };
     }
     mdb::Future<EquationResult> register_equation(Equation equation) {
-      cheating_stack = equation.stack;
       auto [promise, future] = mdb::create_promise_future_pair<EquationResult>();
       active_solvers.push_back({
         .solver = Solver(get_solver_interface(), std::move(equation)),
@@ -168,9 +129,6 @@ namespace solver {
         for(auto& failed : failed_solvers) {
           failed.solver.try_to_make_progress();
         }
-        mdb::erase_from_active_queue(active_rule_builders, [&](auto& rule) {
-          return extract_done(run(rule));
-        });
       }
       is_running = false;
     }
@@ -183,12 +141,6 @@ namespace solver {
       });
       mdb::erase_from_active_queue(failed_solvers, [&](auto& eq) {
         eq.result.set_value(std::move(eq.solver).get_error_info());
-        return true;
-      });
-      mdb::erase_from_active_queue(active_rule_builders, [&](auto& eq) {
-        if(eq.result) {
-          eq.result->set_value(false);
-        }
         return true;
       });
     }
@@ -230,7 +182,7 @@ namespace solver {
       definable_indeterminates.set(std::move(expr), solver::DefinableInfo{std::move(stack)});
     }
     bool solved() {
-      return active_solvers.empty();
+      return active_solvers.empty() && failed_solvers.empty();
     }
   };
   Manager::Manager(BasicContext& context):impl(new Impl{
