@@ -20,7 +20,8 @@ template<class Embed>
 solver::ExternalInterfaceParts interface_from_embed(Embed embed) {
   return solver::ExternalInterfaceParts{
     .explain_variable = [](auto&&...){},
-    .embed = std::move(embed)
+    .embed = std::move(embed),
+    .report_error = [](auto&&){}
   };
 }
 TEST_CASE("The evaluator can handle simple programs") {

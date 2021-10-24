@@ -5,19 +5,21 @@
 
 using namespace new_expression;
 
-bool is_free_from_conglomerates(Arena& arena, WeakExpression expr) {
-  return arena.visit(expr, mdb::overloaded{
-    [&](Apply const& apply) {
-      return is_free_from_conglomerates(arena, apply.lhs)
-          && is_free_from_conglomerates(arena, apply.rhs);
-    },
-    [&](Conglomerate const&) {
-       return false;
-    },
-    [&](auto const&) {
-      return true;
-    }
-  });
+namespace {
+  bool is_free_from_conglomerates(Arena& arena, WeakExpression expr) {
+    return arena.visit(expr, mdb::overloaded{
+      [&](Apply const& apply) {
+        return is_free_from_conglomerates(arena, apply.lhs)
+            && is_free_from_conglomerates(arena, apply.rhs);
+      },
+      [&](Conglomerate const&) {
+         return false;
+      },
+      [&](auto const&) {
+        return true;
+      }
+    });
+  }
 }
 
 TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function.") {

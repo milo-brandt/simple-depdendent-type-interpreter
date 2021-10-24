@@ -30,7 +30,7 @@ struct SimpleContext {
   new_expression::Arena& arena;
   new_expression::RuleCollector rule_collector;
   new_expression::EvaluationContext evaluation_context;
-  std::unordered_set<std::uint64_t> indeterminate_indices;
+  std::unordered_set<void const*> indeterminate_indices;
   SimpleContext(new_expression::Arena& arena):
     arena(arena),
     rule_collector(arena),
@@ -41,8 +41,14 @@ struct SimpleContext {
       .term_depends_on = [this](new_expression::WeakExpression lhs, new_expression::WeakExpression rhs) {
         return lhs == rhs;
       },
-      .is_definable_indeterminate = [this](new_expression::WeakExpression expr) {
-        return indeterminate_indices.contains(expr.index());
+      .get_definable_info = [this](new_expression::WeakExpression expr) -> std::optional<solver::DefinableInfo> {
+        if(indeterminate_indices.contains(expr.data())) {
+          return solver::DefinableInfo{
+            .stack = get_empty_stack_for(arena, rule_collector)
+          };
+        } else {
+          return std::nullopt;
+        }
       },
       .is_lambda_like = [this](new_expression::WeakExpression expr) {
         return evaluation_context.is_lambda_like(expr);
@@ -53,9 +59,9 @@ struct SimpleContext {
         //note: arguments might not be entirely closed with assumptions - should check in real code
       },
       .make_definition = [this](solver::IndeterminateDefinition definition) {
-        if(!indeterminate_indices.contains(definition.head.index()))
+        if(!indeterminate_indices.contains(definition.head.data()))
           std::terminate();
-        indeterminate_indices.erase(definition.head.index());
+        indeterminate_indices.erase(definition.head.data());
         rule_collector.add_rule({
           .pattern = lambda_pattern(arena.copy(definition.head), definition.arg_count),
           .replacement = std::move(definition.replacement)
@@ -73,7 +79,7 @@ TEST_CASE("var_1 = axiom is resolved") {
     SimpleContext context{arena};
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto axiom = arena.axiom();
     Solver solver{
       context.interface(),
@@ -101,7 +107,7 @@ TEST_CASE("var_1 = declaration is resolved") {
     SimpleContext context{arena};
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto declaration = arena.declaration();
     context.rule_collector.register_declaration(declaration);
     Solver solver{
@@ -130,7 +136,7 @@ TEST_CASE("axiom = var_1 is resolved") {
     SimpleContext context{arena};
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto axiom = arena.axiom();
     Solver solver{
       context.interface(),
@@ -158,7 +164,7 @@ TEST_CASE("var_1 $0 = axiom is resolved") {
     SimpleContext context{arena};
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto axiom = arena.axiom();
     Solver solver{
       context.interface(),
@@ -191,10 +197,10 @@ TEST_CASE("var_1 $0 = var_2 $1 stalls") {
     SimpleContext context{arena};
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto var_2 = arena.declaration();
     context.rule_collector.register_declaration(var_2);
-    context.indeterminate_indices.insert(var_2.index());
+    context.indeterminate_indices.insert(var_2.data());
     Solver solver{
       context.interface(),
       {
@@ -225,10 +231,10 @@ TEST_CASE("var_1 $0 = var_2 $1 and var_2 $0 = axiom succeeds") {
     SimpleContext context{arena};
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto var_2 = arena.declaration();
     context.rule_collector.register_declaration(var_2);
-    context.indeterminate_indices.insert(var_2.index());
+    context.indeterminate_indices.insert(var_2.data());
     auto axiom = arena.axiom();
     Solver solver{
       context.interface(),
@@ -344,7 +350,7 @@ TEST_CASE("axiom_1 var_1 = axiom_1 axiom_2 succeeds.") {
 
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto axiom_1 = arena.axiom();
     auto axiom_2 = arena.axiom();
 
@@ -381,7 +387,7 @@ TEST_CASE("f var_1 = f var_1 succeeds even for undefined declaration f.") {
     context.rule_collector.register_declaration(f);
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
 
     Solver solver{
       context.interface(),
@@ -412,7 +418,7 @@ TEST_CASE("axiom_1 var_1 = $0 succeeds in a stack where $0 = axiom_1 axiom_2.") 
 
     auto var_1 = arena.declaration();
     context.rule_collector.register_declaration(var_1);
-    context.indeterminate_indices.insert(var_1.index());
+    context.indeterminate_indices.insert(var_1.data());
     auto axiom_1 = arena.axiom();
     auto axiom_2 = arena.axiom();
     auto dummy_type = arena.axiom();
