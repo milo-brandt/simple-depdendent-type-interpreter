@@ -522,10 +522,10 @@ namespace solver::evaluator {
     for(auto const& command : root.commands) {
       detail.evaluate(command, local_context);
     }
+    auto ret = detail.evaluate(root.value, local_context);
     for(auto& local : detail.locals) {
       destroy_from_arena(detail.interface.arena, local);
     }
-    auto ret = detail.evaluate(root.value, local_context);
     detail.interface.close_interface();
     return ret;
   }
