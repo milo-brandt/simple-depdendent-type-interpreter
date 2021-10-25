@@ -42,14 +42,15 @@ namespace new_expression {
       }
     };
   }
+  using Replacement = std::variant<OwnedExpression, mdb::function<OwnedExpression(std::span<WeakExpression>)> >;
   struct Rule {
     Pattern pattern;
-    OwnedExpression replacement;
+    Replacement replacement;
     static constexpr auto part_info = mdb::parts::simple<2>;
   };
   struct RuleBody {
     PatternBody pattern_body;
-    OwnedExpression replacement;
+    Replacement replacement;
     static constexpr auto part_info = mdb::parts::simple<2>;
   };
   struct DeclarationInfo {

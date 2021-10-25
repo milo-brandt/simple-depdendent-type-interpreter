@@ -6,6 +6,7 @@
 #include "../ExpressionParser/expression_generator.hpp"
 #include "../Solver/manager.hpp"
 #include "../Primitives/primitives.hpp"
+#include "../Utility/vector_utility.hpp"
 #include "debug_format.hpp"
 #include <sstream>
 
@@ -121,6 +122,7 @@ namespace interactive {
     new_expression::WeakKeyMap<std::string> externals_to_names;
     new_expression::OwnedExpression u64_type;
     new_expression::OwnedExpression u64_head;
+    new_expression::OwnedExpression add_u64;
     primitive::U64Data* u64;
     void name_external(std::string name, new_expression::WeakExpression expr) {
       externals_to_names.set(expr, name);
@@ -129,12 +131,73 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       }));
     }
-    Impl():arena(), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)) {
+    Impl():arena(), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), add_u64(arena.declaration()), u64(primitive::U64Data::register_on(arena)) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
       context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
       name_external("U64", u64_type);
       externals_to_names.set(u64_head, "u64"); //this is internal, not to be exposed to user
+      context.type_collector.type_of_primitive.set(add_u64, arena.apply(
+        arena.copy(context.primitives.arrow),
+        arena.copy(u64_type),
+        arena.apply(
+          arena.copy(context.primitives.constant),
+          arena.copy(context.primitives.type),
+          arena.apply(
+            arena.copy(context.primitives.arrow),
+            arena.copy(u64_type),
+            arena.apply(
+              arena.copy(context.primitives.constant),
+              arena.copy(context.primitives.type),
+              arena.copy(u64_type),
+              arena.copy(u64_type)
+            )
+          ),
+          arena.copy(u64_type)
+        )
+      ));
+      context.rule_collector.register_declaration(add_u64);
+      name_external("add_u64", add_u64);
+      context.rule_collector.add_rule({
+        .pattern = {
+          .head = arena.copy(add_u64),
+          .body = {
+            .args_captured = 2,
+            .steps = mdb::make_vector<new_expression::PatternStep>(
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(0),
+                .expected_head = arena.copy(u64_head),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 1,
+                .expected_type = u64->type_index
+              },
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(2),
+                .expected_head = arena.copy(u64_head),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 3,
+                .expected_type = u64->type_index
+              }
+            )
+          }
+        },
+        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+          [&](std::span<new_expression::WeakExpression> inputs) {
+            return arena.apply(
+              arena.copy(u64_head),
+              u64->make_expression(
+                u64->read_data(arena.get_data(inputs[1])) + u64->read_data(arena.get_data(inputs[3]))
+              )
+            );
+          }
+        }
+      });
     }
     mdb::Result<LexInfo, std::string> lex_code(BaseInfo input) {
       expression_parser::LexerInfo lexer_info {

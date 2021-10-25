@@ -49,7 +49,14 @@ namespace new_expression {
               }
               //if we get here, the pattern succeeded.
               {
-                auto new_expr = substitute_into(arena, rule.replacement, mdb::as_span(pattern_stack));
+                auto new_expr = std::visit(mdb::overloaded{
+                  [&](OwnedExpression const& expr) {
+                    return substitute_into(arena, expr, mdb::as_span(pattern_stack));
+                  },
+                  [&](mdb::function<OwnedExpression(std::span<WeakExpression>)> const& func) {
+                    return func(mdb::as_span(pattern_stack));
+                  }
+                }, rule.replacement);
                 for(std::size_t i = rule.pattern_body.args_captured; i < unfolded.args.size(); ++i) {
                   new_expr = me().arena.apply(
                     std::move(new_expr),
@@ -787,7 +794,14 @@ namespace new_expression {
                 expr = arena.copy(indeterminate_head);
                 return false;
               } else {
-                auto new_expr = substitute_into(arena, rule.replacement, mdb::as_span(pattern_stack));
+                auto new_expr = std::visit(mdb::overloaded{
+                  [&](OwnedExpression const& expr) {
+                    return substitute_into(arena, expr, mdb::as_span(pattern_stack));
+                  },
+                  [&](mdb::function<OwnedExpression(std::span<WeakExpression>)> const& func) {
+                    return func(mdb::as_span(pattern_stack));
+                  }
+                }, rule.replacement);
                 arena.drop(std::move(expr));
                 expr = std::move(new_expr);
                 destroy_from_arena(arena, novel_roots);
