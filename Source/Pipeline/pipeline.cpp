@@ -60,18 +60,18 @@ namespace pipeline::compile {
       auto print_stack = [&](stack::Stack const& stack) {
         auto assumptions = stack.list_assumptions();
         for(auto const& assumption : assumptions.assumptions) {
-          std::cout << "Given " << format_expr(assumption.representative);
+          o << "Given " << format_expr(assumption.representative);
           for(auto const& term : assumption.terms) {
-            std::cout << " = " << format_expr(term);
+            o << " = " << format_expr(term);
           }
-          std::cout << "\n";
+          o << "\n";
         }
         destroy_from_arena(arena, assumptions);
       };
       auto print_eq = [&](solver::Equation const& eq, bool fail) {
-        if(fail) std::cout << "Failed:\n";
-        else std::cout << "Stalled:\n";
-        std::cout << format_expr(eq.lhs) << " =?= " << format_expr(eq.rhs) << "\n";
+        if(fail) o << "Failed:\n";
+        else o << "Stalled:\n";
+        o << format_expr(eq.lhs) << " =?= " << format_expr(eq.rhs) << "\n";
         print_stack(eq.stack);
       };
       print_eq(err.primary, err.primary_failed);
