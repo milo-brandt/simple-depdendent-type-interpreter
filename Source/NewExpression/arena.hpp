@@ -176,6 +176,9 @@ namespace new_expression {
         std::forward<Callback>(callback)
       );
     }
+    void debug_print_data(std::ostream& o, Data const& data) {
+      return data_type_at_index(data.type_index)->debug_print(data.buffer, o);
+    }
     void clear_orphaned_expressions(); //primarily for testing.
     bool empty() const; //primarily for testing
     void debug_dump() const;

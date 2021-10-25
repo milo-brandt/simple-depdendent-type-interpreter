@@ -44,7 +44,7 @@ namespace user {
             format_external(o, expression);
           },
           [&](new_expression::Data const& data) {
-            std::terminate();
+            arena.debug_print_data(o, data);
           },
           [&](new_expression::Conglomerate const& conglomerate) {
             o << "#" << conglomerate.index;

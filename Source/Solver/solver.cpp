@@ -95,8 +95,10 @@ namespace solver {
             [&](new_expression::Conglomerate const& conglomerate) {
               return true;
             },
-            [&](auto const&) -> bool {
-              std::terminate();
+            [&](new_expression::Data const& data) {
+              return interface.arena.all_subexpressions_of(data, [&](WeakExpression expr) {
+                return is_acceptable(expr);
+              });
             }
           });
         }
@@ -183,10 +185,6 @@ namespace solver {
     }
     AttemptResult try_to_deepen(std::uint64_t index, EquationInfo const& eq) {
       if(interface.is_lambda_like(eq.equation.lhs)) {
-        /*auto lhs_type = context.expression_context().get_domain_and_codomain(
-          info.equation.stack.type_of(context.expression_context(), lhs.expression)
-        );
-        if(!lhs_type) std::terminate();*/
         equations.push_back({
           .equation = {
             .lhs = interface.arena.apply(
@@ -202,10 +200,6 @@ namespace solver {
         });
         return AttemptResult::handled;
       } else if(interface.is_lambda_like(eq.equation.rhs)) {
-        /*auto rhs_type = context.expression_context().get_domain_and_codomain(
-          info.equation.stack.type_of(context.expression_context(), rhs.expression)
-        );
-        if(!rhs_type) std::terminate();*/
         equations.push_back({
           .equation = {
             .lhs = interface.arena.apply(

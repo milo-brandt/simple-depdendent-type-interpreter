@@ -1,7 +1,8 @@
 Need to ensure that indeterminates are not defined from contexts with more assumptions.
 Need to re-add support for U64s, Strings, Vectors.
-
-
+* For Data: Should add a way to internally destructure pairs of things (for assumptions)
+  - might accomplish this by adding a method to check whether two pieces of data are "shape-compatible"
+    and, if so, to list all pairs that need to align for them to be equal.
 
 *************
 High priority

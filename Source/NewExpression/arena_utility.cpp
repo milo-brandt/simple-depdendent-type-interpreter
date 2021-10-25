@@ -51,7 +51,12 @@ namespace new_expression {
           [&](Declaration const& declaration) {
             return arena.copy(target);
           },
-          [&](auto const&) -> OwnedExpression {
+          [&](Data const& data) {
+            return arena.modify_subexpressions_of(data, [&](WeakExpression expr) {
+              return substitute(expr);
+            });
+          },
+          [&](Conglomerate const&) -> OwnedExpression {
             std::terminate();
           }
         });

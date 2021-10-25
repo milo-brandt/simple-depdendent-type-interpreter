@@ -212,7 +212,9 @@ namespace new_expression {
                 if(source_axiomatic->head != target_axiomatic->head) {
                   return false;
                 }
-                if(source_axiomatic->applied_conglomerates.size() != target_axiomatic->applied_conglomerates.size()) std::terminate();
+                if(source_axiomatic->applied_conglomerates.size() != target_axiomatic->applied_conglomerates.size()) {
+                  return false;
+                }
                 me.arena.drop(std::move(target_axiomatic->head)); //target will be destroyed
                 for(std::size_t i = 0; i < source_axiomatic->applied_conglomerates.size(); ++i) {
                   further_combines.emplace_back(
@@ -307,7 +309,7 @@ namespace new_expression {
           return combine_conglomerates(target_class, conglomerate_to_class[conglomerate->index]);
         }
         auto unfolding = unfold(arena, reducer);
-        if(arena.holds_axiom(unfolding.head)) {
+        if(arena.holds_axiom(unfolding.head) || arena.holds_data(unfolding.head)) {
           if(auto* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&conglomerate_class_info[target_class].status)) {
             if(axiomatic->head == unfolding.head && axiomatic->applied_conglomerates.size() == unfolding.args.size()) {
               for(std::size_t i = 0; i < unfolding.args.size(); ++i) {
@@ -484,7 +486,7 @@ namespace new_expression {
               return true;
             } else {
               auto unfolded = unfold(me.arena, constraint.source);
-              if(me.arena.holds_axiom(unfolded.head)) {
+              if(me.arena.holds_axiom(unfolded.head) || me.arena.holds_data(unfolded.head)) {
                 auto unfolded_target = unfold(me.arena, constraint.target);
                 if(unfolded.head != unfolded_target.head || unfolded.args.size() != unfolded_target.args.size()) return false;
                 for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
@@ -872,8 +874,10 @@ namespace new_expression {
         [&](Conglomerate const& conglomerate) -> OwnedExpression  {
           return get_conglomerate_elimination_replacement(conglomerate.index);
         },
-        [&](Data const&) -> OwnedExpression {
-          std::terminate();
+        [&](Data const& data) {
+          return arena.modify_subexpressions_of(data, [&](WeakExpression subexpr) {
+            return eliminate_conglomerates(subexpr);
+          });
         }
       });
     }
@@ -1008,8 +1012,10 @@ namespace new_expression {
       [&](Declaration const&) {
         return true;
       },
-      [&](Data const&) -> bool {
-        std::terminate();
+      [&](Data const& data) {
+        return arena.all_subexpressions_of(data, [&](WeakExpression expr) {
+          return can_map(arena, expr);
+        });
       }
     });
   }
@@ -1033,8 +1039,10 @@ namespace new_expression {
       [&](Declaration const&) {
         return arena.copy(expr);
       },
-      [&](Data const&) -> OwnedExpression {
-        std::terminate();
+      [&](Data const& data) -> OwnedExpression {
+        return arena.modify_subexpressions_of(data, [&](WeakExpression expr) {
+          return map(arena, expr);
+        });
       }
     });
   }

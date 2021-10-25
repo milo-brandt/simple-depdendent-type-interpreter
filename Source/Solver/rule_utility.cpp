@@ -443,6 +443,7 @@ namespace solver {
           return arena.copy(captures.at(capture.capture_index));
         },
         [&](pattern_expr::Hole&) -> new_expression::OwnedExpression {
+          //TODO SOON: Deal with all of this - and actually type check it!
           std::terminate(); //can't yet deal with holes appearing!
         }
       });
