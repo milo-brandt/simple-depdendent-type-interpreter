@@ -41,13 +41,13 @@ TEST_CASE("{{ test.name }}"{% if test.tags -%}
     auto must_compile_result = environment.full_compile(R"#--#({{ definition.source }})#--#");
     if(must_compile_result.holds_error()) {
       INFO(must_compile_result.get_error());
-      FAIL("Failed while compiling variable {{definition.var}}");
+      FAIL("Failed while compiling MUST_COMPILE case.");
     }
     if(!must_compile_result.get_value().is_okay()) {
       std::stringstream error_message;
       must_compile_result.get_value().report_errors_to(error_message, environment.externals_to_names());
       INFO(error_message.str())
-      FAIL("Failed while compiling variable {{definition.var}}");
+      FAIL("Failed while compiling MUST_COMPILE case.");
     }
   }
   {%- else %}
