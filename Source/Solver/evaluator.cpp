@@ -9,7 +9,6 @@ namespace solver::evaluator {
   using WeakExpression = new_expression::WeakExpression;
   using Stack = stack::Stack;
   namespace instruction_archive = compiler::new_instruction::output::archive_part;
-  using Expression = expression::tree::Expression;
   enum class VariableKind {
     axiom,
     declaration,

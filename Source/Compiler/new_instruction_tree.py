@@ -133,41 +133,12 @@ locator = shape.generate_instance(namespace = "compiler::new_instruction::locato
         "ProgramRoot": [("source", "Explanation")]
     }
 })
-forward_locator = shape.generate_instance(namespace = "compiler::new_instruction::forward_locator", data = {
-    "Expression": {
-        "Apply": [],
-        "Local": [],
-        "Embed": [],
-        "PrimitiveExpression": [],
-        "TypeFamilyOver": []
-    },
-    "Pattern": {
-        "PatternApply": [],
-        "PatternLocal": [],
-        "PatternEmbed": [],
-        "PatternCapture": [],
-        "PatternHole": []
-    },
-    "SubmatchGeneric": {
-        "Submatch": []
-    },
-    "Command": {
-        "DeclareHole": [("result", "expression::TypedValue")],
-        "Declare": [("result", "expression::TypedValue")],
-        "Rule": [],
-        "Axiom": [("result", "expression::TypedValue")],
-        "Let": [("result", "expression::TypedValue")]
-    },
-    "Program": {
-        "ProgramRoot": []
-    }
-})
 located_output = Multitree("compiler::new_instruction::located_output", {
     "output": output,
     "locator": locator
 })
 tree_def = TreeOutput(
-    trees = [output, locator, forward_locator],
+    trees = [output, locator],
     multitrees = [located_output],
     archive_namespace = "compiler::new_instruction::archive_index"
 )
@@ -176,6 +147,6 @@ main_output = get_output("THIS_impl")
 
 main_output.write(
     tree_def,
-    source_includes = ["Source/ExpressionParser/parser_tree.hpp", "Source/Expression/expression_tree.hpp"],
+    source_includes = ["Source/ExpressionParser/parser_tree.hpp"],
     relative_includes = ["new_instruction_tree_explanation.hpp"]
 )
