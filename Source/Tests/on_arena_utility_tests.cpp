@@ -34,3 +34,30 @@ TEST_CASE("Part destroyer works recursively through a structure.") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+namespace test_case {
+  struct Custom {
+    OwnedExpression head;
+  };
+  void destroy_from_arena(Arena& arena, Custom& custom) {
+    arena.drop(std::move(custom.head));
+  }
+  struct CustomPair {
+    Custom member_1;
+    Custom member_2;
+    static constexpr auto part_info = mdb::parts::simple<2>;
+  };
+}
+TEST_CASE("Part destroyer calls into ADL specializations when available.") {
+  Arena arena;
+  test_case::CustomPair item{
+    .member_1 = {
+      .head = arena.axiom()
+    },
+    .member_2 = {
+      .head = arena.axiom()
+    }
+  };
+  destroy_from_arena(arena, item);
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
