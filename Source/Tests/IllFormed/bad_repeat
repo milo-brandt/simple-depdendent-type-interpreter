@@ -10,5 +10,5 @@ block {
 
 # TEST DEFINITION
 
-REQUIRE(compile_result.has_result());
-REQUIRE(!compile_result.is_fully_solved());
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

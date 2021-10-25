@@ -1,4 +1,3 @@
-# TEST BEGIN
 # TEST NAME A vector with inconsistent types is rejected.
 # TEST FULL_SET compile_result
 

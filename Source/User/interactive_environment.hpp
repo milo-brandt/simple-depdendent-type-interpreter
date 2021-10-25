@@ -27,6 +27,7 @@ namespace interactive {
     new_expression::WeakExpression u64_head();
     new_expression::WeakExpression u64_type();
     primitive::U64Data* u64();
+    new_expression::WeakKeyMap<std::string>& externals_to_names();
 
   };
 }

@@ -145,6 +145,47 @@ int main(int argc, char** argv) {
         }
       }
     });
+    auto mul_u64 = environment.declare("mul", "U64 -> U64 -> U64");
+    context.rule_collector.add_rule({
+      .pattern = {
+        .head = arena.copy(mul_u64),
+        .body = {
+          .args_captured = 2,
+          .steps = mdb::make_vector<new_expression::PatternStep>(
+            new_expression::PullArgument{},
+            new_expression::PatternMatch{
+              .substitution = arena.argument(0),
+              .expected_head = arena.copy(environment.u64_head()),
+              .args_captured = 1
+            },
+            new_expression::DataCheck{
+              .capture_index = 1,
+              .expected_type = environment.u64()->type_index
+            },
+            new_expression::PullArgument{},
+            new_expression::PatternMatch{
+              .substitution = arena.argument(2),
+              .expected_head = arena.copy(environment.u64_head()),
+              .args_captured = 1
+            },
+            new_expression::DataCheck{
+              .capture_index = 3,
+              .expected_type = environment.u64()->type_index
+            }
+          )
+        }
+      },
+      .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+        [&](std::span<new_expression::WeakExpression> inputs) {
+          return arena.apply(
+            arena.copy(environment.u64_head()),
+            environment.u64()->make_expression(
+              environment.u64()->read_data(arena.get_data(inputs[1])) * environment.u64()->read_data(arena.get_data(inputs[3]))
+            )
+          );
+        }
+      }
+    });
 
     environment.debug_parse(source);
   }

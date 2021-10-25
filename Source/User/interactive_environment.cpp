@@ -419,6 +419,9 @@ namespace interactive {
   primitive::U64Data* Environment::u64() {
     return impl->u64;
   }
+  new_expression::WeakKeyMap<std::string>& Environment::externals_to_names() {
+    return impl->externals_to_names;
+  }
 
 
 /*

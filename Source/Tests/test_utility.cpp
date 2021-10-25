@@ -1,7 +1,95 @@
 #include "test_utility.hpp"
+#include "../Utility/vector_utility.hpp"
 
-expression::interactive::Environment setup_enviroment() {
-  expression::interactive::Environment environment;
+interactive::Environment setup_enviroment() {
+  interactive::Environment environment;
+  auto& arena = environment.arena();
+  auto& context = environment.context();
+  auto add_u64 = environment.declare("add", "U64 -> U64 -> U64");
+  context.rule_collector.add_rule({
+    .pattern = {
+      .head = arena.copy(add_u64),
+      .body = {
+        .args_captured = 2,
+        .steps = mdb::make_vector<new_expression::PatternStep>(
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(environment.u64_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 1,
+            .expected_type = environment.u64()->type_index
+          },
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(2),
+            .expected_head = arena.copy(environment.u64_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 3,
+            .expected_type = environment.u64()->type_index
+          }
+        )
+      }
+    },
+    .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+      [&](std::span<new_expression::WeakExpression> inputs) {
+        return arena.apply(
+          arena.copy(environment.u64_head()),
+          environment.u64()->make_expression(
+            environment.u64()->read_data(arena.get_data(inputs[1])) + environment.u64()->read_data(arena.get_data(inputs[3]))
+          )
+        );
+      }
+    }
+  });
+  auto mul_u64 = environment.declare("mul", "U64 -> U64 -> U64");
+  context.rule_collector.add_rule({
+    .pattern = {
+      .head = arena.copy(mul_u64),
+      .body = {
+        .args_captured = 2,
+        .steps = mdb::make_vector<new_expression::PatternStep>(
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(environment.u64_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 1,
+            .expected_type = environment.u64()->type_index
+          },
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(2),
+            .expected_head = arena.copy(environment.u64_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 3,
+            .expected_type = environment.u64()->type_index
+          }
+        )
+      }
+    },
+    .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+      [&](std::span<new_expression::WeakExpression> inputs) {
+        return arena.apply(
+          arena.copy(environment.u64_head()),
+          environment.u64()->make_expression(
+            environment.u64()->read_data(arena.get_data(inputs[1])) * environment.u64()->read_data(arena.get_data(inputs[3]))
+          )
+        );
+      }
+    }
+  });
+  return environment;
+
+  /*
   auto const& u64 = environment.u64();
   auto const& str = environment.str();
   static bool init_vec = false;
@@ -123,10 +211,7 @@ expression::interactive::Environment setup_enviroment() {
         return vec(std::move(type), std::move(data));
       }
     );
-    /*
-    These lines are very odd! Must be factored out later!
-    Programmer be warned!
-    */
+
     environment.context().primitives.empty_vec = empty_vec;
     environment.context().primitives.push_vec = push_vec;
 
@@ -156,5 +241,5 @@ expression::interactive::Environment setup_enviroment() {
       }
     );
   }
-  return environment;
+  return environment;*/
 }

@@ -1,4 +1,4 @@
-# TEST BEGIN
+# this test currently fails :/
 # TEST NAME Ill-typed patterns are rejected.
 # TEST FULL_SET compile_result
 
@@ -10,5 +10,5 @@ block {
 
 # TEST DEFINITION
 
-REQUIRE(compile_result.has_result()); //no syntax errors
-REQUIRE(!compile_result.is_fully_solved());
+REQUIRE(compile_result.holds_success()); //no syntax errors
+REQUIRE(!compile_result.get_value().is_okay());

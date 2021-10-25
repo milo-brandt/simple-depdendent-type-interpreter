@@ -1,4 +1,3 @@
-# TEST BEGIN
 # TEST HEAVY
 # TEST NAME A complicated program implementing a parser and calculator is compiled and evaluated.
 # TEST SET complex_value

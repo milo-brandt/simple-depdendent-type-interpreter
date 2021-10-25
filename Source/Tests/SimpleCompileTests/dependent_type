@@ -1,4 +1,3 @@
-# TEST BEGIN
 # TEST NAME Syntax sugar for dependent types expands properly.
 # TEST SET expr
 

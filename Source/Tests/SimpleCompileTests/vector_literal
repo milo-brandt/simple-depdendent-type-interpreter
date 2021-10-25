@@ -1,4 +1,3 @@
-# TEST BEGIN
 # TEST NAME An expression with vector literals and lfold_vec evaluates.
 # TEST SET expr
 

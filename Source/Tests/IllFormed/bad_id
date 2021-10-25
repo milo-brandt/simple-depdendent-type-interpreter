@@ -6,4 +6,4 @@ this_id_is_not_real
 
 # TEST DEFINITION
 
-REQUIRE(!compile_result.has_result()); //syntax error
+REQUIRE(compile_result.holds_error()); //syntax error

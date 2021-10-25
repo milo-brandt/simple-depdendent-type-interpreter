@@ -1,0 +1,5 @@
+block {
+  declare f : U64 -> Type;
+  f U64 = 5;
+  f
+}
