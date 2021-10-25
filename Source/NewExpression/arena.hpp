@@ -88,6 +88,8 @@ namespace new_expression {
     void add_type(std::unique_ptr<DataType>&&);
     std::pair<OwnedExpression, Buffer*> allocate_data(std::uint64_t type_index);
     std::pair<std::size_t, void const*> visit_data(WeakExpression expr) const;
+    DataType* data_type_at_index(std::uint64_t type_index);
+    WeakExpression weak_expression_of_data(Data const&);
   public:
     Arena();
     Arena(Arena&&);
@@ -156,7 +158,24 @@ namespace new_expression {
         default: std::terminate();
       }
     }
-
+    template<class Callback>
+    void visit_subexpressions_of(Data const& data, Callback&& callback) {
+      data_type_at_index(data.type_index)->all_subexpressions([&callback](WeakExpression expr) {
+        callback(expr);
+        return true;
+      });
+    }
+    template<class Callback>
+    bool all_subexpressions_of(Data const& data, Callback&& callback) {
+      return data_type_at_index(data.type_index)->all_subexpressions(std::forward<Callback>(callback));
+    }
+    template<class Callback>
+    OwnedExpression modify_subexpressions_of(Data const& data, Callback&& callback) {
+      return data_type_at_index(data.type_index)->modify_subexpressions(
+        weak_expression_of_data(data),
+        std::forward<Callback>(callback)
+      );
+    }
     void clear_orphaned_expressions(); //primarily for testing.
     bool empty() const; //primarily for testing
     void debug_dump() const;

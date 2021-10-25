@@ -31,6 +31,31 @@ TEST_CASE("Arenas give equal indices to equal applications.") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("Scalar C++ types embedded in arena are sensibly handled.") {
+  Arena arena;
+  auto u64 = arena.create_data_type([](Arena& arena, std::uint64_t index) {
+    return new U64Data{arena, index};
+  });
+  auto data = arena.data(u64->index, [](Buffer* buffer){
+    new (buffer) std::uint64_t{51};
+  });
+  REQUIRE(arena.holds_data(data));
+  REQUIRE(arena.get_data(data).type_index == u64->index);
+  REQUIRE((std::uint64_t const&)arena.get_data(data).buffer == 51);
+  REQUIRE(arena.all_subexpressions_of(arena.get_data(data), [&](WeakExpression) -> bool {
+    std::terminate(); //this shouldn't be called
+  }));
+  auto data_modified = arena.modify_subexpressions_of(arena.get_data(data), [&](WeakExpression) -> OwnedExpression {
+    std::terminate(); //this shouldn't be called
+  });
+  REQUIRE(data_modified == data);
+
+  arena.drop(std::move(data));
+  arena.drop(std::move(data_modified));
+
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
 TEST_CASE("Data in arenas can be recovered by getters.") {
   Arena arena;
   auto u64 = arena.create_data_type([](Arena& arena, std::uint64_t index) {
@@ -58,7 +83,7 @@ TEST_CASE("Data in arenas can be recovered by getters.") {
     std::make_tuple("Apply", std::move(apply), &Arena::get_if_apply, &Arena::get_apply, &Arena::holds_apply, [&](Apply const& apply) { return apply.lhs == apply_lhs_weak && apply.rhs == apply_rhs_weak; }),
     std::make_tuple("Axiom", arena.axiom(), &Arena::get_if_axiom, &Arena::get_axiom, &Arena::holds_axiom,  [&](Axiom const& axiom) { return true; }),
     std::make_tuple("Declaration", arena.declaration(), &Arena::get_if_declaration, &Arena::get_declaration, &Arena::holds_declaration, [&](Declaration const& axiom) { return true; }),
-    std::make_tuple("Data", std::move(data), &Arena::get_if_data, &Arena::get_data, &Arena::holds_data, [&](Data const& data) { return data.type_index == u64->index && (std::uint64_t&)data.buffer == 34; }),
+    std::make_tuple("Data", std::move(data), &Arena::get_if_data, &Arena::get_data, &Arena::holds_data, [&](Data const& data) { return data.type_index == u64->index && (std::uint64_t const&)data.buffer == 34; }),
     std::make_tuple("Argument", arena.argument(17), &Arena::get_if_argument, &Arena::get_argument, &Arena::holds_argument, [&](Argument const& argument) { return argument.index == 17; }),
     std::make_tuple("Conglomerate", arena.conglomerate(51), &Arena::get_if_conglomerate, &Arena::get_conglomerate, &Arena::holds_conglomerate, [&](Conglomerate const& conglomerate) { return conglomerate.index == 51; })
   );

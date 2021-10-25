@@ -426,4 +426,12 @@ namespace new_expression {
       }
     }*/
   }
+  WeakExpression Arena::weak_expression_of_data(Data const& data) {
+    return WeakExpression{ //move the pointer backwards to the entry
+      ((std::byte const*)&data) - offsetof(ArenaEntry, data)
+    };
+  }
+  DataType* Arena::data_type_at_index(std::uint64_t type_index) {
+    return impl->data_types[type_index].get();
+  }
 }
