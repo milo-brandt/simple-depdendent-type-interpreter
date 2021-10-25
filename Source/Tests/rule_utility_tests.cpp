@@ -1,5 +1,3 @@
-#ifdef AWEFADGDFHGJDGHJGHJ //these tests are mostly obsolete and need to be rewritten
-
 #include "../Solver/rule_utility.hpp"
 #include "../Utility/vector_utility.hpp"
 #include "../Solver/manager.hpp" //for BasicContext
@@ -7,113 +5,74 @@
 
 using namespace solver;
 
-void destroy_pattern_expr(new_expression::Arena& arena, pattern_expr::PatternExpr& expr) {
-  expr.visit(mdb::overloaded{
-    [&](pattern_expr::Apply& apply) {
-      destroy_pattern_expr(arena, apply.lhs);
-      destroy_pattern_expr(arena, apply.rhs);
-    },
-    [&](pattern_expr::Embed& embed) {
-      arena.drop(std::move(embed.value));
-    },
-    [&](pattern_expr::Capture&) {},
-    [&](pattern_expr::Hole&) {}
-  });
-}
-void destroy_pattern_node(new_expression::Arena& arena, pattern_node::PatternNode& node) {
-  node.visit(mdb::overloaded{
-    [&](pattern_node::Apply& apply) {
-      arena.drop(std::move(apply.head));
-      for(auto& arg : apply.args) {
-        destroy_pattern_node(arena, arg);
-      }
-    },
-    [&](pattern_node::Capture&) {},
-    [&](pattern_node::Check& check) {
-      destroy_pattern_expr(arena, check.desired_equality);
-    },
-    [&](pattern_node::Ignore&) {}
-  });
-}
-void destroy_folded_pattern(new_expression::Arena& arena, FoldedPattern& pattern) {
-  arena.drop(std::move(pattern.head));
-  for(auto& match : pattern.matches) {
-    destroy_pattern_node(arena, match);
-  }
-}
-void destroy_flat_pattern(new_expression::Arena& arena, FlatPattern& pattern) {
-  destroy_from_arena(arena, pattern.head, pattern.captures, pattern.shards);
-  for(auto& check : pattern.checks) {
-    destroy_pattern_expr(arena, check.expected_value);
-  }
-}
-
 TEST_CASE("Pattern normalization works on lambda functions.") {
   new_expression::Arena arena;
   SECTION("normalize_pattern works on a direct definition of a lambda with two captures.") {
     auto head = arena.declaration();
-    auto pattern = pattern_expr::Apply {
+    auto pattern = archive(pattern_expr::Apply {
       pattern_expr::Apply {
         pattern_expr::Embed{arena.copy(head)},
         pattern_expr::Capture{0}
       },
       pattern_expr::Capture{1}
-    };
-    auto normalized = normalize_pattern(arena, std::move(pattern), 2);
+    });
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 2).output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 0);
     REQUIRE(normalized.capture_count == 2);
     REQUIRE(normalized.matches.size() == 2);
-    REQUIRE(normalized.matches[0] == pattern_node::Capture{0});
-    REQUIRE(normalized.matches[1] == pattern_node::Capture{1});
-    destroy_folded_pattern(arena, normalized);
-    destroy_from_arena(arena, head);
+    REQUIRE(normalized.matches[0].root().holds_capture());
+    REQUIRE(normalized.matches[0].root().get_capture().capture_index == 0);
+    REQUIRE(normalized.matches[1].root().holds_capture());
+    REQUIRE(normalized.matches[1].root().get_capture().capture_index == 1);
+    destroy_from_arena(arena, head, normalized);
   }
   SECTION("normalize_pattern works on a definition of a lambda with a context argument and a captures.") {
     auto head = arena.declaration();
-    auto pattern = pattern_expr::Apply {
+    auto pattern = archive(pattern_expr::Apply {
       pattern_expr::Embed{arena.apply(
         arena.copy(head),
         arena.argument(0)
       )},
       pattern_expr::Capture{0}
-    };
-    auto normalized = normalize_pattern(arena, std::move(pattern), 1);
+    });
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 1);
     REQUIRE(normalized.capture_count == 1);
     REQUIRE(normalized.matches.size() == 1);
-    REQUIRE(normalized.matches[0] == pattern_node::Capture{0});
-    destroy_folded_pattern(arena, normalized);
-    destroy_from_arena(arena, head);
+    REQUIRE(normalized.matches[0].root().holds_capture());
+    REQUIRE(normalized.matches[0].root().get_capture().capture_index == 0);
+    destroy_from_arena(arena, head, normalized);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+
 TEST_CASE("Pattern normalization destructures axioms.") {
   new_expression::Arena arena;
   {
     auto head = arena.declaration();
     auto ax = arena.axiom();
-    auto pattern = pattern_expr::Apply {
+    auto pattern = archive(pattern_expr::Apply {
       pattern_expr::Embed{arena.copy(head)},
       pattern_expr::Apply {
         pattern_expr::Embed{arena.copy(ax)},
         pattern_expr::Capture{0}
       }
-    };
-    auto normalized = normalize_pattern(arena, std::move(pattern), 1);
+    });
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 0);
     REQUIRE(normalized.capture_count == 1);
     REQUIRE(normalized.matches.size() == 1);
-    REQUIRE(normalized.matches[0].holds_apply());
-    auto& apply = normalized.matches[0].get_apply();
+    REQUIRE(normalized.matches[0].root().holds_apply());
+    auto& apply = normalized.matches[0].root().get_apply();
     REQUIRE(apply.head == ax);
     REQUIRE(apply.args.size() == 1);
-    REQUIRE(apply.args[0] == pattern_node::Capture{0});
-    destroy_folded_pattern(arena, normalized);
-    destroy_from_arena(arena, head, ax);
+    REQUIRE(apply.args[0].holds_capture());
+    REQUIRE(apply.args[0].get_capture().capture_index == 0);
+    destroy_from_arena(arena, normalized, head, ax);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -123,28 +82,33 @@ TEST_CASE("Pattern normalization does not destructure declarations.") {
   {
     auto head = arena.declaration();
     auto decl = arena.declaration();
-    auto pattern = pattern_expr::Apply {
+    auto pattern = archive(pattern_expr::Apply {
       pattern_expr::Embed{arena.copy(head)},
       pattern_expr::Apply {
         pattern_expr::Embed{arena.copy(decl)},
         pattern_expr::Capture{0}
       }
-    };
-    auto normalized = normalize_pattern(arena, std::move(pattern), 1);
+    });
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 0);
     REQUIRE(normalized.capture_count == 1);
     REQUIRE(normalized.matches.size() == 1);
-    pattern_node::PatternNode expected = pattern_node::Check{
+    /*Expect: pattern_node::Check{
       pattern_expr::Apply {
         pattern_expr::Embed{arena.copy(decl)},
         pattern_expr::Capture{0}
       }
-    };
-    REQUIRE(normalized.matches[0] == expected);
-    destroy_folded_pattern(arena, normalized);
-    destroy_pattern_node(arena, expected);
-    destroy_from_arena(arena, head, decl);
+    };*/
+    REQUIRE(normalized.matches[0].root().holds_check());
+    auto const& check = normalized.matches[0].root().get_check();
+    REQUIRE(check.desired_equality.holds_apply());
+    auto const& check_apply = check.desired_equality.get_apply();
+    REQUIRE(check_apply.lhs.holds_embed());
+    REQUIRE(check_apply.lhs.get_embed().value == decl);
+    REQUIRE(check_apply.rhs.holds_capture());
+    REQUIRE(check_apply.rhs.get_capture().capture_index == 0);
+    destroy_from_arena(arena, head, decl, normalized);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -154,7 +118,7 @@ TEST_CASE("Pattern normalization turns stray arguments into checks.") {
   {
     auto head = arena.declaration();
     auto ax = arena.axiom();
-    auto pattern = pattern_expr::Apply {
+    auto pattern = archive(pattern_expr::Apply {
       pattern_expr::Embed{arena.apply(
         arena.copy(head),
         arena.argument(0)
@@ -163,23 +127,24 @@ TEST_CASE("Pattern normalization turns stray arguments into checks.") {
         arena.copy(ax),
         arena.argument(0)
       )}
-    };
-    auto normalized = normalize_pattern(arena, std::move(pattern), 0);
+    });
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 0).output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 1);
     REQUIRE(normalized.capture_count == 0);
     REQUIRE(normalized.matches.size() == 1);
-    REQUIRE(normalized.matches[0].holds_apply());
-    auto& apply = normalized.matches[0].get_apply();
+    REQUIRE(normalized.matches[0].root().holds_apply());
+    auto& apply = normalized.matches[0].root().get_apply();
     REQUIRE(apply.head == ax);
     REQUIRE(apply.args.size() == 1);
-    pattern_node::PatternNode expected = pattern_node::Check{
+    /* Expect: pattern_node::Check{
       pattern_expr::Embed{arena.argument(0)}
-    };
-    REQUIRE(apply.args[0] == expected);
-    destroy_folded_pattern(arena, normalized);
-    destroy_pattern_node(arena, expected);
-    destroy_from_arena(arena, head, ax);
+    }; */
+    auto arg_zero = arena.argument(0);
+    REQUIRE(apply.args[0].holds_check());
+    REQUIRE(apply.args[0].get_check().desired_equality.holds_embed());
+    REQUIRE(apply.args[0].get_check().desired_equality.get_embed().value == arg_zero);
+    destroy_from_arena(arena, head, ax, arg_zero, normalized);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -192,15 +157,19 @@ TEST_CASE("Pattern flattening handles lambda patterns") {
       .head = arena.copy(head),
       .stack_arg_count = 0,
       .capture_count = 2,
-      .matches = mdb::make_vector<pattern_node::PatternNode>(
-        pattern_node::Capture{0},
-        pattern_node::Capture{1}
+      .matches = mdb::make_vector(
+        archive(pattern_node::Capture{0}),
+        archive(pattern_node::Capture{1})
       )
     };
-    auto flat = flatten_pattern(arena, std::move(pat));
+    auto flat_result = flatten_pattern(arena, std::move(pat));
+    REQUIRE(flat_result.holds_success());
+    auto& flat = flat_result.get_value().output;
     REQUIRE(flat.head == head);
     REQUIRE(flat.stack_arg_count == 0);
-    REQUIRE(flat.shards.empty());
+    REQUIRE(flat.shards.size() == 2);
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[0]));
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[1]));
     REQUIRE(flat.captures.size() == 2);
     auto arg = arena.argument(0);
     REQUIRE(flat.captures[0] == arg);
@@ -209,8 +178,7 @@ TEST_CASE("Pattern flattening handles lambda patterns") {
     REQUIRE(flat.captures[1] == arg);
     arena.drop(std::move(arg));
     REQUIRE(flat.checks.empty());
-    destroy_flat_pattern(arena, flat);
-    destroy_from_arena(arena, head);
+    destroy_from_arena(arena, head, flat);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -223,15 +191,19 @@ TEST_CASE("Pattern flattening creates implicit checks for equal captures.") {
       .head = arena.copy(head),
       .stack_arg_count = 0,
       .capture_count = 1,
-      .matches = mdb::make_vector<pattern_node::PatternNode>(
-        pattern_node::Capture{0},
-        pattern_node::Capture{0}
+      .matches = mdb::make_vector(
+        archive(pattern_node::Capture{0}),
+        archive(pattern_node::Capture{0})
       )
     };
-    auto flat = flatten_pattern(arena, std::move(pat));
+    auto flat_result = flatten_pattern(arena, std::move(pat));
+    REQUIRE(flat_result.holds_success());
+    auto& flat = flat_result.get_value().output;
     REQUIRE(flat.head == head);
     REQUIRE(flat.stack_arg_count == 0);
-    REQUIRE(flat.shards.empty());
+    REQUIRE(flat.shards.size() == 2);
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[0]));
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[1]));
     REQUIRE(flat.captures.size() == 1);
     auto arg = arena.argument(0);
     REQUIRE(flat.captures[0] == arg);
@@ -239,8 +211,7 @@ TEST_CASE("Pattern flattening creates implicit checks for equal captures.") {
     REQUIRE(flat.checks.size() == 1);
     REQUIRE(flat.checks[0].arg_index == 1);
     REQUIRE(flat.checks[0].expected_value == pattern_expr::Capture{0});
-    destroy_flat_pattern(arena, flat);
-    destroy_from_arena(arena, head);
+    destroy_from_arena(arena, head, flat);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -254,20 +225,24 @@ TEST_CASE("Pattern flattening creates checks for explicit checks.") {
       .head = arena.copy(head),
       .stack_arg_count = 0,
       .capture_count = 1,
-      .matches = mdb::make_vector<pattern_node::PatternNode>(
-        pattern_node::Check{
+      .matches = mdb::make_vector(
+        archive(pattern_node::Check{
           pattern_expr::Apply{
             pattern_expr::Embed{arena.copy(decl)},
             pattern_expr::Capture{0}
           }
-        },
-        pattern_node::Capture{0}
+        }),
+        archive(pattern_node::Capture{0})
       )
     };
-    auto flat = flatten_pattern(arena, std::move(pat));
+    auto flat_result = flatten_pattern(arena, std::move(pat));
+    REQUIRE(flat_result.holds_success());
+    auto& flat = flat_result.get_value().output;
     REQUIRE(flat.head == head);
     REQUIRE(flat.stack_arg_count == 0);
-    REQUIRE(flat.shards.empty());
+    REQUIRE(flat.shards.size() == 2);
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[0]));
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[1]));
     REQUIRE(flat.captures.size() == 1);
     auto arg = arena.argument(1);
     REQUIRE(flat.captures[0] == arg);
@@ -279,14 +254,12 @@ TEST_CASE("Pattern flattening creates checks for explicit checks.") {
       pattern_expr::Capture{0}
     };
     REQUIRE(flat.checks[0].expected_value == expected_check);
-    destroy_pattern_expr(arena, expected_check);
-    destroy_flat_pattern(arena, flat);
-    destroy_from_arena(arena, head, decl);
+    destroy_from_arena(arena, head, decl, expected_check, flat);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
-TEST_CASE("Pattern flattening creates shards for nested checks.") {
+TEST_CASE("Pattern flattening creates shards for nested destructuring.") {
   new_expression::Arena arena;
   {
     auto head = arena.declaration();
@@ -295,33 +268,42 @@ TEST_CASE("Pattern flattening creates shards for nested checks.") {
       .head = arena.copy(head),
       .stack_arg_count = 0,
       .capture_count = 2,
-      .matches = mdb::make_vector<pattern_node::PatternNode>(
-        pattern_node::Apply{
+      .matches = mdb::make_vector(
+        archive(pattern_node::Apply{
           .args = mdb::make_vector<pattern_node::PatternNode>(
             pattern_node::Capture{0}
           ),
           .head = arena.copy(ax)
-        },
-        pattern_node::Capture{1}
+        }),
+        archive(pattern_node::Capture{1})
       )
     };
-    auto flat = flatten_pattern(arena, std::move(pat));
+    auto flat_result = flatten_pattern(arena, std::move(pat));
+    REQUIRE(flat_result.holds_success());
+    auto& flat = flat_result.get_value().output;
     REQUIRE(flat.head == head);
     REQUIRE(flat.stack_arg_count == 0);
-    REQUIRE(flat.shards.size() == 1);
-    REQUIRE(flat.shards[0].matched_arg_index == 0);
-    REQUIRE(flat.shards[0].match_head == ax);
-    REQUIRE(flat.shards[0].capture_count == 1);
+    REQUIRE(flat.shards.size() == 3);
+    /*
+    Shards are: Pull, Match first arg, Pull. No other orders are allowable.
+    */
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[0]));
+    REQUIRE(std::holds_alternative<FlatPatternMatch>(flat.shards[1]));
+    auto& shard_match = std::get<FlatPatternMatch>(flat.shards[1]);
+    REQUIRE(std::holds_alternative<FlatPatternMatchArg>(shard_match.matched_expr)); //implicit matches should be represented by args
+    REQUIRE(std::get<FlatPatternMatchArg>(shard_match.matched_expr).matched_arg_index == 0);
+    REQUIRE(shard_match.match_head == ax);
+    REQUIRE(shard_match.capture_count == 1);
+    REQUIRE(std::holds_alternative<FlatPatternPullArgument>(flat.shards[2]));
     REQUIRE(flat.captures.size() == 2);
-    auto arg = arena.argument(2);
+    auto arg = arena.argument(1);
     REQUIRE(flat.captures[0] == arg);
     arena.drop(std::move(arg));
-    arg = arena.argument(1);
+    arg = arena.argument(2);
     REQUIRE(flat.captures[1] == arg);
     arena.drop(std::move(arg));
     REQUIRE(flat.checks.empty());
-    destroy_flat_pattern(arena, flat);
-    destroy_from_arena(arena, head, ax);
+    destroy_from_arena(arena, head, ax, flat);
   }
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
@@ -580,5 +562,3 @@ TEST_CASE("If f : (n : Nat) -> Family n -> Type and ax : Family zero, then f $0 
   REQUIRE(arena.empty());
 }
 */
-
-#endif
