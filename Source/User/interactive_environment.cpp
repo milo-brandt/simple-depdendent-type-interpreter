@@ -7,60 +7,11 @@
 #include "../Solver/manager.hpp"
 #include "../Primitives/primitives.hpp"
 #include "../Utility/vector_utility.hpp"
+#include "../Pipeline/pipeline.hpp"
 #include "debug_format.hpp"
 #include <sstream>
 
 namespace interactive {
-  namespace {
-    struct BaseInfo {
-      std::string_view source;
-    };
-    struct LexInfo : BaseInfo {
-      expression_parser::lex_output::archive_root::Term lexer_output;
-      expression_parser::lex_locator::archive_root::Term lexer_locator;
-    };
-    struct ReadInfo : LexInfo {
-      expression_parser::output::archive_root::Expression parser_output;
-      expression_parser::locator::archive_root::Expression parser_locator;
-    };
-    struct ResolveInfo : ReadInfo {
-      std::vector<new_expression::TypedValue> embeds;
-      expression_parser::resolved::archive_root::Expression parser_resolved;
-    };
-    struct EvaluateInfo : ResolveInfo {
-      new_expression::TypedValue result;
-      new_expression::WeakKeyMap<solver::evaluator::variable_explanation::Any> variable_explanations;
-      compiler::new_instruction::output::archive_root::Program instruction_output;
-      compiler::new_instruction::locator::archive_root::Program instruction_locator;
-      /*compiler::evaluate::EvaluateResult evaluate_result;
-      std::uint64_t rule_begin;
-      std::uint64_t rule_end;*/
-      //solver::ErrorInfo error_info;
-
-      //bool is_solved() const { return error_info.failed_equations.empty() && error_info.unconstrainable_patterns.empty(); }
-      std::optional<std::string_view> get_explicit_name(new_expression::WeakExpression primitive) const {
-        namespace explanation = solver::evaluator::variable_explanation;
-        if(!variable_explanations.contains(primitive)) return std::nullopt;
-        auto const& reason = variable_explanations.at(primitive);
-        if(auto* declared = std::get_if<explanation::Declaration>(&reason)) {
-          auto const& location = instruction_locator[declared->index];
-          if(location.source.kind == compiler::new_instruction::ExplanationKind::declare) {
-            auto const& parsed_position = parser_output[location.source.index];
-            if(auto* declare_locator = parsed_position.get_if_declare()) {
-              return declare_locator->name;
-            }
-          }
-        } else if(auto* axiom = std::get_if<explanation::Axiom>(&reason)) {
-          auto const& location = instruction_locator[axiom->index];
-          if(location.source.kind == compiler::new_instruction::ExplanationKind::axiom) {
-            auto const& parsed_position = parser_output[location.source.index];
-            if(auto* axiom_locator = parsed_position.get_if_axiom()) {
-              return axiom_locator->name;
-            }
-          }
-        }
-        return std::nullopt;
-      }
       /*std::vector<std::pair<std::string, expression::TypedValue> > get_outer_values() { //values in outermost block, if such a thing makes sense.
         if(!parser_output.root().holds_block()) return {}; //only do anything if block is outermost thing
         auto const& block = parser_output.root().get_block();
@@ -111,8 +62,7 @@ namespace interactive {
         }
         return values;
       }*/
-    };
-  }
+  using namespace pipeline::compile;
   struct Environment::Impl {
     new_expression::Arena arena;
     solver::BasicContext context;
@@ -122,7 +72,6 @@ namespace interactive {
     new_expression::WeakKeyMap<std::string> externals_to_names;
     new_expression::OwnedExpression u64_type;
     new_expression::OwnedExpression u64_head;
-    new_expression::OwnedExpression add_u64;
     primitive::U64Data* u64;
     void name_external(std::string name, new_expression::WeakExpression expr) {
       externals_to_names.set(expr, name);
@@ -131,75 +80,14 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       }));
     }
-    Impl():arena(), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), add_u64(arena.declaration()), u64(primitive::U64Data::register_on(arena)) {
+    Impl():arena(), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
       context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
       name_external("U64", u64_type);
       externals_to_names.set(u64_head, "u64"); //this is internal, not to be exposed to user
-      context.type_collector.type_of_primitive.set(add_u64, arena.apply(
-        arena.copy(context.primitives.arrow),
-        arena.copy(u64_type),
-        arena.apply(
-          arena.copy(context.primitives.constant),
-          arena.copy(context.primitives.type),
-          arena.apply(
-            arena.copy(context.primitives.arrow),
-            arena.copy(u64_type),
-            arena.apply(
-              arena.copy(context.primitives.constant),
-              arena.copy(context.primitives.type),
-              arena.copy(u64_type),
-              arena.copy(u64_type)
-            )
-          ),
-          arena.copy(u64_type)
-        )
-      ));
-      context.rule_collector.register_declaration(add_u64);
-      name_external("add_u64", add_u64);
-      context.rule_collector.add_rule({
-        .pattern = {
-          .head = arena.copy(add_u64),
-          .body = {
-            .args_captured = 2,
-            .steps = mdb::make_vector<new_expression::PatternStep>(
-              new_expression::PullArgument{},
-              new_expression::PatternMatch{
-                .substitution = arena.argument(0),
-                .expected_head = arena.copy(u64_head),
-                .args_captured = 1
-              },
-              new_expression::DataCheck{
-                .capture_index = 1,
-                .expected_type = u64->type_index
-              },
-              new_expression::PullArgument{},
-              new_expression::PatternMatch{
-                .substitution = arena.argument(2),
-                .expected_head = arena.copy(u64_head),
-                .args_captured = 1
-              },
-              new_expression::DataCheck{
-                .capture_index = 3,
-                .expected_type = u64->type_index
-              }
-            )
-          }
-        },
-        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
-          [&](std::span<new_expression::WeakExpression> inputs) {
-            return arena.apply(
-              arena.copy(u64_head),
-              u64->make_expression(
-                u64->read_data(arena.get_data(inputs[1])) + u64->read_data(arena.get_data(inputs[3]))
-              )
-            );
-          }
-        }
-      });
     }
-    mdb::Result<LexInfo, std::string> lex_code(BaseInfo input) {
+    mdb::Result<LexInfo, std::string> lex_code(SourceInfo input) {
       expression_parser::LexerInfo lexer_info {
         .symbol_map = {
           {"block", 0},
@@ -234,10 +122,10 @@ namespace interactive {
         return err.str();
       }
     }
-    mdb::Result<ReadInfo, std::string> read_code(LexInfo input) {
+    mdb::Result<ParseInfo, std::string> read_code(LexInfo input) {
       auto ret = expression_parser::parse_lexed(input.lexer_output.root());
       if(auto* success = ret.get_if_value()) {
-        return ReadInfo{
+        return ParseInfo{
           std::move(input),
           archive(std::move(success->output)),
           archive(std::move(success->locator))
@@ -249,7 +137,7 @@ namespace interactive {
         return err.str();
       }
     }
-    mdb::Result<ResolveInfo, std::string> resolve(ReadInfo input) {
+    mdb::Result<ResolveInfo, std::string> resolve(ParseInfo input) {
       std::vector<new_expression::TypedValue> embeds;
       std::unordered_map<std::string, std::uint64_t> names_to_embeds;
       auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda {
@@ -318,94 +206,12 @@ namespace interactive {
       }
     }
     EvaluateInfo evaluate(ResolveInfo input) {
-      auto primitive_printer = mdb::overloaded{
-        []<class T>(std::ostream& o, std::vector<T> const& vec) {
-          o << "[";
-          bool first = true;
-          for(auto const& v : vec) {
-            if(first) first = false;
-            else o << ", ";
-            o << v;
-          }
-          o << "]";
-        },
-        [](std::ostream& o, auto const& v) {
-          o << v;
-        }
-      };
-      //auto rule_start = expression_context.rules.size();
       auto instructions = compiler::new_instruction::make_instructions(input.parser_resolved.root());
-      std::cout << format(instructions.output, primitive_printer) << "\n";
       auto instruction_output = archive(std::move(instructions.output));
       auto instruction_locator = archive(std::move(instructions.locator));
       solver::Manager manager(context);
       new_expression::WeakKeyMap<solver::evaluator::variable_explanation::Any> variable_explanations(arena);
-      auto locate = [&](compiler::new_instruction::archive_index::PolymorphicKind index) {
-        auto parser_index = instruction_locator[index].visit([](auto const& locator) { return locator.source.index; });
-        auto lexer_span = input.parser_locator[parser_index].visit([](auto const& locator) { return locator.position; });
-        return expression_parser::position_of(expression_parser::LexerLocatorSpan{
-          lexer_span,
-          input.lexer_locator
-        });
-      };
-      std::vector<mdb::function<void(EvaluateInfo&)> > to_print;
-      auto report = [&](std::string_view text, compiler::new_instruction::archive_index::PolymorphicKind index) {
-        std::stringstream o;
-        o << "Error: " << text << "\n" << format_error(locate(index), input.source) << "\n";
-        to_print.push_back([str = o.str()](auto&) {
-          std::cout << str;
-        });
-      };
-      auto report_double = [&](std::string_view text, compiler::new_instruction::archive_index::PolymorphicKind index, compiler::new_instruction::archive_index::PolymorphicKind index2) {
-        std::stringstream o;
-        o << "Error: " << text << "\n" << format_info_pair(locate(index), locate(index2), input.source) << "\n";
-        to_print.push_back([str = o.str()](auto&) {
-          std::cout << str;
-        });
-      };
-      auto report_bad_eq_printer = [&](EvaluateInfo& info, solver::EquationErrorInfo const& err) {
-        auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
-          if(auto name = info.get_explicit_name(expr)) {
-            o << *name;
-          } else if(externals_to_names.contains(expr)) {
-            o << externals_to_names.at(expr);
-          } else if(arena.holds_declaration(expr)) {
-            o << "decl_" << expr.data();
-          } else if(arena.holds_axiom(expr)) {
-            o << "ax_" << expr.data();
-          } else {
-            o << "???";
-          }
-        };
-        auto format_expr = [&](new_expression::WeakExpression expr) {
-          return user::raw_format(arena, expr, namer);
-        };
-        auto print_stack = [&](stack::Stack const& stack) {
-          auto assumptions = stack.list_assumptions();
-          for(auto const& assumption : assumptions.assumptions) {
-            std::cout << "Given " << format_expr(assumption.representative);
-            for(auto const& term : assumption.terms) {
-              std::cout << " = " << format_expr(term);
-            }
-            std::cout << "\n";
-          }
-          destroy_from_arena(arena, assumptions);
-        };
-        auto print_eq = [&](solver::Equation const& eq, bool fail) {
-          if(fail) std::cout << "Failed:\n";
-          else std::cout << "Stalled:\n";
-          std::cout << format_expr(eq.lhs) << " =?= " << format_expr(eq.rhs) << "\n";
-          print_stack(eq.stack);
-        };
-        print_eq(err.primary, err.primary_failed);
-        for(auto const& eq : err.failures) print_eq(eq, true);
-        for(auto const& eq : err.stalls) print_eq(eq, false);
-      };
-      auto report_eq = [&](solver::EquationErrorInfo& err) {
-        to_print.push_back([&, err = std::move(err)](EvaluateInfo& info) {
-          report_bad_eq_printer(info, err);
-        });
-      };
+      std::vector<solver::evaluator::error::Any> evaluation_errors;
       auto interface = manager.get_evaluator_interface({
         .explain_variable = [&](new_expression::WeakExpression primitive, solver::evaluator::variable_explanation::Any explanation) {
           variable_explanations.set(primitive, explanation);
@@ -414,24 +220,7 @@ namespace interactive {
           return copy_on_arena(arena, input.embeds[embed_index]);
         },
         .report_error = [&](solver::evaluator::error::Any error) {
-          using namespace solver::evaluator::error;
-          std::visit(mdb::overloaded{
-            [&](NotAFunction& err) { report("Not a function.", err.apply); report_eq(err.equation); },
-            [&](MismatchedArgType& err) { report("Mismatched arg type.", err.apply); report_eq(err.equation); },
-            [&](BadTypeFamilyType& err) { report("Bad type family type.", err.type_family); report_eq(err.equation); },
-            [&](BadHoleType& err) { report("Bad hole type.", err.hole); report_eq(err.equation); },
-            [&](BadDeclarationType& err) { report("Bad declaration type.", err.declaration); report_eq(err.equation); },
-            [&](BadAxiomType& err) { report("Bad axiom type.", err.axiom); report_eq(err.equation); },
-            [&](BadLetType& err) { report("Bad let type.", err.let); report_eq(err.equation); },
-            [&](MismatchedLetType& err) { report("Mismatched let type.", err.let); report_eq(err.equation); },
-            [&](MissingCaptureInSubclause& err) { report("Missing capture in subclause.", err.subclause); },
-            [&](MissingCaptureInRule& err) { report("Missing capture in pattern.", err.rule);  },
-            [&](BadApplicationInPattern& err) { report("Bad application in pattern.", err.rule); },
-            [&](BadApplicationInSubclause& err) { report("Bad application in subclause.", err.subclause); },
-            [&](InvalidDoubleCapture& err) { report_double("Bad double capture.", err.primary_capture, err.secondary_capture); report_eq(err.equation); },
-            [&](InvalidNondestructurablePattern& err) { report("Bad non-destructible match.", err.pattern_part); report_eq(err.equation); },
-            [&](MismatchedReplacementType& err) { report("Mismatched replacement type.", err.rule); report_eq(err.equation); }
-          }, error);
+          evaluation_errors.push_back(std::move(error));
         }
       });
       auto eval_result = solver::evaluator::evaluate(instruction_output.root().get_program_root(), std::move(interface));
@@ -443,19 +232,46 @@ namespace interactive {
         std::move(eval_result),
         std::move(variable_explanations),
         std::move(instruction_output),
-        std::move(instruction_locator)
+        std::move(instruction_locator),
+        std::move(evaluation_errors)
       };
-      for(auto& er : to_print) {
-        er(ret);
-      }
       return std::move(ret);
     }
     mdb::Result<EvaluateInfo, std::string> full_compile(std::string_view str) {
       return map(bind(
-        lex_code({str}),
+        lex_code({arena, str}),
         [this](auto last) { return read_code(std::move(last)); },
         [this](auto last) { return resolve(std::move(last)); }
       ), [this](auto last) { return evaluate(std::move(last)); });
+    }
+    new_expression::OwnedExpression parse_as_type(std::string_view str) {
+      auto result = full_compile(str);
+      if(result.holds_error()) {
+        std::cerr << result.get_error() << "\n";
+        std::terminate();
+      }
+      auto& value = result.get_value();
+      if(!value.is_okay()) {
+        value.report_errors_to(std::cerr, externals_to_names);
+        std::terminate();
+      }
+      new_expression::EvaluationContext ctx{arena, context.rule_collector};
+      value.result.type = ctx.reduce(std::move(value.result.type));
+      if(value.result.type != context.primitives.type) {
+        std::cerr << "Type of declaration type is not type!\n";
+        std::terminate();
+      }
+      auto ret = arena.copy(value.result.value);
+      destroy_from_arena(arena, value);
+      return ret;
+    }
+    new_expression::OwnedExpression declare_of_type(std::string var_name, std::string_view str, bool axiom) {
+      auto type = parse_as_type(str);
+      auto ret = axiom ? arena.axiom() : arena.declaration();
+      if(!axiom) context.rule_collector.register_declaration(ret);
+      context.type_collector.type_of_primitive.set(ret, std::move(type));
+      name_external(std::move(var_name), ret);
+      return ret;
     }
     /*auto fancy_format(EvaluateInfo const& eval_info) {
       return expression::format::FormatContext{
@@ -578,7 +394,34 @@ namespace interactive {
   }*/
   void Environment::debug_parse(std::string_view str, std::ostream& output) {
     return impl->debug_parse(str, output);
-  }/*
+  }
+  mdb::Result<pipeline::compile::EvaluateInfo, std::string> Environment::full_compile(std::string_view str) {
+    return impl->full_compile(str);
+  }
+  new_expression::OwnedExpression Environment::declare(std::string name, std::string_view str) {
+    return impl->declare_of_type(std::move(name), str, false);
+  }
+  new_expression::OwnedExpression Environment::axiom(std::string name, std::string_view str) {
+    return impl->declare_of_type(std::move(name), str, true);
+  }
+  new_expression::Arena& Environment::arena() {
+    return impl->arena;
+  }
+  solver::BasicContext& Environment::context() {
+    return impl->context;
+  }
+  new_expression::WeakExpression Environment::u64_head() {
+    return impl->u64_head;
+  }
+  new_expression::WeakExpression Environment::u64_type() {
+    return impl->u64_type;
+  }
+  primitive::U64Data* Environment::u64() {
+    return impl->u64;
+  }
+
+
+/*
   ParseResult Environment::parse(std::string_view str) {
     return impl->parse(str);
   }
@@ -780,8 +623,9 @@ namespace interactive {
   void Environment::Impl::debug_parse(std::string_view expr, std::ostream& output)  {
     auto result = full_compile(expr);
     if(auto* value = result.get_if_value()) {
+      value->report_errors_to(output, externals_to_names);
       auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
-        if(auto name = value->get_explicit_name(expr)) {
+        if(auto name = value->get_explicit_name_of(expr)) {
           o << *name;
         } else if(externals_to_names.contains(expr)) {
           o << externals_to_names.at(expr);
