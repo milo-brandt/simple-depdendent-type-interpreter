@@ -1,0 +1,27 @@
+# TEST BEGIN
+# TEST NAME A pattern defined with a subclause is accepted and computes.
+# TEST SET expr
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare v : U64;
+  v
+    where yes = no
+  = 0;
+  v
+    where no = no
+  = 1;
+
+  v
+}
+
+# TEST SET simple
+
+1
+
+# TEST DEFINITION
+
+REQUIRE(expr == simple);

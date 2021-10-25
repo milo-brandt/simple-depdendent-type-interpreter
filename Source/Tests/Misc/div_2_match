@@ -1,4 +1,10 @@
+# TEST BEGIN
+# TEST NAME A match arm relying on the judgemental equality the match computes.
+# TEST SET expr
+
 block {
+  axiom Pair : (T : Type) -> Type;
+  axiom pair : (T : Type) -> T -> T -> Pair T;
   axiom Nat : Type;
   axiom zero : Nat;
   axiom succ : Nat -> Nat;
@@ -28,6 +34,14 @@ block {
     no -> n;
   };
 
-  div_2_if_possible (succ \\ succ \\ succ \\ succ zero)
-
+  pair _
+    (div_2_if_possible (succ \\ succ \\ succ \\ succ zero))
+    (succ \\ succ zero)
 }
+
+
+# TEST DEFINITION
+
+auto unfolded = unfold(environment.arena(), expr.value);
+REQUIRE(unfolded.args.size() == 3);
+REQUIRE(unfolded.args[1] == unfolded.args[2]);

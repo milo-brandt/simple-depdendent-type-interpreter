@@ -1,4 +1,11 @@
+# TEST BEGIN
+# TEST NAME A rule relying on the judgemental equality of a subclause computes.
+# TEST SET expr
+
 block {
+  axiom Pair : (T : Type) -> Type;
+  axiom pair : (T : Type) -> T -> T -> Pair T;
+
   axiom Bool : Type;
   axiom yes : Bool;
   axiom no : Bool;
@@ -19,10 +26,13 @@ block {
     where f yes = yes
   = none _;
 
-  let id = \b:Bool.b;
-  declare not : Bool -> Bool;
-  not yes = no;
-  not no = yes;
-
-  weird (\.no) no_fam
+  pair _
+    (weird (\.no) no_fam)
+    (some _ no_fam)
 }
+
+# TEST DEFINITION
+
+auto unfolded = unfold(environment.arena(), expr.value);
+REQUIRE(unfolded.args.size() == 3);
+REQUIRE(unfolded.args[1] == unfolded.args[2]);

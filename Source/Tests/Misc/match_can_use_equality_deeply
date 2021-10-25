@@ -1,0 +1,43 @@
+# TEST BEGIN
+# TEST NAME A rule relying on the judgemental equality of a match computes, even where the rule must be applied multiple times.
+# TEST SET expr
+
+block {
+  axiom Pair : (T : Type) -> Type;
+  axiom pair : (T : Type) -> T -> T -> Pair T;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Maybe : Type -> Type;
+  axiom some : (T : Type) -> T -> Maybe T;
+  axiom none : (T : Type) -> Maybe T;
+
+  axiom Fam : Bool -> Type;
+  axiom yes_fam : Fam yes;
+  axiom no_fam : Fam no;
+
+  declare weird : (f : Bool -> Bool) -> Fam (f (f yes)) -> Maybe (Fam yes);
+  weird f x = match(f yes) {
+    yes -> some _ x;
+    no -> match(f no) {
+      yes -> some _ x;
+      no -> none _;
+    };
+  };
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  pair _
+    (weird not yes_fam)
+    (some _ yes_fam)
+}
+
+# TEST DEFINITION
+
+auto unfolded = unfold(environment.arena(), expr.value);
+REQUIRE(unfolded.args.size() == 3);
+REQUIRE(unfolded.args[1] == unfolded.args[2]);

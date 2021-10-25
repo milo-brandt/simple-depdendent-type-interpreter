@@ -2,6 +2,7 @@
 #define TEST_UTILITY_HPP
 
 #include "../User/interactive_environment.hpp"
+#include "../NewExpression/arena_utility.hpp"
 
 interactive::Environment setup_enviroment();
 

@@ -1,0 +1,30 @@
+# TEST BEGIN
+# TEST NAME Matching against identity types provides the required judgemental equalities.
+# TEST SET expr
+
+block {
+  axiom Pair : (T : Type) -> Type;
+  axiom pair : (T : Type) -> T -> T -> Pair T;
+
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  declare symmetry : (T : Type) -> (x : T) -> (y : T) -> Id T x y -> Id T y x;
+  symmetry _ _ _ (refl _ x) = refl _ x;
+  declare transitivity : (T : Type) -> (x : T) -> (y : T) -> (z : T) -> Id T x y -> Id T y z -> Id T x z;
+  transitivity _ _ _ _ (refl _ x) (refl _ x) = refl _ x;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  pair _
+    (transitivity _ _ _ _ (refl _ zero) (symmetry _ _ _ (refl _ zero)))
+    (refl _ zero)
+}
+
+# TEST DEFINITION
+
+auto unfolded = unfold(environment.arena(), expr.value);
+REQUIRE(unfolded.args.size() == 3);
+REQUIRE(unfolded.args[1] == unfolded.args[2]);

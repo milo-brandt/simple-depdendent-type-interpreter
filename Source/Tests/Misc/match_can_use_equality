@@ -1,0 +1,36 @@
+# TEST BEGIN
+# TEST NAME A rule relying on the judgemental equality of a match arm computes.
+# TEST SET expr
+
+block {
+  axiom Pair : (T : Type) -> Type;
+  axiom pair : (T : Type) -> T -> T -> Pair T;
+
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Maybe : Type -> Type;
+  axiom some : (T : Type) -> T -> Maybe T;
+  axiom none : (T : Type) -> Maybe T;
+
+  axiom Fam : Bool -> Type;
+  axiom yes_fam : Fam yes;
+  axiom no_fam : Fam no;
+
+  declare weird : (f : Bool -> Bool) -> Fam (f yes) -> Maybe (Fam no);
+  weird f x = match(f yes) {
+    no -> some _ x;
+    yes -> none _;
+  };
+
+  pair _
+    (weird (\.no) no_fam)
+    (some _ no_fam)
+}
+
+# TEST DEFINITION
+
+auto unfolded = unfold(environment.arena(), expr.value);
+REQUIRE(unfolded.args.size() == 3);
+REQUIRE(unfolded.args[1] == unfolded.args[2]);

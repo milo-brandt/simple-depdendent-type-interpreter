@@ -1,0 +1,21 @@
+# TEST BEGIN
+# TEST NAME A dependent pattern involving a declaration-headed subexpression compiles and runs.
+# TEST SET expr
+
+block {
+  axiom Square : U64 -> Type;
+  axiom square : (n : U64) -> Square (mul n n);
+
+  declare sqrt : (n : U64) -> Square n -> U64;
+  sqrt (mul n n) (square n) = n;
+
+  sqrt _ (square 51)
+}
+
+# TEST SET simple
+
+51
+
+# TEST DEFINITION
+
+REQUIRE(expr == simple);

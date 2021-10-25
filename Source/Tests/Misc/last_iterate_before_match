@@ -1,0 +1,43 @@
+# TEST BEGIN
+# TEST NAME A complex definition returning the last iterate before hitting zero using a match statement.
+# TEST SET expr
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare nat_to_u64 : Nat -> U64;
+  nat_to_u64 zero = 0;
+  nat_to_u64 (succ n) = add 1 (nat_to_u64 n);
+
+  declare last_nonzero_iterate : Nat -> (Nat -> Nat) -> Nat -> Nat;
+  last_nonzero_iterate zero f base = zero; # return zero as a placeholder for failure
+  last_nonzero_iterate (succ max_steps) f base = block {
+    match(f base) {
+      zero -> base;
+      succ _ -> last_nonzero_iterate max_steps f (f base);
+    }
+  };
+
+  declare pred_twice : Nat -> Nat;
+  pred_twice zero = zero;
+  pred_twice (succ zero) = zero;
+  pred_twice (succ (succ n)) = n;
+
+  let big = succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ zero;
+
+  nat_to_u64 \\ last_nonzero_iterate big pred_twice (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero)
+}
+
+
+# TEST SET expect
+
+2
+
+# TEST DEFINITION
+
+REQUIRE(expr == expect);

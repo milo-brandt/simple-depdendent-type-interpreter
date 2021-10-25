@@ -1,0 +1,28 @@
+# TEST BEGIN
+# TEST NAME A pattern involving a declaration with output that is sometimes a function (matched on a bool) compiles and runs.
+# TEST SET expr
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare if : (T : Type) -> Bool -> T -> T -> T;
+  if _ yes yes_branch _ = yes_branch;
+  if _ no _ no_branch = no_branch;
+
+  declare weird : (b : Bool) -> (if _ b (Bool -> U64) U64);
+  weird yes yes = 1;
+  weird yes no = 2;
+  weird no = 3;
+
+  weird yes no
+}
+
+# TEST SET expect
+
+2
+
+# TEST DEFINITION
+
+REQUIRE(expr == expect);

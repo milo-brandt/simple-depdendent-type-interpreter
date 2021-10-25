@@ -1,3 +1,5 @@
+Add test to ensure that axioms can't be defined by rules
+
 Need to ensure that indeterminates are not defined from contexts with more assumptions.
 Need to re-add support for U64s, Strings, Vectors.
 * For Data: Should add a way to internally destructure pairs of things (for assumptions)
