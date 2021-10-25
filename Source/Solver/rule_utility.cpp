@@ -3,6 +3,65 @@
 #include "../Utility/vector_utility.hpp"
 
 namespace solver {
+  namespace pattern_expr {
+    void destroy_from_arena(new_expression::Arena& arena, PatternExpr& expr) {
+      expr.visit(mdb::overloaded{
+        [&](Apply& apply) {
+          destroy_from_arena(arena, apply.lhs);
+          destroy_from_arena(arena, apply.rhs);
+        },
+        [&](Embed& embed) {
+          arena.drop(std::move(embed.value));
+        },
+        [&](Capture&) {},
+        [&](Hole&) {}
+      });
+    }
+  }
+  namespace pattern_expr::archive_root {
+    void destroy_from_arena(new_expression::Arena& arena, PatternExpr& expr_root) {
+      struct Detail {
+        new_expression::Arena& arena;
+        void destroy(pattern_expr::archive_part::PatternExpr& expr) {
+          expr.visit(mdb::overloaded{
+            [&](pattern_expr::archive_part::Apply& apply) {
+              destroy(apply.lhs);
+              destroy(apply.rhs);
+            },
+            [&](pattern_expr::archive_part::Embed& embed) {
+              arena.drop(std::move(embed.value));
+            },
+            [&](pattern_expr::archive_part::Capture&) {},
+            [&](pattern_expr::archive_part::Hole&) {}
+          });
+        }
+      };
+      Detail{arena}.destroy(expr_root.root());
+    }
+  }
+  namespace pattern_node::archive_root {
+    void destroy_from_arena(new_expression::Arena& arena, PatternNode& node_root) {
+      struct Detail {
+        new_expression::Arena& arena;
+        void destroy(pattern_node::archive_part::PatternNode& node) {
+          node.visit(mdb::overloaded{
+            [&](pattern_node::archive_part::Apply& apply) {
+              arena.drop(std::move(apply.head));
+              for(auto& arg : apply.args) {
+                destroy(arg);
+              }
+            },
+            [&](pattern_node::archive_part::Capture&) {},
+            [&](pattern_node::archive_part::Check& check) {
+              destroy_from_arena(arena, check.desired_equality);
+            },
+            [&](pattern_node::archive_part::Ignore&) {}
+          });
+        }
+      };
+      Detail{arena}.destroy(node_root.root());
+    }
+  }
   namespace instruction_archive = compiler::new_instruction::output::archive_part;
   pattern_located_resolution::PatternExpr resolve_pattern_impl(compiler::new_instruction::output::archive_part::Pattern const& pattern, PatternResolveInterface const& interface) {
     return pattern.visit(mdb::overloaded{

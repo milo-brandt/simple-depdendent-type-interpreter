@@ -22,13 +22,24 @@ namespace solver {
       f $0 $1
 
   */
+  namespace pattern_expr {
+    void destroy_from_arena(new_expression::Arena&, PatternExpr&);
+  }
+  namespace pattern_expr::archive_root {
+    void destroy_from_arena(new_expression::Arena&, PatternExpr&);
+  }
+  namespace pattern_node::archive_root {
+    void destroy_from_arena(new_expression::Arena&, PatternNode&);
+  }
   struct RawPatternShard {
     std::vector<std::uint64_t> used_captures;
     pattern_expr::archive_root::PatternExpr pattern;
+    static constexpr auto part_info = mdb::parts::simple<2>;
   };
   struct RawPattern {
     pattern_expr::archive_root::PatternExpr primary_pattern;
     std::vector<RawPatternShard> subpatterns;
+    static constexpr auto part_info = mdb::parts::simple<2>;
   };
   struct FoldedPatternBacktrace {
     std::vector<pattern_normalization_locator::archive_root::PatternNode> matches;
@@ -37,6 +48,7 @@ namespace solver {
   struct FoldedSubclause {
     std::vector<std::uint64_t> used_captures;
     pattern_node::archive_root::PatternNode node; //must be an apply node
+    static constexpr auto part_info = mdb::parts::simple<2>;
   };
   struct FoldedPattern {
     new_expression::OwnedExpression head;
@@ -44,6 +56,7 @@ namespace solver {
     std::size_t capture_count;
     std::vector<pattern_node::archive_root::PatternNode> matches;
     std::vector<FoldedSubclause> subclause_matches;
+    static constexpr auto part_info = mdb::parts::simple<5>;
     //represents pattern head arg_0 arg_1 ... arg_n matches[0] ... matches[m-1]
   };
   struct FlatSubclauseMissingCapture {
@@ -57,6 +70,7 @@ namespace solver {
   struct FlatPatternMatchSubexpression {
     std::vector<new_expression::OwnedExpression> requested_captures;
     std::size_t matched_subexpression;
+    static constexpr auto part_info = mdb::parts::simple<2>;
   };
   using FlatPatternMatchExpr = std::variant<FlatPatternMatchArg, FlatPatternMatchSubexpression>;
   struct FlatPatternMatch {
