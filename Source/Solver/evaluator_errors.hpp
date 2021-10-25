@@ -69,6 +69,26 @@ namespace solver::evaluator::error {
     archive_index::Rule rule;
     EquationErrorInfo equation;
   };
+  struct BadRequirementType {
+    archive_index::Check check;
+    EquationErrorInfo equation;
+  };
+  struct FailedRequirement {
+    bool allow_deduction;
+    archive_index::Check check;
+    EquationErrorInfo equation;
+  };
+  struct FailedTypeRequirement {
+    bool allow_deduction;
+    archive_index::Check check;
+    EquationErrorInfo equation;
+  };
+  struct MismatchedRequirementRHSType {
+    //reported for instances of "require x : T = y" where y doesn't have type T
+    bool allow_deduction;
+    archive_index::Check check;
+    EquationErrorInfo equation;
+  };
   using Any = std::variant<
     NotAFunction,
     MismatchedArgType,
@@ -84,7 +104,11 @@ namespace solver::evaluator::error {
     BadApplicationInSubclause,
     InvalidDoubleCapture,
     InvalidNondestructurablePattern,
-    MismatchedReplacementType
+    MismatchedReplacementType,
+    MismatchedRequirementRHSType,
+    BadRequirementType,
+    FailedRequirement,
+    FailedTypeRequirement
   >;
 }
 

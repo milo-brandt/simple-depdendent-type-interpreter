@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Require rejects false type equations in compound requirements with incorrect RHS type.
+# TEST FULL_SET compile_result
+
+block {
+  require U64 : Type = 1;
+  0
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

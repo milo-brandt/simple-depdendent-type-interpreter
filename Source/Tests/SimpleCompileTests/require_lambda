@@ -1,0 +1,8 @@
+# TEST BEGIN
+# TEST NAME Require can correctly see that two similar lambdas are equal.
+# TEST MUST_COMPILE
+
+block {
+  require \x:Type.2 = \y:Type.2;
+  3
+}

@@ -474,6 +474,141 @@ namespace solver::evaluator {
             }
           });
         },
+        [&](instruction_archive::Check const& check) {
+          auto& solver = check.allow_deduction ? interface.solve : interface.solve_no_deduce;
+          auto term = evaluate(check.term, local_context);
+          std::optional<OwnedExpression> expected_type;
+          if(check.expected_type) {
+            expected_type = cast(
+              evaluate(*check.expected_type, local_context),
+              interface.arena.copy(interface.type),
+              local_context,
+              variable_explanation::RequirementTypeCast{check.index()},
+              error_listener<error::BadRequirementType>(check.index())
+            );
+          }
+          std::optional<TypedValue> expected;
+          if(check.expected) {
+            expected = evaluate(*check.expected, local_context);
+          }
+          /*
+            At this point, expected_type and expected just contain their literal values.
+
+            We wish to separate this into (optional) checks expected_type and expected_value
+            to appropriately model the situation.
+
+            Consumes every reference into the equations.
+          */
+          std::optional<solver::Equation> rhs_type_equation;
+          std::optional<solver::Equation> type_equation;
+          std::optional<solver::Equation> value_equation;
+          if(expected) {
+            if(expected_type) {
+              rhs_type_equation = solver::Equation{
+                .lhs = std::move(expected->type),
+                .rhs = interface.arena.copy(*expected_type),
+                .stack = local_context
+              };
+              type_equation = solver::Equation{
+                .lhs = std::move(term.type),
+                .rhs = std::move(*expected_type),
+                .stack = local_context
+              };
+              value_equation = solver::Equation{
+                .lhs = std::move(term.value),
+                .rhs = std::move(expected->value),
+                .stack = local_context
+              };
+            } else {
+              type_equation = solver::Equation{
+                .lhs = std::move(term.type),
+                .rhs = std::move(expected->type),
+                .stack = local_context
+              };
+              value_equation = solver::Equation{
+                .lhs = std::move(term.value),
+                .rhs = std::move(expected->value),
+                .stack = local_context
+              };
+            }
+          } else {
+            if(expected_type) {
+              type_equation = solver::Equation{
+                .lhs = std::move(term.type),
+                .rhs = std::move(*expected_type),
+                .stack = local_context
+              };
+            } else {
+              //nothing to check, I guess
+              destroy_from_arena(interface.arena, term);
+              return;
+            }
+          }
+          //type_equation must be set. rhs_type_equation might be set. value_equation might be set.
+          struct SharedState {
+            mdb::Promise<bool> finished;
+            std::uint8_t remaining;
+            SharedState(mdb::Promise<bool> finished, bool rhs_equation):finished(std::move(finished)), remaining(rhs_equation ? 2 : 1) {}
+            void mark_solved() {
+              if(--remaining == 0) {
+                finished.set_value(true);
+              }
+            }
+            ~SharedState() {
+              if(remaining > 0) {
+                finished.set_value(false);
+              }
+            }
+          };
+          auto [type_promise, type_future] = mdb::create_promise_future_pair<bool>();
+          {
+            auto shared = std::make_shared<SharedState>(std::move(type_promise), rhs_type_equation.has_value());
+            solver(std::move(*type_equation)).listen([this, shared, &check](EquationResult result) {
+              if(std::holds_alternative<EquationSolved>(result)) {
+                shared->mark_solved();
+              } else {
+                call_on_error(std::move(result), [this, &check](EquationErrorInfo error_info) {
+                  interface.report_error(error::FailedTypeRequirement{
+                    .allow_deduction = check.allow_deduction,
+                    .check = check.index(),
+                    .equation = std::move(error_info)
+                  });
+                });
+              }
+            });
+            if(rhs_type_equation) {
+              solver(std::move(*rhs_type_equation)).listen([this, shared, &check](EquationResult result) {
+                if(std::holds_alternative<EquationSolved>(result)) {
+                  shared->mark_solved();
+                } else {
+                  call_on_error(std::move(result), [this, &check](EquationErrorInfo error_info) {
+                    interface.report_error(error::MismatchedRequirementRHSType {
+                      .allow_deduction = check.allow_deduction,
+                      .check = check.index(),
+                      .equation = std::move(error_info)
+                    });
+                  });
+                }
+              });
+            }
+          }
+          if(value_equation) {
+            std::move(type_future).listen([this, &check, &solver, value_equation = std::move(*value_equation)](bool okay) mutable {
+              if(!okay) return;
+              solver(std::move(value_equation)).listen([this, &solver, &check](EquationResult result) {
+                if(!std::holds_alternative<EquationSolved>(result)) {
+                  call_on_error(std::move(result), [this, &check](EquationErrorInfo error_info) {
+                    interface.report_error(error::FailedRequirement{
+                      .allow_deduction = check.allow_deduction,
+                      .check = check.index(),
+                      .equation = std::move(error_info)
+                    });
+                  });
+                }
+              });
+            });
+          }
+        },
         [&](instruction_archive::Let const& let) {
           if(let.type) {
             auto value = evaluate(let.value, local_context);

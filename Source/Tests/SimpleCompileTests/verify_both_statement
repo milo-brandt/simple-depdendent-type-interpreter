@@ -1,0 +1,8 @@
+# TEST BEGIN
+# TEST NAME A trivial type and value verify statement does not hold up compilation.
+# TEST MUST_COMPILE
+
+block {
+  verify 2 : U64 = 2;
+  3
+}

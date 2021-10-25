@@ -44,6 +44,11 @@ shape = CompoundShape({
             ("value", "Expression"),
             ("type", optional("Expression"))
         ],
+        "Check": [
+            ("term", "Expression"),
+            ("expected", optional("Expression")),
+            ("expected_type", optional("Expression"))
+        ],
         "Rule": [
             ("primary_pattern", "Pattern"),
             ("submatches", vector("SubmatchGeneric")),
@@ -96,6 +101,9 @@ output = shape.generate_instance(namespace = "compiler::new_instruction::output"
         "Declare": [],
         "Axiom": [],
         "Let": [],
+        "Check": [
+            ("allow_deduction", "bool")
+        ],
         "Rule": [
             ("capture_count", "std::uint64_t")
         ]
@@ -127,6 +135,7 @@ locator = shape.generate_instance(namespace = "compiler::new_instruction::locato
         "Declare": [("source", "Explanation")],
         "Axiom": [("source", "Explanation")],
         "Let": [("source", "Explanation")],
+        "Check": [("source", "Explanation")],
         "Rule": [("source", "Explanation")]
     },
     "Program": {

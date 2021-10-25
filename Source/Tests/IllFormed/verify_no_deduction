@@ -1,0 +1,14 @@
+# TEST BEGIN
+# TEST NAME Verify does not define holes.
+# TEST FULL_SET compile_result
+
+block {
+  let x : U64 = _;
+  verify x = 5;
+  x
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

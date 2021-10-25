@@ -1,12 +1,10 @@
+# TEST BEGIN
 # TEST NAME Syntax sugar for arrow types expands properly.
-# TEST SET expr
+# TEST MUST_COMPILE
 
-Type -> Type
+block {
+  let test = Type -> Type;
+  verify test = arrow Type \.Type;
 
-# TEST SET expanded
-
-arrow Type \.Type
-
-# TEST DEFINITION
-
-REQUIRE(environment.deep_compare(expr, expanded));
+  test
+}

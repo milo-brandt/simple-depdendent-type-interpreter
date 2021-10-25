@@ -1,12 +1,9 @@
+# TEST BEGIN
 # TEST NAME Syntax sugar for dependent types expands properly.
-# TEST SET expr
+# TEST MUST_COMPILE
 
-(T : Type) -> T
-
-# TEST SET expanded
-
-arrow Type \T:Type.T
-
-# TEST DEFINITION
-
-REQUIRE(environment.deep_compare(expr, expanded));
+block {
+  let test = (T : Type) -> T;
+  verify test = arrow Type \T:Type.T;
+  test
+}

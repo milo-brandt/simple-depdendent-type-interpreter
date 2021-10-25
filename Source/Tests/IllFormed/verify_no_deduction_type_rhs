@@ -1,0 +1,17 @@
+# TEST BEGIN
+# TEST NAME Verify does not define holes in type equations applied to RHS.
+# TEST FULL_SET compile_result
+
+block {
+  let x : U64 = _;
+  axiom Fam : U64 -> Type;
+  axiom fam : (x : U64) -> Fam x;
+
+  verify fam 5 : Fam 5 = fam x;
+  x
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

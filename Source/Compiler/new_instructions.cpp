@@ -338,6 +338,27 @@ namespace compiler::new_instruction {
             .source = {ExplanationKind::declare, declare.index()}
           });
         },
+        [&](resolved_archive::Check const& check) {
+          commands.push_back(located_output::Check{
+            .term = compile(check.term),
+            .expected = [&]() -> std::optional<located_output::Expression> {
+              if(check.expected) {
+                return compile(*check.expected);
+              } else {
+                return std::nullopt;
+              }
+            }(),
+            .expected_type = [&]() -> std::optional<located_output::Expression> {
+              if(check.expected_type) {
+                return compile(*check.expected_type);
+              } else {
+                return std::nullopt;
+              }
+            }(),
+            .allow_deduction = check.allow_deduction,
+            .source = {ExplanationKind::check, check.index()}
+          });
+        },
         [&](resolved_archive::Rule const& rule) {
           struct Detail {
             InstructionContext& me;

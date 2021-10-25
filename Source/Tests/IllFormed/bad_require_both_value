@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Require rejects false equations in compound requirements.
+# TEST FULL_SET compile_result
+
+block {
+  require 1 : U64 = 2;
+  0
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

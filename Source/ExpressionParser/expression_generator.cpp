@@ -570,11 +570,82 @@ namespace expression_parser {
         .position = locator.to_span(span)
       }};
     }
+    CommandResult parse_require_or_verify(LocatorInfo const& locator, LexerSpan& span, bool is_require) { //pointed *at* "require"/"verify"
+      auto statement_begin = span.begin();
+      ++span.span_begin;
+      if(span.empty()) {
+        return ParseError{
+          .position = statement_begin->index(),
+          .message = "Expected expression after 'require' or 'verify'."
+        };
+      }
+      LexerIt expected_begin = find_if(span.begin(), span.end(), [](lex_archive::Term const& term) {
+        return term.holds_symbol() && term.get_symbol().symbol_index == symbols::equals;
+      });
+      LexerIt expected_type_begin = statement_begin;
+      std::size_t lambda_def_depth = 0; //to ensure that "verify \x:Type.x : Type -> Type; is okay". Number of ways in which we are between a backslash and a period.
+      for(;expected_type_begin != expected_begin; ++expected_type_begin) {
+        if(auto* sym = expected_type_begin->get_if_symbol()) {
+          if(sym->symbol_index == symbols::backslash) {
+            ++lambda_def_depth;
+          } else if(sym->symbol_index == symbols::dot) {
+            if(lambda_def_depth > 0) {
+              --lambda_def_depth;
+            } else {
+              return ParseError{
+                .position = expected_type_begin->index(),
+                .message = "Unexpected '.' in expression, not matched by opening lambda."
+              };
+            }
+          } else if(sym->symbol_index == symbols::colon && lambda_def_depth == 0) {
+            break;
+          }
+        }
+      }
+      LexerSpan expr_span{span.begin(), expected_type_begin};
+      auto expr = parse_expression(locator, expr_span);
+      if(expr.holds_error()) return std::move(expr.get_error());
+      std::optional<located_output::Expression> expected_type;
+      std::optional<located_output::Expression> expected;
+      if(expected_type_begin != expected_begin) {
+        LexerSpan expected_type_span{expected_type_begin + 1, expected_begin};
+        if(expected_type_span.empty()) {
+          return ParseError{
+            .position = expected_type_begin->index(),
+            .message = "Expected expression for expected type after ':' in requirement."
+          };
+        }
+        auto expected_type_result = parse_expression(locator, expected_type_span);
+        if(expected_type_result.holds_error()) return std::move(expected_type_result.get_error());
+        expected_type = std::move(expected_type_result.get_value());
+      }
+      if(expected_begin != span.end()) {
+        LexerSpan expected_span{expected_begin + 1, span.end()};
+        if(expected_span.empty()) {
+          return ParseError{
+            .position = expected_type_begin->index(),
+            .message = "Expected expression for expected value after '=' in requirement."
+          };
+        }
+        auto expected_result = parse_expression(locator, expected_span);
+        if(expected_result.holds_error()) return std::move(expected_result.get_error());
+        expected = std::move(expected_result.get_value());
+      }
+      return located_output::Command{located_output::Check{
+        .term = std::move(expr.get_value()),
+        .expected = std::move(expected),
+        .expected_type = std::move(expected_type),
+        .allow_deduction = is_require,
+        .position = locator.to_span({statement_begin, span.end()})
+      }};
+    }
     CommandResult parse_statement(LocatorInfo const& locator, LexerSpan& span, bool final) { //must consume span
       if(auto* symbol = span.span_begin->get_if_symbol()) {
         switch(symbol->symbol_index) {
           case symbols::declare: return parse_declare_or_axiom(locator, span, false);
           case symbols::axiom: return parse_declare_or_axiom(locator, span, true);
+          case symbols::require: return parse_require_or_verify(locator, span, true);
+          case symbols::verify: return parse_require_or_verify(locator, span, false);
           case symbols::let: return parse_let(locator, span);
           case symbols::rule: {
             ++span.span_begin;

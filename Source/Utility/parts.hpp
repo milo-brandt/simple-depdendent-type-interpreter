@@ -2,6 +2,7 @@
 #include <tuple>
 #include <variant>
 #include <vector>
+#include <optional>
 
 namespace mdb {
   namespace parts {
@@ -13,6 +14,30 @@ namespace mdb {
     }
 
     namespace detail {
+      template<class T>
+      struct VisitSpecial {
+        static constexpr bool is_valid = false;
+      };
+      template<class T>
+      struct VisitSpecial<std::optional<T> > {
+        static constexpr bool is_valid = true;
+        template<class Callback>
+        static void visit_children(std::optional<T>& v, Callback&& callback) {
+          if(v) {
+            callback(*v);
+          }
+        }
+      };
+      template<class T>
+      struct VisitSpecial<std::optional<T> const> {
+        static constexpr bool is_valid = true;
+        template<class Callback>
+        static void visit_children(std::optional<T> const& v, Callback&& callback) {
+          if(v) {
+            callback(*v);
+          }
+        }
+      };
       template<class T, class Callback>
       void visit_children_tuple(T& value, Callback&& callback) {
         constexpr auto size = std::tuple_size_v<std::decay_t<T> >;
@@ -261,6 +286,8 @@ namespace mdb {
           detail::visit_children_variant(value, callback); return std::bool_constant<true>{};
         } else if constexpr(requires{ value.begin(); value.end(); }) {
           detail::visit_children_range(value, callback); return std::bool_constant<true>{};
+        } else if constexpr(detail::VisitSpecial<T>::is_valid){
+          detail::VisitSpecial<T>::visit_children(value, std::forward<Callback>(callback)); return std::bool_constant<true>{};
         } else {
           return std::bool_constant<false>{};
         }

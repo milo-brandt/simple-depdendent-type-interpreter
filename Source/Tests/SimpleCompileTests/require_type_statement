@@ -1,0 +1,8 @@
+# TEST BEGIN
+# TEST NAME A trivial require type statement does not hold up compilation.
+# TEST MUST_COMPILE
+
+block {
+  require 2 : U64;
+  3
+}

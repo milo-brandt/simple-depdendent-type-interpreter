@@ -29,6 +29,8 @@ namespace expression_parser {
     constexpr std::uint64_t let = 4;
     constexpr std::uint64_t where = 14;
     constexpr std::uint64_t match = 15;
+    constexpr std::uint64_t verify = 16;
+    constexpr std::uint64_t require = 17;
 
     constexpr std::uint64_t arrow = 5;
     constexpr std::uint64_t colon = 6;

@@ -1,0 +1,17 @@
+# TEST BEGIN
+# TEST NAME Require statements can force deduction of untyped holes.
+# TEST SET expr
+
+block {
+  let x = _;
+  require x = 5;
+  x
+}
+
+# TEST SET type
+
+5
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

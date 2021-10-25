@@ -48,10 +48,16 @@ namespace solver::evaluator {
     struct LetTypeCast {
       archive_index::Let index;
     };
+    struct RequirementTypeCast {
+      archive_index::Check index;
+    };
+    struct RequirementRHSCast {
+      archive_index::Check index;
+    };
     struct LetCast {
       archive_index::Let index;
     };
-    using Any = std::variant<ApplyRHSCast, ApplyDomain, ApplyCodomain, ApplyLHSCast, ExplicitHole, Declaration, Axiom, TypeFamilyCast, HoleTypeCast, DeclareTypeCast, AxiomTypeCast, LetCast, LetTypeCast>;
+    using Any = std::variant<ApplyRHSCast, ApplyDomain, ApplyCodomain, ApplyLHSCast, ExplicitHole, Declaration, Axiom, TypeFamilyCast, HoleTypeCast, DeclareTypeCast, AxiomTypeCast, LetCast, RequirementTypeCast, RequirementRHSCast, LetTypeCast>;
     inline bool is_axiom(Any const& any) { return std::holds_alternative<Axiom>(any); }
     inline bool is_declaration(Any const& any) { return std::holds_alternative<Declaration>(any); }
     inline bool is_variable(Any const& any) { return std::holds_alternative<ApplyDomain>(any) || std::holds_alternative<ApplyCodomain>(any) || std::holds_alternative<ExplicitHole>(any); }
@@ -73,6 +79,7 @@ namespace solver::evaluator {
     std::function<void(new_expression::Rule)> add_rule;
     std::function<void(new_expression::WeakExpression, variable_explanation::Any)> explain_variable;
     mdb::function<mdb::Future<EquationResult>(Equation)> solve;
+    mdb::function<mdb::Future<EquationResult>(Equation)> solve_no_deduce;
     mdb::function<void(error::Any)> report_error;
     mdb::function<new_expression::TypedValue(std::uint64_t)> embed;
     mdb::function<void()> close_interface;

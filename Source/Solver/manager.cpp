@@ -73,13 +73,14 @@ namespace solver {
         .done = false
       };
     }
-    SolverInterface get_solver_interface() {
+    SolverInterface get_solver_interface(bool allow_deduction) {
       return {
         .arena = arena,
         .term_depends_on = [this](WeakExpression base, WeakExpression possible_dependency) {
           return base == possible_dependency;
         },
-        .get_definable_info = [this](WeakExpression indeterminate) -> std::optional<solver::DefinableInfo> {
+        .get_definable_info = [this, allow_deduction](WeakExpression indeterminate) -> std::optional<solver::DefinableInfo> {
+          if(!allow_deduction) return std::nullopt;
           if(definable_indeterminates.contains(indeterminate)) {
             return definable_indeterminates.at(indeterminate);
           } else {
@@ -105,10 +106,10 @@ namespace solver {
         }
       };
     }
-    mdb::Future<EquationResult> register_equation(Equation equation) {
+    mdb::Future<EquationResult> register_equation(Equation equation, bool allow_deduction) {
       auto [promise, future] = mdb::create_promise_future_pair<EquationResult>();
       active_solvers.push_back({
-        .solver = Solver(get_solver_interface(), std::move(equation)),
+        .solver = Solver(get_solver_interface(allow_deduction), std::move(equation)),
         .result = std::move(promise)
       });
       return std::move(future);
@@ -169,7 +170,12 @@ namespace solver {
         },
         .explain_variable = std::move(external_interface.explain_variable),
         .solve = [this](Equation eq) {
-          auto ret = register_equation(std::move(eq));
+          auto ret = register_equation(std::move(eq), true);
+          run();
+          return ret;
+        },
+        .solve_no_deduce = [this](Equation eq) {
+          auto ret = register_equation(std::move(eq), false);
           run();
           return ret;
         },

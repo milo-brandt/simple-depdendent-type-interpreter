@@ -12,7 +12,8 @@ namespace compiler::new_instruction {
     hole_type_type, hole_type, hole_type_local, hole, hole_local,
     arrow_domain, arrow_domain_local, arrow_codomain_type, arrow_codomain_type_family, arrow_codomain, arrow_pattern_head, arrow_pattern_arg, arrow_pattern_apply, arrow_rule, arrow_arrow, arrow_arrow_apply, arrow_arrow_complete, declare, rule_pattern_type_hole_type, rule_pattern_type_hole, rule_pattern_type_local, rule_pattern_arg, rule_pattern_for_all, rule, axiom, let, literal_embed, vector_type_type, vector_type, vector_type_local, vector_element, vector_element_local, vector_empty, vector_empty_typed, vector_push, vector_push_typed, vector_push_vector, vector_push_element,
     submatch,
-    matched_expression, matched_expression_local, match_result, match_result_local, match_output_type, match_output_type_local, match_output_type_type, match_arm_submatch, match_arm_rule
+    matched_expression, matched_expression_local, match_result, match_result_local, match_output_type, match_output_type_local, match_output_type_type, match_arm_submatch, match_arm_rule,
+    check
   };
   struct Explanation {
     ExplanationKind kind;

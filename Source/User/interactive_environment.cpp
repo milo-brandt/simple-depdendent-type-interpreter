@@ -97,6 +97,8 @@ namespace interactive {
           {"let", 4},
           {"where", 14},
           {"match", 15},
+          {"verify", 16},
+          {"require", 17},
           {"->", 5},
           {":", 6},
           {";", 7},

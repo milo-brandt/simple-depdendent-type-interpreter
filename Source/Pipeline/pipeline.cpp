@@ -88,6 +88,7 @@ namespace pipeline::compile {
         [&](BadDeclarationType const& err) { report("Bad declaration type.", err.declaration); report_eq(err.equation); },
         [&](BadAxiomType const& err) { report("Bad axiom type.", err.axiom); report_eq(err.equation); },
         [&](BadLetType const& err) { report("Bad let type.", err.let); report_eq(err.equation); },
+        [&](BadRequirementType const& err) { report("Bad check type.", err.check); report_eq(err.equation); },
         [&](MismatchedLetType const& err) { report("Mismatched let type.", err.let); report_eq(err.equation); },
         [&](MissingCaptureInSubclause const& err) { report("Missing capture in subclause.", err.subclause); },
         [&](MissingCaptureInRule const& err) { report("Missing capture in pattern.", err.rule);  },
@@ -95,7 +96,10 @@ namespace pipeline::compile {
         [&](BadApplicationInSubclause const& err) { report("Bad application in subclause.", err.subclause); },
         [&](InvalidDoubleCapture const& err) { report_double("Bad double capture.", err.primary_capture, err.secondary_capture); report_eq(err.equation); },
         [&](InvalidNondestructurablePattern const& err) { report("Bad non-destructible match.", err.pattern_part); report_eq(err.equation); },
-        [&](MismatchedReplacementType const& err) { report("Mismatched replacement type.", err.rule); report_eq(err.equation); }
+        [&](MismatchedReplacementType const& err) { report("Mismatched replacement type.", err.rule); report_eq(err.equation); },
+        [&](FailedRequirement const& err) { report("Failed requirement.", err.check); report_eq(err.equation); },
+        [&](FailedTypeRequirement const& err) { report("Failed type requirement.", err.check); report_eq(err.equation); },
+        [&](MismatchedRequirementRHSType const& err) { report("RHS type is not requested type.", err.check); report_eq(err.equation); }
       }, error);
     }
   }

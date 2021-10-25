@@ -52,6 +52,11 @@ shape = CompoundShape({
         "Axiom": [
             ("type", "Expression")
         ],
+        "Check": [
+            ("term", "Expression"),
+            ("expected", optional("Expression")),
+            ("expected_type", optional("Expression"))
+        ],
         "Let": [
             ("value", "Expression"),
             ("type", optional("Expression"))
@@ -92,6 +97,9 @@ output = shape.generate_instance(namespace = "expression_parser::output", data =
         "Rule": [],
         "Axiom": [
             ("name", "std::string_view")
+        ],
+        "Check": [
+            ("allow_deduction", "bool")
         ],
         "Let": [
             ("name", "std::string_view")
@@ -149,6 +157,9 @@ locator = shape.generate_instance(namespace = "expression_parser::locator", data
         "Axiom": [
             ("position", "LexerSpanIndex")
         ],
+        "Check": [
+            ("position", "LexerSpanIndex")
+        ],
         "Let": [
             ("position", "LexerSpanIndex")
         ]
@@ -188,6 +199,9 @@ resolution = shape.generate_instance(namespace = "expression_parser::resolved", 
             ("args_in_pattern", "std::uint64_t")
         ],
         "Axiom": [],
+        "Check": [
+            ("allow_deduction", "bool")
+        ],
         "Let": []
     }
 })

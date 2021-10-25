@@ -204,6 +204,11 @@ namespace expression_parser {
                 if(let.type && expression_uses_identifier(*let.type, id)) return true;
                 return expression_uses_identifier(let.value, id);
               },
+              [&](output_archive::Check const& check) {
+                if(check.expected && expression_uses_identifier(*check.expected, id)) return true;
+                if(check.expected_type && expression_uses_identifier(*check.expected_type, id)) return true;
+                return expression_uses_identifier(check.term, id);
+              },
               [&](output_archive::Rule const& rule) {
                 for(auto const& subexpr : rule.subclause_expressions) {
                   if(expression_uses_identifier(subexpr, id)) return true;
@@ -522,6 +527,30 @@ namespace expression_parser {
           });
           command_context.add_name(declaration.name);
           return ret;
+        },
+        [&](output_archive::Check const& check) -> mdb::Result<resolved::Command, ResolutionError> {
+          std::vector<ResolutionError> errors;
+          auto move_error = [&](auto&& term) { if(term.holds_error()) errors.push_back(std::move(term.get_error())); return std::move(term); };
+          auto as_opt = [&]<class T>(T* term) -> std::optional<T> { if(term) return std::move(*term); else return std::nullopt; };
+          auto term_result = move_error(resolve_impl(command_context, command_context.next_index, check.term));
+          std::optional<resolved::Expression> expected;
+          if(check.expected) expected = as_opt(move_error(resolve_impl(command_context, command_context.next_index, *check.expected)).get_if_value());
+          std::optional<resolved::Expression> expected_type;
+          if(check.expected_type) expected_type = as_opt(move_error(resolve_impl(command_context, command_context.next_index, *check.expected_type)).get_if_value());
+          if(errors.empty()) {
+            return resolved::Command{resolved::Check{
+              .term = std::move(term_result.get_value()),
+              .expected = std::move(expected),
+              .expected_type = std::move(expected_type),
+              .allow_deduction = check.allow_deduction
+            }};
+          } else {
+            auto err = std::move(errors[0]);
+            for(std::size_t i = 0; i < errors.size(); ++i) {
+              err = merge_errors(std::move(err), std::move(errors[i]));
+            }
+            return err;
+          }
         },
         [&](output_archive::Rule const& rule) -> mdb::Result<resolved::Command, ResolutionError> {
           return resolve_rule(command_context, command_context.next_index, rule);

@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Verify rejects false type equations in compound requirements.
+# TEST FULL_SET compile_result
+
+block {
+  verify 1 : Type = U64;
+  0
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());
