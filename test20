@@ -1,0 +1,8 @@
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  let data_eq : Id _ 5 5 = refl _ 5;
+
+  data_eq
+}

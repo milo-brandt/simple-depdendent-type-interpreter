@@ -9,7 +9,6 @@ namespace {
     Arena& arena;
     std::uint64_t index;
     U64Data(Arena& arena, std::uint64_t index):arena(arena),index(index) {}
-    void move_destroy(Buffer&, Buffer&) {}; //move second argument to first. Destroy second argument.
     void destroy(WeakExpression, Buffer&) {};
     void debug_print(Buffer const&, std::ostream&) {};
     void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) {};

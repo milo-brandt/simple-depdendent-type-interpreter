@@ -5,6 +5,7 @@
 #include "../Solver/evaluator.hpp"
 #include "../ExpressionParser/expression_generator.hpp"
 #include "../Solver/manager.hpp"
+#include "../Primitives/primitives.hpp"
 #include "debug_format.hpp"
 #include <sstream>
 
@@ -118,6 +119,9 @@ namespace interactive {
     //expression::data::SmallScalar<imported_type::StringHolder> str;
     std::unordered_map<std::string, new_expression::TypedValue> names_to_values;
     new_expression::WeakKeyMap<std::string> externals_to_names;
+    new_expression::OwnedExpression u64_type;
+    new_expression::OwnedExpression u64_head;
+    primitive::U64Data* u64;
     void name_external(std::string name, new_expression::WeakExpression expr) {
       externals_to_names.set(expr, name);
       names_to_values.insert(std::make_pair(name, new_expression::TypedValue{
@@ -125,9 +129,12 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       }));
     }
-    Impl():arena(), context(arena), externals_to_names(arena) {
+    Impl():arena(), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
+      context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
+      name_external("U64", u64_type);
+      externals_to_names.set(u64_head, "u64"); //this is internal, not to be exposed to user
     }
     mdb::Result<LexInfo, std::string> lex_code(BaseInfo input) {
       expression_parser::LexerInfo lexer_info {
@@ -209,10 +216,13 @@ namespace interactive {
           auto ret = embeds.size();
           std::visit(mdb::overloaded{
             [&](std::uint64_t literal) {
-              std::terminate();
-              /*auto ret = u64(literal);
-              auto t = ret.get_data().data.type_of();
-              embeds.push_back({std::move(ret), std::move(t)});*/
+              embeds.push_back({
+                .value = arena.apply(
+                  arena.copy(u64_head),
+                  u64->make_expression(literal)
+                ),
+                .type = arena.copy(u64_type)
+              });
             },
             [&](std::string literal) {
               std::terminate();

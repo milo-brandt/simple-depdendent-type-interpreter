@@ -56,8 +56,6 @@ namespace new_expression {
   class DataType {
   public:
     //responsible for uniquing elements of this type.
-    virtual void move_destroy(Buffer&, Buffer&) = 0; //move second argument to first. Destroy second argument.
-      //allowed to assume a memcpy has already occurred
     virtual void destroy(WeakExpression, Buffer&) = 0;
     virtual void debug_print(Buffer const&, std::ostream&) = 0;
     virtual void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) = 0;
