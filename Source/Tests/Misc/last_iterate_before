@@ -1,6 +1,7 @@
 # TEST BEGIN
 # TEST NAME A complex definition returning the last iterate before hitting zero, using a local definition defined by subclauses.
-# TEST SET expr
+# TEST MUST_COMPILE
+
 block {
   axiom Bool : Type;
   axiom yes : Bool;
@@ -9,10 +10,6 @@ block {
   axiom Nat : Type;
   axiom zero : Nat;
   axiom succ : Nat -> Nat;
-
-  declare nat_to_u64 : Nat -> U64;
-  nat_to_u64 zero = 0;
-  nat_to_u64 (succ n) = add 1 (nat_to_u64 n);
 
   declare last_nonzero_iterate : Nat -> (Nat -> Nat) -> Nat -> Nat;
   last_nonzero_iterate zero f base = zero; # return zero as a placeholder for failure
@@ -24,6 +21,10 @@ block {
     ret
   };
 
+  declare pred : Nat -> Nat;
+  pred zero = zero;
+  pred (succ n) = n;
+
   declare pred_twice : Nat -> Nat;
   pred_twice zero = zero;
   pred_twice (succ zero) = zero;
@@ -31,14 +32,21 @@ block {
 
   let big = succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ zero;
 
-  nat_to_u64 \\ last_nonzero_iterate big pred_twice (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero)
+  verify last_nonzero_iterate big pred_twice zero = zero;
+  verify last_nonzero_iterate big pred_twice (succ zero) = succ zero;
+  verify last_nonzero_iterate big pred_twice (succ \\ succ zero) = succ \\ succ zero;
+  verify last_nonzero_iterate big pred_twice (succ \\ succ \\ succ zero) = succ zero;
+  verify last_nonzero_iterate big pred_twice (succ \\ succ \\ succ \\ succ zero) = succ \\ succ zero;
+  verify last_nonzero_iterate big pred_twice (succ \\ succ \\ succ \\ succ \\ succ zero) = succ zero;
+  verify last_nonzero_iterate big pred_twice (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) = succ \\ succ zero;
+
+  verify last_nonzero_iterate big pred zero = zero;
+  verify last_nonzero_iterate big pred (succ zero) = succ zero;
+  verify last_nonzero_iterate big pred (succ \\ succ zero) = succ zero;
+  verify last_nonzero_iterate big pred (succ \\ succ \\ succ zero) = succ zero;
+  verify last_nonzero_iterate big pred (succ \\ succ \\ succ \\ succ zero) = succ zero;
+  verify last_nonzero_iterate big pred (succ \\ succ \\ succ \\ succ \\ succ zero) = succ zero;
+  verify last_nonzero_iterate big pred (succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) = succ zero;
+
+  Nat
 }
-
-
-# TEST SET expect
-
-2
-
-# TEST DEFINITION
-
-REQUIRE(expr == expect);

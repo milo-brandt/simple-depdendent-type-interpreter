@@ -1,11 +1,8 @@
 # TEST BEGIN
 # TEST NAME A rule relying on the judgemental equality of a match arm computes.
-# TEST SET expr
+# TEST MUST_COMPILE
 
 block {
-  axiom Pair : (T : Type) -> Type;
-  axiom pair : (T : Type) -> T -> T -> Pair T;
-
   axiom Bool : Type;
   axiom yes : Bool;
   axiom no : Bool;
@@ -24,13 +21,14 @@ block {
     yes -> none _;
   };
 
-  pair _
-    (weird (\.no) no_fam)
-    (some _ no_fam)
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  verify weird (\x.no) no_fam = some _ no_fam;
+  verify weird not no_fam = some _ no_fam;
+  verify weird (\x.yes) yes_fam = none (Fam no);
+  verify weird (\x.x) yes_fam = none (Fam no);
+
+  yes
 }
-
-# TEST DEFINITION
-
-auto unfolded = unfold(environment.arena(), expr.value);
-REQUIRE(unfolded.args.size() == 3);
-REQUIRE(unfolded.args[1] == unfolded.args[2]);

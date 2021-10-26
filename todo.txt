@@ -6,6 +6,8 @@ Need to re-add support for U64s, Strings, Vectors.
   - might accomplish this by adding a method to check whether two pieces of data are "shape-compatible"
     and, if so, to list all pairs that need to align for them to be equal.
 
+Verify should probably allow deduction of holes *defined within verify itself*.
+
 *************
 High priority
 *************

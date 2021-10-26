@@ -1,11 +1,8 @@
 # TEST BEGIN
 # TEST NAME A rule relying on the judgemental equality of a match computes, even where the rule must be applied multiple times.
-# TEST SET expr
+# TEST MUST_COMPILE
 
 block {
-  axiom Pair : (T : Type) -> Type;
-  axiom pair : (T : Type) -> T -> T -> Pair T;
-
   axiom Bool : Type;
   axiom yes : Bool;
   axiom no : Bool;
@@ -31,13 +28,9 @@ block {
   not yes = no;
   not no = yes;
 
-  pair _
-    (weird not yes_fam)
-    (some _ yes_fam)
+  verify weird not yes_fam = some _ yes_fam;
+  verify weird (\.yes) yes_fam = some _ yes_fam;
+  verify weird (\.no) no_fam = none (Fam yes);
+
+  yes
 }
-
-# TEST DEFINITION
-
-auto unfolded = unfold(environment.arena(), expr.value);
-REQUIRE(unfolded.args.size() == 3);
-REQUIRE(unfolded.args[1] == unfolded.args[2]);

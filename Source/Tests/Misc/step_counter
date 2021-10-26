@@ -1,6 +1,6 @@
 # TEST BEGIN
 # TEST NAME A complex definition counting the steps to zero works, with a local declaration defined by subclauses.
-# TEST SET expr
+# TEST MUST_COMPILE
 
 block {
   axiom Bool : Type;
@@ -11,16 +11,13 @@ block {
   axiom zero : Nat;
   axiom succ : Nat -> Nat;
 
-  declare nat_to_u64 : Nat -> U64;
-  nat_to_u64 zero = 0;
-  nat_to_u64 (succ n) = add 1 (nat_to_u64 n);
 
   declare count_steps_to_zero : Nat -> (Nat -> Nat) -> Nat -> Nat;
   count_steps_to_zero zero f base = zero;
   count_steps_to_zero (succ max_steps) f base = block {
     declare ret : Nat;
     ret where base = zero = zero;
-    ret where base = succ _ = succ \\ count_steps_to_zero max_steps f base;
+    ret where base = succ _ = succ \\ count_steps_to_zero max_steps f (f base);
     ret
   };
 
@@ -28,15 +25,13 @@ block {
   f zero = succ zero;
   f (succ n) = n;
 
-  declare g : Nat;
+  verify count_steps_to_zero (succ zero) f zero = zero;
+  verify count_steps_to_zero (succ zero) f (succ zero) = succ zero;
+  verify count_steps_to_zero (succ zero) f (succ \\ succ zero) = succ zero;
 
-  nat_to_u64 \\ count_steps_to_zero (succ \\ succ zero) f (succ \\ succ zero)
+  verify count_steps_to_zero (succ \\ succ zero) f zero = zero;
+  verify count_steps_to_zero (succ \\ succ zero) f (succ zero) = succ zero;
+  verify count_steps_to_zero (succ \\ succ zero) f (succ \\ succ zero) = succ \\ succ zero;
+
+  yes
 }
-
-# TEST SET expect
-
-2
-
-# TEST DEFINITION
-
-REQUIRE(expr == expect);
