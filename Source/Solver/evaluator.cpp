@@ -395,6 +395,7 @@ namespace solver::evaluator {
             ))
           };
           struct BacktraceInfo {
+            new_expression::Arena& arena;
             instruction_archive::Rule const& rule;
             pattern_resolution_locator::archive_root::PatternExpr primary_pattern_resolution_locator;
             std::vector<pattern_resolution_locator::archive_root::PatternExpr> subclause_resolution_locators;
@@ -436,8 +437,14 @@ namespace solver::evaluator {
                 }
               }, reason);
             }
+            ~BacktraceInfo() {
+              if(equations_left > 0) {
+                destroy_from_arena(arena, proposed_rule);
+              }
+            }
           };
           std::shared_ptr<BacktraceInfo> backtrace_info{new BacktraceInfo{
+            .arena = interface.arena,
             .rule = rule,
             .primary_pattern_resolution_locator = std::move(resolved_result.locator),
             .subclause_resolution_locators = std::move(subpattern_locators),
