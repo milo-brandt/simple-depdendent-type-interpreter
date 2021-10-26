@@ -44,6 +44,7 @@ namespace expression_parser {
     };
     struct CommandContext {
       std::vector<LocalContext> declaration_vector;
+      std::vector<std::string_view> local_declarations; //what can actually be defined
       std::uint64_t next_index;
       ContextParent parent;
       ContextParent link_vector() {
@@ -253,6 +254,13 @@ namespace expression_parser {
           }
         });
       }
+      output_archive::Pattern const& head_of(output_archive::Pattern const& pattern) {
+        auto head = &pattern;
+        while(auto const* apply = head->get_if_pattern_apply()) {
+          head = &apply->lhs;
+        }
+        return *head;
+      }
     };
     mdb::Result<resolved::Command, ResolutionError> resolve_rule(CommandContext& context, std::uint64_t stack_depth, output_archive::Rule const& rule) {
       PatternResolver detail{
@@ -262,6 +270,24 @@ namespace expression_parser {
           .parent = &context
         }
       };
+      auto const& primary_head = detail.head_of(rule.pattern);
+      if(primary_head.holds_pattern_hole()) {
+        return ResolutionError{
+          .hole_pattern_heads = {primary_head.get_pattern_hole().index()}
+        };
+      } else {
+        auto const& id_head = primary_head.get_pattern_identifier();
+        for(auto const& str : context.local_declarations) {
+          if(str == id_head.id) {
+            goto ID_OKAY;
+          }
+        }
+        //if we get here, the head is not valid.
+        return ResolutionError{
+          .nondefinable_pattern_heads = {id_head.index()}
+        };
+      ID_OKAY:;
+      }
       auto primary_pattern = detail.resolve_pattern(rule.pattern, false);
       if(primary_pattern.holds_error()) return std::move(primary_pattern.get_error());
       std::vector<std::vector<std::uint64_t> > captures_used_in_subclause_expression;
@@ -526,6 +552,7 @@ namespace expression_parser {
             };
           });
           command_context.add_name(declaration.name);
+          command_context.local_declarations.push_back(declaration.name);
           return ret;
         },
         [&](output_archive::Check const& check) -> mdb::Result<resolved::Command, ResolutionError> {

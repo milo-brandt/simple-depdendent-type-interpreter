@@ -14,6 +14,8 @@ namespace expression_parser {
   struct ResolutionError {
     std::vector<archive_index::Identifier> bad_ids;
     std::vector<archive_index::PatternIdentifier> bad_pattern_ids;
+    std::vector<archive_index::PatternIdentifier> nondefinable_pattern_heads;
+    std::vector<archive_index::PatternHole> hole_pattern_heads;
   };
   mdb::Result<resolved::Expression, ResolutionError> resolve(resolved::Context context, output::archive_part::Expression const&);
   mdb::Result<resolved::Command, ResolutionError> resolve(resolved::Context context, output::archive_part::Command const&);

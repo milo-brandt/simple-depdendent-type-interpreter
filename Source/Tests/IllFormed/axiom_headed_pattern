@@ -1,0 +1,19 @@
+# this currently just crashes - need to look out for this issue at resolution time.
+# TEST NAME Patterns with an axiom head fail before evaluate time.
+# TEST FULL_SET compile_result
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  axiom not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  not no
+}
+
+# TEST DEFINITION
+
+REQUIRE(!compile_result.holds_success());

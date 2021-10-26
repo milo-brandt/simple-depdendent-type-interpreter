@@ -1,0 +1,21 @@
+# this currently just crashes - need to look out for this issue at resolution time.
+# TEST NAME Patterns with a declaration from an outer context are rejected.
+# TEST FULL_SET compile_result
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  let blah = block {
+    not yes = no;
+    not no = yes;
+  };
+
+  not no
+}
+
+# TEST DEFINITION
+
+REQUIRE(!compile_result.holds_success());
