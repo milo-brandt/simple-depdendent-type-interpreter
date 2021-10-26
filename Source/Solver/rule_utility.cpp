@@ -477,6 +477,7 @@ namespace solver {
         arena.drop(std::move(type_of));
         return ret;
       } else {
+        destroy_from_arena(arena, arg, type_of);
         return std::nullopt;
       }
     }
@@ -514,8 +515,8 @@ namespace solver {
         return false;
       }
     };
-    std::size_t shard_index = 0;
-    for(auto& shard : flat.shards) {
+    for(std::size_t shard_index = 0; shard_index < flat.shards.size(); ++shard_index) {
+      auto& shard = flat.shards[shard_index];
       if(auto* match = std::get_if<FlatPatternMatch>(&shard)) {
         new_expression::OwnedExpression head_expr = std::visit(mdb::overloaded{
           [&](FlatPatternMatchArg&& arg) {
@@ -525,11 +526,15 @@ namespace solver {
             return interface.get_subexpression(subexpr.matched_subexpression, stack, std::move(subexpr.requested_captures));
           }
         }, std::move(match->matched_expr));
-        auto shard_head = std::move(match->match_head);
+        auto shard_head = arena.copy(match->match_head);
         for(std::size_t i = 0; i < match->capture_count; ++i) {
           if(auto next_type = extract_application_domain(arena, stack, interface.arrow, shard_head, arena.argument(next_arg++))) {
             stack = stack.extend(std::move(*next_type));
           } else {
+            destroy_from_arena(arena, flat.captures, match->match_head, head_expr, shard_head, steps, flat.checks, flat.head, outer_head);
+            for(std::size_t destroy_index = shard_index + 1; destroy_index < flat.shards.size(); ++destroy_index) {
+              destroy_from_arena(arena, flat.shards[destroy_index]);
+            }
             return {mdb::in_place_error, PatternExecuteShardNotFunction{
               .shard_index = shard_index,
               .args_applied = i
@@ -538,17 +543,20 @@ namespace solver {
         }
         steps.push_back(new_expression::PatternMatch{
           .substitution = arena.copy(head_expr),
-          .expected_head = arena.copy(match->match_head),
+          .expected_head = std::move(match->match_head),
           .args_captured = match->capture_count
         });
         stack = extend_by_assumption_typeless(std::move(stack), std::move(head_expr), std::move(shard_head));
       } else {
         if(!std::holds_alternative<FlatPatternPullArgument>(shard)) std::terminate();
         if(!pull_argument()) {
+          destroy_from_arena(arena, steps, flat.captures, flat.checks, flat.head, outer_head);
+          for(std::size_t destroy_index = shard_index + 1; destroy_index < flat.shards.size(); ++destroy_index) {
+            destroy_from_arena(arena, flat.shards[destroy_index]);
+          }
           return {mdb::in_place_error, PatternExecuteGlobalNotFunction{}};
         }
       }
-      shard_index++;
     }
     std::vector<std::pair<new_expression::OwnedExpression, new_expression::OwnedExpression> > checks;
     for(auto& check : flat.checks) {
