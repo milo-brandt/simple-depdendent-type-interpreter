@@ -207,6 +207,7 @@ namespace interactive {
           auto bad_pos = input.parser_locator[bad_id].position;
           err_out << "Bad pattern id: " << format_error(expression_parser::position_of(bad_pos, input.lexer_locator), input.source) << "\n";
         }
+        destroy_from_arena(arena, embeds);
         return err_out.str();
       }
     }
