@@ -351,6 +351,7 @@ namespace solver {
           },
           [&](pattern_node::archive_part::Ignore&) {
             //nothing to do
+            if(subexpr.index() != 0) std::terminate(); //can't pass a non-trivial expression in here
           }
         });
       }
@@ -390,19 +391,19 @@ namespace solver {
     auto can_pull_argument = [&] {
       return args_pulled != folded.matches.size();
     };
-    std::size_t sub_index = 0;
-    for(auto& sub : folded.subclause_matches) {
+
+    for(std::size_t sub_index = 0; sub_index < folded.subclause_matches.size(); ++sub_index) {
+      auto& sub = folded.subclause_matches[sub_index];
     TRY_TO_INSTANTIATE_SUBCLAUSE:
       if(detail.has_needed_captures(sub.used_captures)) {
-        auto index = sub_index++;
         auto head = FlatPatternMatchSubexpression{
           .requested_captures = detail.get_captures_for(sub.used_captures),
-          .matched_subexpression = index
+          .matched_subexpression = sub_index
         };
         detail.process(
           FlatPatternPart{
             .primary = false,
-            .index = index
+            .index = sub_index
           },
           sub.node.root(),
           std::move(head)
@@ -412,6 +413,11 @@ namespace solver {
           pull_argument();
           goto TRY_TO_INSTANTIATE_SUBCLAUSE;
         } else {
+          //failed - unreachable capture
+          for(std::size_t destroy_index = sub_index; destroy_index < folded.subclause_matches.size(); ++destroy_index) {
+            destroy_from_arena(arena, folded.subclause_matches[destroy_index]);
+          }
+          destroy_from_arena(arena, folded.head, detail.shards, detail.checks);
           return {mdb::in_place_error, FlatSubclauseMissingCapture{
             .subclause_index = sub_index
           }};
@@ -420,6 +426,7 @@ namespace solver {
     }
     while(can_pull_argument()) pull_argument();
     if(!detail.has_all_captures()) {
+      destroy_from_arena(arena, folded.head, detail.shards, detail.checks);
       return {mdb::in_place_error, FlatGlobalMissingCapture{}};
     }
     return FlatResult{
