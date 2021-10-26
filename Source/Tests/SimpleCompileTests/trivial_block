@@ -1,0 +1,15 @@
+# TEST BEGIN
+# TEST NAME A trivial block evaluates.
+# TEST SET expr
+
+block {
+  17
+}
+
+# TEST SET type
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

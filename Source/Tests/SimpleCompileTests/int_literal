@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Integer literals can be evaluated.
+# TEST SET expr
+
+17
+
+# TEST SET type
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

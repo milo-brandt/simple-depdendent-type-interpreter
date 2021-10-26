@@ -1,0 +1,13 @@
+# TEST BEGIN
+# TEST NAME Primitives can be embedded.
+# TEST SET expr
+
+Type
+
+# TEST SET type
+
+Type
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

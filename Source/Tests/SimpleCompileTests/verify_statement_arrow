@@ -1,0 +1,8 @@
+# TEST BEGIN
+# TEST NAME A trivial verify statement of primitives (arrow) does not hold up compilation.
+# TEST MUST_COMPILE
+
+block {
+  verify arrow = arrow;
+  17
+}

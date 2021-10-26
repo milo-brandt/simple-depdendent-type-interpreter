@@ -1,0 +1,5 @@
+# TEST BEGIN
+# TEST NAME The test harness can appropriately hande MUST_COMPILE cases.
+# TEST MUST_COMPILE
+
+0

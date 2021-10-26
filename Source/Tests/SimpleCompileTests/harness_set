@@ -1,0 +1,5 @@
+# TEST BEGIN
+# TEST NAME The test harness can appropriately handle SET cases.
+# TEST SET expr
+
+0

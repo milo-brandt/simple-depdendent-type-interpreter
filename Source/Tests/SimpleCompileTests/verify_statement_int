@@ -1,0 +1,8 @@
+# TEST BEGIN
+# TEST NAME A trivial verify statement of integer literals does not hold up compilation.
+# TEST MUST_COMPILE
+
+block {
+  verify 2 = 2;
+  3
+}

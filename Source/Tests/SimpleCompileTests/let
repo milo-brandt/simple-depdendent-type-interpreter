@@ -1,0 +1,16 @@
+# TEST BEGIN
+# TEST NAME A let statement evaluates.
+# TEST SET expr
+
+block {
+  let x = 17;
+  x
+}
+
+# TEST SET type
+
+17
+
+# TEST DEFINITION
+
+REQUIRE(expr == type);

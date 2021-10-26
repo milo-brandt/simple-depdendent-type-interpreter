@@ -1,0 +1,5 @@
+# TEST BEGIN
+# TEST NAME The test harness can appropriately handle FULL_SET cases.
+# TEST FULL_SET expr
+
+0

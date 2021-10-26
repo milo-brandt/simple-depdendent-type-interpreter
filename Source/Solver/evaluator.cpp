@@ -547,6 +547,7 @@ namespace solver::evaluator {
                 .rhs = std::move(*expected_type),
                 .stack = local_context
               };
+              destroy_from_arena(interface.arena, term.value);
             } else {
               //nothing to check, I guess
               destroy_from_arena(interface.arena, term);
@@ -603,7 +604,10 @@ namespace solver::evaluator {
           }
           if(value_equation) {
             std::move(type_future).listen([this, &check, &solver, value_equation = std::move(*value_equation)](bool okay) mutable {
-              if(!okay) return;
+              if(!okay) {
+                destroy_from_arena(interface.arena, value_equation);
+                return;
+              }
               solver(std::move(value_equation)).listen([this, &solver, &check](EquationResult result) {
                 if(!std::holds_alternative<EquationSolved>(result)) {
                   call_on_error(std::move(result), [this, &check](EquationErrorInfo error_info) {

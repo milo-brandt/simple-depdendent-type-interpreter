@@ -51,6 +51,7 @@ TEST_CASE("{{ test.name }}", "[full_case]{% if test.tags %}{% for tag in test.ta
         INFO(error_message.str())
         FAIL("Failed while compiling MUST_COMPILE case.");
       }
+      destroy_from_arena(arena, must_compile_result.get_value());
     }
     {%- else %}
     static_assert(false, "The source code generator did something wrong.")
@@ -63,7 +64,9 @@ TEST_CASE("{{ test.name }}", "[full_case]{% if test.tags %}{% for tag in test.ta
     {%- if definition.kind == "SET" %}
     destroy_from_arena(arena, {{definition.var}});
     {%- elif definition.kind == "FULL_SET" %}
-    destroy_from_arena(arena, {{definition.var}});
+    if({{definition.var}}.holds_success()) {
+      destroy_from_arena(arena, {{definition.var}}.get_value());
+    }
     {%- elif definition.kind == "MUST_COMPILE" %}
     {# Nothing to do in this case. Value was already discarded. #}
     {%- else %}
