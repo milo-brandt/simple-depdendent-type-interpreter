@@ -73,6 +73,9 @@ namespace interactive {
     new_expression::OwnedExpression u64_type;
     new_expression::OwnedExpression u64_head;
     primitive::U64Data* u64;
+    new_expression::OwnedExpression str_type;
+    new_expression::OwnedExpression str_head;
+    primitive::StringData* str;
     void name_external(std::string name, new_expression::WeakExpression expr) {
       externals_to_names.set(expr, name);
       names_to_values.insert(std::make_pair(name, new_expression::TypedValue{
@@ -80,15 +83,18 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       }));
     }
-    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)) {
+    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena), u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)), str_type(arena.axiom()), str_head(arena.axiom()), str(primitive::StringData::register_on(arena)) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
       context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
       name_external("U64", u64_type);
       externals_to_names.set(u64_head, "u64"); //this is internal, not to be exposed to user
+      context.type_collector.type_of_primitive.set(str_type, arena.copy(context.primitives.type));
+      name_external("String", str_type);
+      externals_to_names.set(str_head, "str"); //this is internal, not to be exposed to user
     }
     ~Impl() {
-      destroy_from_arena(arena, names_to_values, u64_type, u64_head);
+      destroy_from_arena(arena, names_to_values, u64_type, u64_head, str_type, str_head);
     }
     mdb::Result<LexInfo, std::string> lex_code(SourceInfo input) {
       expression_parser::LexerInfo lexer_info {
@@ -181,10 +187,13 @@ namespace interactive {
               });
             },
             [&](std::string literal) {
-              std::terminate();
-              /*auto ret = str(imported_type::StringHolder{literal});
-              auto t = ret.get_data().data.type_of();
-              embeds.push_back({std::move(ret), std::move(t)});*/
+              embeds.push_back({
+                .value = arena.apply(
+                  arena.copy(str_head),
+                  str->make_expression(primitive::StringHolder{literal})
+                ),
+                .type = arena.copy(str_type)
+              });
             }
           }, literal);
           return ret;
@@ -424,6 +433,15 @@ namespace interactive {
   }
   primitive::U64Data* Environment::u64() {
     return impl->u64;
+  }
+  new_expression::WeakExpression Environment::str_head() {
+    return impl->str_head;
+  }
+  new_expression::WeakExpression Environment::str_type() {
+    return impl->str_type;
+  }
+  primitive::StringData* Environment::str() {
+    return impl->str;
   }
   new_expression::WeakKeyMap<std::string>& Environment::externals_to_names() {
     return impl->externals_to_names;

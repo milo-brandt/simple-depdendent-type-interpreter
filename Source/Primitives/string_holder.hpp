@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <iostream>
 
-namespace imported_type {
+namespace primitive {
   class StringHolder {
     std::byte* allocation;
     const char* m_begin;
@@ -24,6 +24,12 @@ namespace imported_type {
     StringHolder substr(std::uint64_t start) &&;
     StringHolder substr(std::uint64_t start) const&;
     std::string_view get_string() const;
+  };
+  struct StringHolderHasher {
+    std::hash<std::string_view> hasher;
+    auto operator()(StringHolder const& holder) const noexcept {
+      return hasher(holder.get_string());
+    }
   };
   bool operator==(StringHolder const&, StringHolder const&);
   std::ostream& operator<<(std::ostream&, StringHolder const&);

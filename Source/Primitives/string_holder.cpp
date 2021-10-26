@@ -2,7 +2,7 @@
 #include <atomic>
 #include <cstring>
 
-namespace imported_type {
+namespace primitive {
   namespace {
     constexpr auto counter_size = sizeof(std::atomic<std::uint64_t>);
     std::atomic<std::uint64_t>& counter_for(std::byte* data) {

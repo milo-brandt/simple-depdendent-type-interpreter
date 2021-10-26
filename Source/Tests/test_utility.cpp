@@ -86,7 +86,61 @@ interactive::Environment setup_enviroment(new_expression::Arena& arena) {
       }
     }
   });
-  destroy_from_arena(arena, add_u64, mul_u64);
+  auto substr = environment.declare("substr", "String -> U64 -> U64 -> String");
+  context.rule_collector.add_rule({
+    .pattern = {
+      .head = arena.copy(substr),
+      .body = {
+        .args_captured = 3,
+        .steps = mdb::make_vector<new_expression::PatternStep>(
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(0),
+            .expected_head = arena.copy(environment.str_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 1,
+            .expected_type = environment.str()->type_index
+          },
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(2),
+            .expected_head = arena.copy(environment.u64_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 3,
+            .expected_type = environment.u64()->type_index
+          },
+          new_expression::PullArgument{},
+          new_expression::PatternMatch{
+            .substitution = arena.argument(4),
+            .expected_head = arena.copy(environment.u64_head()),
+            .args_captured = 1
+          },
+          new_expression::DataCheck{
+            .capture_index = 5,
+            .expected_type = environment.u64()->type_index
+          }
+        )
+      }
+    },
+    .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+      [&](std::span<new_expression::WeakExpression> inputs) {
+        return arena.apply(
+          arena.copy(environment.str_head()),
+          environment.str()->make_expression(
+            environment.str()->read_data(arena.get_data(inputs[1])).substr(
+              environment.u64()->read_data(arena.get_data(inputs[3])),
+              environment.u64()->read_data(arena.get_data(inputs[5]))
+            )
+          )
+        );
+      }
+    }
+  });
+  destroy_from_arena(arena, add_u64, mul_u64, substr);
   return environment;
 
   /*

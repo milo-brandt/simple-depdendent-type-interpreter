@@ -1,3 +1,4 @@
+# TEST BEGIN
 # TEST NAME An expression involving a string literal evaluates.
 # TEST SET expr
 
