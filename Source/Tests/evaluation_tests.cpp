@@ -1057,3 +1057,22 @@ TEST_CASE("Evaluation context can map context in which $0 = $1 to itself") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("Evaluation context can gracefully fail in a situation where we request axiom = $0") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+    MapRequest request{
+      .constraints = mdb::make_vector(
+        MapRequestConstraint{
+          .source = arena.axiom(),
+          .target = arena.argument(0)
+        }
+      )
+    };
+    auto attempt = evaluator.try_to_map_to(evaluator, std::move(request));
+    REQUIRE(!attempt);
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}

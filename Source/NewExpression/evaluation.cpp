@@ -495,7 +495,10 @@ namespace new_expression {
               auto unfolded = unfold(me.arena, constraint.source);
               if(me.arena.holds_axiom(unfolded.head) || me.arena.holds_data(unfolded.head)) {
                 auto unfolded_target = unfold(me.arena, constraint.target);
-                if(unfolded.head != unfolded_target.head || unfolded.args.size() != unfolded_target.args.size()) return false;
+                if(unfolded.head != unfolded_target.head || unfolded.args.size() != unfolded_target.args.size()) {
+                  destroy_from_arena(me.arena, constraint);
+                  return false;
+                }
                 for(std::size_t i = 0; i < unfolded.args.size(); ++i) {
                   unchecked_constraints.push_back({
                     .source = me.arena.copy(unfolded.args[i]),

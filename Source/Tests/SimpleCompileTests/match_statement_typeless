@@ -1,0 +1,27 @@
+# TEST BEGIN
+# TEST NAME A simple match statement with deduced type can be defined.
+# TEST SET expr
+
+block {
+  axiom Pair : (T : Type) -> Type;
+  axiom pair : (T : Type) -> T -> T -> Pair T;
+
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  let pred : Nat -> Nat = \n.match(n) {
+    zero -> zero;
+    succ m -> m;
+  };
+
+  pair Nat
+    (pred (succ \\ succ \\ succ zero))
+    (succ \\ succ zero)
+}
+
+# TEST DEFINITION
+
+auto unfolded = unfold(environment.arena(), expr.value);
+REQUIRE(unfolded.args.size() == 3);
+REQUIRE(unfolded.args[1] == unfolded.args[2]);
