@@ -532,7 +532,7 @@ namespace new_expression {
               made_progress = false;
               while(!unchecked_constraints.empty()) {
                 made_progress = true;
-                MapRequestConstraint constraint= std::move(unchecked_constraints.back());
+                MapRequestConstraint constraint = std::move(unchecked_constraints.back());
                 unchecked_constraints.pop_back();
                 if(!check_initial_constraint(std::move(constraint))) return false;
               }
@@ -576,7 +576,7 @@ namespace new_expression {
         if(detail.run()) {
           return std::move(detail.ret);
         } else {
-          destroy_from_arena(arena, detail.ret);
+          destroy_from_arena(arena, detail.ret, detail.unchecked_constraints, detail.map_only_constraints, detail.waiting_match_mapped_expression_to_class);
           return std::nullopt;
         }
       }
