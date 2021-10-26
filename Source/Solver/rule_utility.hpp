@@ -41,6 +41,9 @@ namespace solver {
     std::vector<RawPatternShard> subpatterns;
     static constexpr auto part_info = mdb::parts::simple<2>;
   };
+  struct NormalizationError {
+    std::vector<std::size_t> nonmatchable_subclauses;
+  };
   struct FoldedPatternBacktrace {
     std::vector<pattern_normalization_locator::archive_root::PatternNode> matches;
     std::vector<pattern_normalization_locator::archive_root::PatternNode> subclause_matches;
@@ -151,7 +154,7 @@ namespace solver {
     FoldedPattern output;
     FoldedPatternBacktrace locator;
   };
-  NormalizationResult normalize_pattern(new_expression::Arena&, RawPattern raw, std::size_t capture_count);
+  mdb::Result<NormalizationResult, NormalizationError> normalize_pattern(new_expression::Arena&, RawPattern raw, std::size_t capture_count);
   struct FlatResult {
     FlatPattern output;
     FlatPatternExplanation locator;

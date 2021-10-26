@@ -203,7 +203,7 @@ namespace solver {
       });
     }
   }
-  NormalizationResult normalize_pattern(new_expression::Arena& arena, RawPattern raw, std::size_t capture_count) {
+  mdb::Result<NormalizationResult, NormalizationError> normalize_pattern(new_expression::Arena& arena, RawPattern raw, std::size_t capture_count) {
     //step 1: figure out how many arguments are on head.
     auto head_pattern_unfolding = unfold(raw.primary_pattern.root());
     auto& head_value = head_pattern_unfolding.head->get_embed();
@@ -231,24 +231,35 @@ namespace solver {
       backtrace.matches.push_back(archive(std::move(node.locator)));
     }
     std::vector<FoldedSubclause> subclause_matches;
+    NormalizationError errors;
+    std::size_t subpattern_index = 0;
     for(auto& shard : raw.subpatterns) {
       auto node = convert_to_node(arena, shard.pattern.root());
+      if(!node.output.holds_apply()) {
+        errors.nonmatchable_subclauses.push_back(subpattern_index);
+      }
       subclause_matches.push_back({
         .used_captures = std::move(shard.used_captures),
         .node = archive(std::move(node.output))
       });
       backtrace.subclause_matches.push_back(archive(std::move(node.locator)));
+      ++subpattern_index;
     }
-    return NormalizationResult{
-      .output = FoldedPattern{
-        .head = std::move(head),
-        .stack_arg_count = arg_count,
-        .capture_count = capture_count,
-        .matches = std::move(matches),
-        .subclause_matches = std::move(subclause_matches)
-      },
-      .locator = std::move(backtrace)
-    };
+    if(errors.nonmatchable_subclauses.empty()) {
+      return NormalizationResult{
+        .output = FoldedPattern{
+          .head = std::move(head),
+          .stack_arg_count = arg_count,
+          .capture_count = capture_count,
+          .matches = std::move(matches),
+          .subclause_matches = std::move(subclause_matches)
+        },
+        .locator = std::move(backtrace)
+      };
+    } else {
+      destroy_from_arena(arena, head, matches, subclause_matches);
+      return std::move(errors);
+    }
   }
   mdb::Result<FlatResult, FlatError> flatten_pattern(new_expression::Arena& arena, FoldedPattern folded) {
     struct Detail {

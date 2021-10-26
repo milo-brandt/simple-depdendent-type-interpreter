@@ -16,7 +16,7 @@ TEST_CASE("Pattern normalization works on lambda functions.") {
       },
       pattern_expr::Capture{1}
     });
-    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 2).output;
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 2).get_value().output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 0);
     REQUIRE(normalized.capture_count == 2);
@@ -36,7 +36,7 @@ TEST_CASE("Pattern normalization works on lambda functions.") {
       )},
       pattern_expr::Capture{0}
     });
-    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).output;
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).get_value().output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 1);
     REQUIRE(normalized.capture_count == 1);
@@ -61,7 +61,7 @@ TEST_CASE("Pattern normalization destructures axioms.") {
         pattern_expr::Capture{0}
       }
     });
-    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).output;
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).get_value().output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 0);
     REQUIRE(normalized.capture_count == 1);
@@ -89,7 +89,7 @@ TEST_CASE("Pattern normalization does not destructure declarations.") {
         pattern_expr::Capture{0}
       }
     });
-    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).output;
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 1).get_value().output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 0);
     REQUIRE(normalized.capture_count == 1);
@@ -128,7 +128,7 @@ TEST_CASE("Pattern normalization turns stray arguments into checks.") {
         arena.argument(0)
       )}
     });
-    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 0).output;
+    auto normalized = normalize_pattern(arena, {.primary_pattern = std::move(pattern)}, 0).get_value().output;
     REQUIRE(normalized.head == head);
     REQUIRE(normalized.stack_arg_count == 1);
     REQUIRE(normalized.capture_count == 0);

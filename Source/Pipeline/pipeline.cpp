@@ -90,6 +90,7 @@ namespace pipeline::compile {
         [&](BadLetType const& err) { report("Bad let type.", err.let); report_eq(err.equation); },
         [&](BadRequirementType const& err) { report("Bad check type.", err.check); report_eq(err.equation); },
         [&](MismatchedLetType const& err) { report("Mismatched let type.", err.let); report_eq(err.equation); },
+        [&](NonmatchableSubclause const& err) { report("Non-matchable subclause head.", err.subclause); },
         [&](MissingCaptureInSubclause const& err) { report("Missing capture in subclause.", err.subclause); },
         [&](MissingCaptureInRule const& err) { report("Missing capture in pattern.", err.rule);  },
         [&](BadApplicationInPattern const& err) { report("Bad application in pattern.", err.rule); },

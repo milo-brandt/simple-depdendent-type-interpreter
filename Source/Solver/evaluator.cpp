@@ -298,7 +298,16 @@ namespace solver::evaluator {
             .primary_pattern = std::move(resolved),
             .subpatterns = std::move(subpatterns)
           }, rule.capture_count);
-          auto& folded = folded_result.output;
+          if(folded_result.holds_error()) {
+            for(std::size_t nonmatchable_subclause : folded_result.get_error().nonmatchable_subclauses) {
+              interface.report_error(error::NonmatchableSubclause{
+                .rule = rule.index(),
+                .subclause = rule.submatches[nonmatchable_subclause].get_submatch().matched_expression.index()
+              });
+            }
+            return;
+          }
+          auto& folded = folded_result.get_value().output;
           auto flat_result = flatten_pattern(interface.arena, std::move(folded));
           if(flat_result.holds_error()) {
             auto& err = flat_result.get_error();
@@ -432,7 +441,7 @@ namespace solver::evaluator {
             .rule = rule,
             .primary_pattern_resolution_locator = std::move(resolved_result.locator),
             .subclause_resolution_locators = std::move(subpattern_locators),
-            .folded_locator = std::move(folded_result.locator),
+            .folded_locator = std::move(folded_result.get_value().locator),
             .flat_locator = std::move(flat_result.get_value().locator),
             .equations_left = 1 + executed.checks.size(),
             .proposed_rule = std::move(proposed_rule)

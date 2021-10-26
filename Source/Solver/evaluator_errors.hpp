@@ -40,6 +40,10 @@ namespace solver::evaluator::error {
     archive_index::Let let;
     EquationErrorInfo equation;
   };
+  struct NonmatchableSubclause {
+    archive_index::Rule rule;
+    archive_index::Expression subclause;
+  };
   struct MissingCaptureInSubclause {
     archive_index::Rule rule;
     archive_index::Expression subclause;
@@ -98,6 +102,7 @@ namespace solver::evaluator::error {
     BadAxiomType,
     BadLetType,
     MismatchedLetType,
+    NonmatchableSubclause,
     MissingCaptureInSubclause,
     MissingCaptureInRule,
     BadApplicationInPattern,

@@ -1,0 +1,25 @@
+# this currently just crashes - need to look out for this issue at resolution time.
+# TEST NAME Subclauses with declarations for heads are rejected.
+# TEST FULL_SET compile_result
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  declare f : Bool -> Bool;
+  f x
+    where x = not y
+  = x;
+
+  f no
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());
