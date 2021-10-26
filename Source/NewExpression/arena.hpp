@@ -59,8 +59,8 @@ namespace new_expression {
     virtual void destroy(WeakExpression, Buffer&) = 0;
     virtual void debug_print(Buffer const&, std::ostream&) = 0;
     virtual void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) = 0;
-    virtual bool all_subexpressions(mdb::function<bool(WeakExpression)>) = 0;
-    virtual OwnedExpression modify_subexpressions(WeakExpression, mdb::function<OwnedExpression(WeakExpression)>) = 0;
+    virtual bool all_subexpressions(Buffer const&, mdb::function<bool(WeakExpression)>) = 0;
+    virtual OwnedExpression modify_subexpressions(Buffer const&, WeakExpression, mdb::function<OwnedExpression(WeakExpression)>) = 0;
     ~DataType() = default;
   };
   struct Apply {
@@ -158,18 +158,25 @@ namespace new_expression {
     }
     template<class Callback>
     void visit_subexpressions_of(Data const& data, Callback&& callback) {
-      data_type_at_index(data.type_index)->all_subexpressions([&callback](WeakExpression expr) {
-        callback(expr);
-        return true;
-      });
+      data_type_at_index(data.type_index)->all_subexpressions(
+        data.buffer,
+        [&callback](WeakExpression expr) {
+          callback(expr);
+          return true;
+        }
+      );
     }
     template<class Callback>
     bool all_subexpressions_of(Data const& data, Callback&& callback) {
-      return data_type_at_index(data.type_index)->all_subexpressions(std::forward<Callback>(callback));
+      return data_type_at_index(data.type_index)->all_subexpressions(
+        data.buffer,
+        std::forward<Callback>(callback)
+      );
     }
     template<class Callback>
     OwnedExpression modify_subexpressions_of(Data const& data, Callback&& callback) {
       return data_type_at_index(data.type_index)->modify_subexpressions(
+        data.buffer,
         weak_expression_of_data(data),
         std::forward<Callback>(callback)
       );

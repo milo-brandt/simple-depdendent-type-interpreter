@@ -12,8 +12,8 @@ namespace {
     void destroy(WeakExpression, Buffer&) {};
     void debug_print(Buffer const&, std::ostream&) {};
     void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) {};
-    bool all_subexpressions(mdb::function<bool(WeakExpression)>) { return true; };
-    OwnedExpression modify_subexpressions(WeakExpression me, mdb::function<OwnedExpression(WeakExpression)>) { return arena.copy(me); };
+    bool all_subexpressions(Buffer const&, mdb::function<bool(WeakExpression)>) { return true; };
+    OwnedExpression modify_subexpressions(Buffer const&, WeakExpression me, mdb::function<OwnedExpression(WeakExpression)>) { return arena.copy(me); };
   };
 }
 TEST_CASE("An arena that has done nothing is empty.") {

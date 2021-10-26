@@ -46,8 +46,8 @@ namespace primitive {
     void pretty_print(new_expression::Buffer const& buffer, std::ostream& o, mdb::function<void(new_expression::WeakExpression)>) {
       o << read_buffer(buffer);
     };
-    bool all_subexpressions(mdb::function<bool(new_expression::WeakExpression)>) { return true; };
-    new_expression::OwnedExpression modify_subexpressions(new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
+    bool all_subexpressions(new_expression::Buffer const&, mdb::function<bool(new_expression::WeakExpression)>) { return true; };
+    new_expression::OwnedExpression modify_subexpressions(new_expression::Buffer const&, new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
   };
   struct StringData : new_expression::DataType {
     new_expression::Arena& arena;
@@ -89,8 +89,8 @@ namespace primitive {
     void pretty_print(new_expression::Buffer const& buffer, std::ostream& o, mdb::function<void(new_expression::WeakExpression)>) {
       o << read_buffer(buffer);
     };
-    bool all_subexpressions(mdb::function<bool(new_expression::WeakExpression)>) { return true; };
-    new_expression::OwnedExpression modify_subexpressions(new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
+    bool all_subexpressions(new_expression::Buffer const&, mdb::function<bool(new_expression::WeakExpression)>) { return true; };
+    new_expression::OwnedExpression modify_subexpressions(new_expression::Buffer const&, new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
   };
 }
 
