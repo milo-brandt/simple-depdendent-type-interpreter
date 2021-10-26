@@ -443,10 +443,10 @@ namespace new_expression {
           bool match_mapped_expression_to_class(OwnedExpression mapped_expr, std::size_t class_index) {
             auto const& class_info = me.conglomerate_class_info[class_index];
             auto class_representative = me.conglomerate_index_of_class(class_index);
+            RAIIDestroyer mapped_destroyer{me.arena, mapped_expr};
             if(ret.conglomerate_map.contains(class_representative)) {
               return ret.conglomerate_map.at(class_representative) == mapped_expr;
             } else {
-              RAIIDestroyer mapped_destroyer{me.arena, mapped_expr};
               ret.conglomerate_map.insert(std::make_pair(class_representative, me.arena.copy(mapped_expr)));
               if(auto const* axiomatic = std::get_if<conglomerate_status::Axiomatic>(&class_info.status)) {
                 auto unfolded = unfold(me.arena, mapped_expr);
@@ -572,7 +572,6 @@ namespace new_expression {
           }
         };
         Detail detail{*this, target, std::move(request)};
-        RAIIDestroyer destroyer{arena, detail.map_only_constraints};
         if(detail.run()) {
           return std::move(detail.ret);
         } else {

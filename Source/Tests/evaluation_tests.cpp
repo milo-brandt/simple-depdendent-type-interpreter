@@ -1014,3 +1014,46 @@ TEST_CASE("Evaluation contexts work properly with rules not consuming every argu
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("Evaluation context can map context in which $0 = $1 to itself") {
+  Arena arena;
+  {
+    RuleCollector rules(arena);
+    EvaluationContext evaluator(arena, rules);
+    auto equal_err = evaluator.assume_equal(
+      arena.argument(0), arena.argument(1)
+    );
+    auto reduced_arg = evaluator.reduce(arena.argument(0));
+    SECTION("A request with no redundancy is handled") {
+      MapRequest request{
+        .constraints = mdb::make_vector(
+          MapRequestConstraint{
+            .source = arena.copy(reduced_arg),
+            .target = arena.copy(reduced_arg)
+          }
+        )
+      };
+      auto attempt = evaluator.try_to_map_to(evaluator, std::move(request));
+      REQUIRE(attempt);
+      destroy_from_arena(arena, reduced_arg, *attempt);
+    }
+    SECTION("A request with redundancy is handled") {
+      MapRequest request{
+        .constraints = mdb::make_vector(
+          MapRequestConstraint{
+            .source = arena.copy(reduced_arg),
+            .target = arena.copy(reduced_arg)
+          },
+          MapRequestConstraint{
+            .source = arena.copy(reduced_arg),
+            .target = arena.copy(reduced_arg)
+          }
+        )
+      };
+      auto attempt = evaluator.try_to_map_to(evaluator, std::move(request));
+      REQUIRE(attempt);
+      destroy_from_arena(arena, reduced_arg, *attempt);
+    }
+  }
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}

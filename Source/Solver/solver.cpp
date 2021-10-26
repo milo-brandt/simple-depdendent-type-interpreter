@@ -118,7 +118,7 @@ namespace solver {
     std::optional<ExtractedRule> get_rule_from_equation_lhs(WeakExpression lhs, WeakExpression rhs, Stack stack, SolverInterface& interface) {
       if(auto map = is_term_in_definition_form(interface.arena, lhs, stack, interface.get_definable_info)) {
         if(auto replacement = get_replacement_from(*map, rhs, interface)) {
-          destroy_from_arena(interface.arena, *map);
+          destroy_from_arena(interface.arena, map->map);
           return ExtractedRule{
             .head = map->head,
             .arg_count = map->arg_count,
