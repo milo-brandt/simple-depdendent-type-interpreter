@@ -1,9 +1,0 @@
-block {
-  axiom Nat : Type;
-  axiom zero : Nat;
-
-  declare div_2 : Nat -> Nat;
-  div_2 zero = _;
-
-  Nat
-}

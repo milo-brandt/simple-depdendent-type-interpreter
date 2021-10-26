@@ -1,3 +1,7 @@
+# TEST BEGIN
+# TEST NAME A function's value cannot be deduced pointwise.
+# TEST FULL_SET compile_result
+
 block {
   axiom Id : (T : Type) -> T -> T -> Type;
   axiom refl : (T : Type) -> (x : T) -> Id T x x;
@@ -14,3 +18,8 @@ block {
 
   fn yes
 }
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

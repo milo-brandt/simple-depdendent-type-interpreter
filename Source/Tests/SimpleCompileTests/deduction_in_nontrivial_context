@@ -1,0 +1,18 @@
+# TEST BEGIN
+# TEST NAME A hole in a context where $0 = zero can be deduced.
+# TEST MUST_COMPILE
+
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+
+  axiom Fam : Nat -> Type;
+  axiom fam : (n : Nat) -> Fam n;
+
+  declare f : Nat -> Fam zero;
+  f zero = fam _;
+
+  verify f zero = fam zero;
+
+  Nat
+}

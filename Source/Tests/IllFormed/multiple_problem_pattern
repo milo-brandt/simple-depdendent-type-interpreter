@@ -1,0 +1,23 @@
+# TEST BEGIN
+# TEST NAME A pattern with bad double captures, bad check captures, and bad replacement types reports errors.
+# TEST FULL_SET compile_result
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  declare f : Bool -> Bool -> Bool -> Bool;
+  f x x (not x) = Bool; # this test causes three simultaneous errors.
+
+  f yes yes
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

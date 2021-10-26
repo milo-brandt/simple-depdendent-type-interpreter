@@ -1,0 +1,23 @@
+# TEST BEGIN
+# TEST NAME A pattern with unreachable captures does not compile.
+# TEST FULL_SET compile_result
+
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  declare f : Bool -> Bool;
+  f (not x) = x;
+
+  f yes
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

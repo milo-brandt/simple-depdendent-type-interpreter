@@ -1,0 +1,25 @@
+# TEST BEGIN
+# TEST NAME A pattern with captures only reachable through a subclause which requires them is not accepted.
+# TEST FULL_SET compile_result
+
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  declare pred : Nat -> Nat;
+  pred zero = zero;
+  pred (succ n) = n;
+
+  declare f : Nat -> Nat;
+  f (pred x)
+    where pred x = succ x
+  = x;
+
+  f zero
+}
+
+# TEST DEFINITION
+
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());

@@ -1,3 +1,7 @@
+# TEST BEGIN
+# TEST NAME A very large program can be compiled.
+# TEST MUST_COMPILE
+
 block {
   axiom Nat : Type;
   axiom zero : Nat;
@@ -2906,6 +2910,6 @@ block {
   declare dmk : Nat -> Nat -> Nat;
   dmk zero x = x;
   dmk (succ x) y = succ (dmk x y);
-  
+
   a
 }

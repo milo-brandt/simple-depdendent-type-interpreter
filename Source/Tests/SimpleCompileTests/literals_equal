@@ -1,3 +1,7 @@
+# TEST BEGIN
+# TEST NAME Equal literals are treated as equal values.
+# TEST MUST_COMPILE
+
 block {
   axiom Id : (T : Type) -> T -> T -> Type;
   axiom refl : (T : Type) -> (x : T) -> Id T x x;

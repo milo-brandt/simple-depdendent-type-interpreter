@@ -1,3 +1,7 @@
+# TEST BEGIN
+# TEST NAME A program implementing well-founded induction and proving the < : Ord Nat is well-ordered functions appropriately.
+# TEST MUST_COMPILE
+
 block {
   axiom Id : (T : Type) -> T -> T -> Type;
   axiom refl : (T : Type) -> (x : T) -> Id T x x;
@@ -154,10 +158,13 @@ block {
     succ m -> \y.prev (mod y (succ m)) (mod_less y m) (succ m);
   });
 
-
-  gcd
+  verify gcd zero (succ \\ succ \\ succ zero) = succ \\ succ \\ succ zero;
+  verify gcd (succ \\ succ \\ succ \\ succ \\ succ zero) (succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) = succ zero;
+  verify gcd
     (succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) #24
     (succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ \\ succ zero) #9
-  # should give 3
+    = succ \\ succ \\ succ zero; #3
+  verify gcd zero zero = zero;
 
+  zero
 }
