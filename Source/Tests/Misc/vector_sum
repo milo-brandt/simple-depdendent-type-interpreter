@@ -1,0 +1,16 @@
+# TEST BEGIN
+# TEST NAME A definition destructuring vector literals compiles.
+# TEST MUST_COMPILE
+
+block {
+  declare sum : Vector U64 -> U64;
+  sum (cons_vec _ head tail) = add head (sum tail);
+  sum (empty_vec _) = 0;
+
+  verify sum [1, 2] = 3;
+  verify sum [17] = 17;
+  verify sum [] = 0;
+  verify sum [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] = 55;
+
+  0
+}

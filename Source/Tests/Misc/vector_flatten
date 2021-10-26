@@ -1,0 +1,22 @@
+# TEST BEGIN
+# TEST NAME A definition destructuring vector literals compiles to define higher level operations.
+# TEST MUST_COMPILE
+
+block {
+  declare append : Vector U64 -> Vector U64 -> Vector U64;
+  append (cons_vec _ head tail) rhs = cons_vec _ head \\ append tail rhs;
+  append (empty_vec _) rhs = rhs;
+
+  verify append [] [1] = [1];
+  verify append [2] [] = [2];
+  verify append [1, 2] [3, 4] = [1, 2, 3, 4];
+
+  declare flatten : Vector (Vector U64) -> Vector U64;
+  flatten (cons_vec _ head tail) = append head (flatten tail);
+  flatten (empty_vec _) = [];
+
+  verify flatten [[1, 2], [3], [4, 5]] = [1, 2, 3, 4, 5];
+  verify flatten [[1]] = [1];
+
+  0
+}
