@@ -654,6 +654,7 @@ namespace interactive {
       value->result.type = ctx.reduce(std::move(value->result.type));
       std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
       std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
+      destroy_from_arena(arena, *value);
     } else {
       std::cout << result.get_error() << "\n";
     }
