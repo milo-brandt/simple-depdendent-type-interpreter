@@ -10,6 +10,18 @@ void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpressi
 void debug_print_expr(new_expression::Arena& arena, new_expression::OwnedExpression const& expr) {
   std::cout << user::raw_format(arena, expr) << "\n";
 }
+std::uint64_t exponent(std::uint64_t base, std::uint64_t power) {
+  std::uint64_t ret = 1;
+  std::uint64_t pow = 1;
+  while(pow <= power) {
+    if(pow & power) {
+      ret *= base;
+    }
+    base *= base;
+    pow *= 2;
+  }
+  return ret;
+}
 
 #ifdef COMPILE_FOR_EMSCRIPTEN
 
@@ -187,12 +199,12 @@ int main(int argc, char** argv) {
           }
         }
       });
-      auto substr = environment.declare("substr", "U64 -> U64 -> String -> String");
+      auto sub_u64 = environment.declare("sub", "U64 -> U64 -> U64");
       context.rule_collector.add_rule({
         .pattern = {
-          .head = arena.copy(substr),
+          .head = arena.copy(sub_u64),
           .body = {
-            .args_captured = 3,
+            .args_captured = 2,
             .steps = mdb::make_vector<new_expression::PatternStep>(
               new_expression::PullArgument{},
               new_expression::PatternMatch{
@@ -213,16 +225,129 @@ int main(int argc, char** argv) {
               new_expression::DataCheck{
                 .capture_index = 3,
                 .expected_type = environment.u64()->type_index
+              }
+            )
+          }
+        },
+        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+          [&](std::span<new_expression::WeakExpression> inputs) {
+            return arena.apply(
+              arena.copy(environment.u64_head()),
+              environment.u64()->make_expression(
+                environment.u64()->read_data(arena.get_data(inputs[1])) - environment.u64()->read_data(arena.get_data(inputs[3]))
+              )
+            );
+          }
+        }
+      });
+      auto exp_u64 = environment.declare("exp", "U64 -> U64 -> U64");
+      context.rule_collector.add_rule({
+        .pattern = {
+          .head = arena.copy(exp_u64),
+          .body = {
+            .args_captured = 2,
+            .steps = mdb::make_vector<new_expression::PatternStep>(
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(0),
+                .expected_head = arena.copy(environment.u64_head()),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 1,
+                .expected_type = environment.u64()->type_index
               },
               new_expression::PullArgument{},
               new_expression::PatternMatch{
-                .substitution = arena.argument(4),
+                .substitution = arena.argument(2),
+                .expected_head = arena.copy(environment.u64_head()),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 3,
+                .expected_type = environment.u64()->type_index
+              }
+            )
+          }
+        },
+        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+          [&](std::span<new_expression::WeakExpression> inputs) {
+            return arena.apply(
+              arena.copy(environment.u64_head()),
+              environment.u64()->make_expression(
+                exponent(environment.u64()->read_data(arena.get_data(inputs[1])), environment.u64()->read_data(arena.get_data(inputs[3])))
+              )
+            );
+          }
+        }
+      });
+      auto len = environment.declare("len", "String -> U64");
+      context.rule_collector.add_rule({
+        .pattern = {
+          .head = arena.copy(len),
+          .body = {
+            .args_captured = 1,
+            .steps = mdb::make_vector<new_expression::PatternStep>(
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(0),
+                .expected_head = arena.copy(environment.u64_head()),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 1,
+                .expected_type = environment.str()->type_index
+              }
+            )
+          }
+        },
+        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+          [&](std::span<new_expression::WeakExpression> inputs) {
+            return arena.apply(
+              arena.copy(environment.u64_head()),
+              environment.u64()->make_expression(
+                environment.str()->read_data(arena.get_data(inputs[1])).size()
+              )
+            );
+          }
+        }
+      });
+      auto substr = environment.declare("substr", "String -> U64 -> U64 -> String");
+      context.rule_collector.add_rule({
+        .pattern = {
+          .head = arena.copy(substr),
+          .body = {
+            .args_captured = 3,
+            .steps = mdb::make_vector<new_expression::PatternStep>(
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(0),
                 .expected_head = arena.copy(environment.str_head()),
                 .args_captured = 1
               },
               new_expression::DataCheck{
-                .capture_index = 5,
+                .capture_index = 1,
                 .expected_type = environment.str()->type_index
+              },
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(2),
+                .expected_head = arena.copy(environment.u64_head()),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 3,
+                .expected_type = environment.u64()->type_index
+              },
+              new_expression::PullArgument{},
+              new_expression::PatternMatch{
+                .substitution = arena.argument(4),
+                .expected_head = arena.copy(environment.u64_head()),
+                .args_captured = 1
+              },
+              new_expression::DataCheck{
+                .capture_index = 5,
+                .expected_type = environment.u64()->type_index
               }
             )
           }
@@ -232,9 +357,9 @@ int main(int argc, char** argv) {
             return arena.apply(
               arena.copy(environment.str_head()),
               environment.str()->make_expression(
-                environment.str()->read_data(arena.get_data(inputs[5])).substr(
-                  environment.u64()->read_data(arena.get_data(inputs[1])),
-                  environment.u64()->read_data(arena.get_data(inputs[3]))
+                environment.str()->read_data(arena.get_data(inputs[1])).substr(
+                  environment.u64()->read_data(arena.get_data(inputs[3])),
+                  environment.u64()->read_data(arena.get_data(inputs[5]))
                 )
               )
             );
@@ -242,7 +367,7 @@ int main(int argc, char** argv) {
         }
       });
       environment.debug_parse(source);
-      destroy_from_arena(arena, add_u64, mul_u64, substr);
+      destroy_from_arena(arena, add_u64, mul_u64, sub_u64, exp_u64, len, substr);
     }
     arena.clear_orphaned_expressions();
     if(!arena.empty()) {
