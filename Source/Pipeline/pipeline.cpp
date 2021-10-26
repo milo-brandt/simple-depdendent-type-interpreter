@@ -111,7 +111,7 @@ namespace pipeline::compile {
     destroy_from_arena(arena, resolve_info.embeds);
   }
   void destroy_from_arena(new_expression::Arena& arena, EvaluateInfo& evaluate_info) {
-    destroy_from_arena(arena, (ResolveInfo&)evaluate_info);
+    destroy_from_arena(arena, evaluate_info.result, (ResolveInfo&)evaluate_info);
   }
 
 }

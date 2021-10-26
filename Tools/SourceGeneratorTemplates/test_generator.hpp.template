@@ -31,9 +31,10 @@ TEST_CASE("{{ test.name }}", "[full_case]{% if test.tags %}{% for tag in test.ta
       INFO(error_message.str())
       FAIL("Failed while compiling variable {{definition.var}}");
     }
-    auto& {{definition.var}} = {{definition.var}}_full.get_value().result;
-    {{definition.var}}.value = reduction_context.reduce(arena.copy({{definition.var}}.value));
-    {{definition.var}}.type = reduction_context.reduce(arena.copy({{definition.var}}.type));
+    new_expression::TypedValue {{definition.var}} {
+      .value = reduction_context.reduce(arena.copy({{definition.var}}_full.get_value().result.value)),
+      .type = reduction_context.reduce(arena.copy({{definition.var}}_full.get_value().result.type))
+    };
     destroy_from_arena(arena, {{definition.var}}_full.get_value());
     {%- elif definition.kind == "FULL_SET" %}
     auto {{definition.var}} = environment.full_compile(R"#--#({{ definition.source }})#--#");

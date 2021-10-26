@@ -86,6 +86,7 @@ interactive::Environment setup_enviroment(new_expression::Arena& arena) {
       }
     }
   });
+  destroy_from_arena(arena, add_u64, mul_u64);
   return environment;
 
   /*
