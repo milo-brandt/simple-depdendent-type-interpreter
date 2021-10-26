@@ -5,7 +5,11 @@
 #include "../Utility/result.hpp"
 
 namespace compiler::new_instruction {
-  located_output::Program make_instructions(expression_parser::resolved::archive_part::Expression const& expression);
+  struct InstructionContext {
+    std::size_t empty_vec_embed_index = (std::size_t)-1;
+    std::size_t cons_vec_embed_index = (std::size_t)-1;
+  };
+  located_output::Program make_instructions(expression_parser::resolved::archive_part::Expression const& expression, InstructionContext const& context = {});
 }
 
 #endif

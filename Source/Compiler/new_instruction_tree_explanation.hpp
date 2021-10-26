@@ -23,7 +23,7 @@ namespace compiler::new_instruction {
     return lhs.kind == rhs.kind && lhs.index == rhs.index;
   }
   enum class Primitive {
-    type, arrow, empty_vec, push_vec
+    type, arrow
   };
   inline std::ostream& operator<<(std::ostream& o, Primitive primitive) {
     switch(primitive) {

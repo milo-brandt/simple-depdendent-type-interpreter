@@ -4,7 +4,8 @@
 namespace compiler::new_instruction {
   namespace {
     namespace resolved_archive = expression_parser::resolved::archive_part;
-    struct InstructionContext {
+    struct InstructionDetail {
+      InstructionContext const& context;
       std::vector<std::uint64_t> locals_stack;
       std::uint64_t output_stack_size = 0;
       std::vector<located_output::Command> commands;
@@ -80,7 +81,7 @@ namespace compiler::new_instruction {
       located_output::Expression compile(resolved_archive::Expression const& expression);
       void compile(resolved_archive::Command const& command);
     };
-    located_output::Expression InstructionContext::compile(resolved_archive::Expression const& expression) {
+    located_output::Expression InstructionDetail::compile(resolved_archive::Expression const& expression) {
       return expression.visit(mdb::overloaded{
         [&](resolved_archive::Apply const& apply) -> located_output::Expression {
           return located_output::Apply {
@@ -211,16 +212,19 @@ namespace compiler::new_instruction {
           };
         },
         [&](resolved_archive::VectorLiteral const& vector_literal) -> located_output::Expression {
+          if(context.empty_vec_embed_index == (std::size_t)-1 || context.cons_vec_embed_index == (std::size_t)-1) std::terminate(); //vector literal not hooked up!
           auto vector_type = result_of(located_output::DeclareHole{
             .type = type({ExplanationKind::vector_type_type, vector_literal.index()}),
             .source = {ExplanationKind::vector_type, vector_literal.index()}
           }, {ExplanationKind::vector_type_local, vector_literal.index()});
           located_output::Expression ret = located_output::Apply{
-            .lhs = located_output::PrimitiveExpression{Primitive::empty_vec, {ExplanationKind::vector_empty, vector_literal.index()}},
+            .lhs = located_output::Embed{context.empty_vec_embed_index, {ExplanationKind::vector_empty, vector_literal.index()}},
             .rhs = vector_type,
             .source = {ExplanationKind::vector_empty_typed, vector_literal.index()}
           };
-          for(auto const& element : vector_literal.elements) {
+          for(std::size_t i = vector_literal.elements.size(); i > 0;) {
+            --i; //we are iterating backwards
+            auto const& element = vector_literal.elements[i];
             auto element_value = result_of(located_output::Let{
               .value = compile(element),
               .type = vector_type,
@@ -229,16 +233,18 @@ namespace compiler::new_instruction {
             ret = located_output::Apply{
               .lhs = located_output::Apply{
                 .lhs = located_output::Apply{
-                  .lhs = located_output::PrimitiveExpression{Primitive::push_vec, {ExplanationKind::vector_push, element.index()}},
+                  .lhs = located_output::Embed{context.cons_vec_embed_index, {ExplanationKind::vector_push, element.index()}},
                   .rhs = vector_type,
                   .source = {ExplanationKind::vector_push_typed, element.index()}
                 },
-                .rhs = std::move(ret),
+                .rhs = std::move(element_value),
                 .source = {ExplanationKind::vector_push_vector, element.index()}
               },
-              .rhs = std::move(element_value),
+              .rhs = std::move(ret),
               .source = {ExplanationKind::vector_push_element, element.index()}
             };
+          }
+          for(auto const& element : vector_literal.elements) {
           }
           return ret;
         },
@@ -263,7 +269,7 @@ namespace compiler::new_instruction {
           auto match_result_index = match_result.local_index;
           for(std::size_t i = 0; i < match.arm_expressions.size(); ++i) {
             struct Detail {
-              InstructionContext& me;
+              InstructionDetail& me;
               std::size_t local_base;
               located_output::Pattern get_pattern(resolved_archive::Pattern const& pattern) {
                 return pattern.visit(mdb::overloaded{
@@ -330,7 +336,7 @@ namespace compiler::new_instruction {
         }
       });
     }
-    void InstructionContext::compile(resolved_archive::Command const& command) {
+    void InstructionDetail::compile(resolved_archive::Command const& command) {
       return command.visit(mdb::overloaded{
         [&](resolved_archive::Declare const& declare) {
           local_result_of(located_output::Declare{
@@ -361,7 +367,7 @@ namespace compiler::new_instruction {
         },
         [&](resolved_archive::Rule const& rule) {
           struct Detail {
-            InstructionContext& me;
+            InstructionDetail& me;
             std::size_t local_base;
             located_output::Pattern get_pattern(resolved_archive::Pattern const& pattern) {
               return pattern.visit(mdb::overloaded{
@@ -452,8 +458,8 @@ namespace compiler::new_instruction {
       });
     }
   }
-  located_output::Program make_instructions(expression_parser::resolved::archive_part::Expression const& expression) {
-    InstructionContext detail;
+  located_output::Program make_instructions(expression_parser::resolved::archive_part::Expression const& expression, InstructionContext const& context) {
+    InstructionDetail detail{.context = context};
     return detail.as_program(detail.compile(expression));
   }
 }

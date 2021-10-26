@@ -76,6 +76,10 @@ namespace interactive {
     new_expression::OwnedExpression str_type;
     new_expression::OwnedExpression str_head;
     primitive::StringData* str;
+    new_expression::OwnedExpression vec_type;
+    new_expression::OwnedExpression empty_vec;
+    new_expression::OwnedExpression cons_vec;
+    new_expression::OwnedExpression parse_as_type(std::string_view str);
     void name_external(std::string name, new_expression::WeakExpression expr) {
       externals_to_names.set(expr, name);
       names_to_values.insert(std::make_pair(name, new_expression::TypedValue{
@@ -83,7 +87,13 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       }));
     }
-    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena), u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)), str_type(arena.axiom()), str_head(arena.axiom()), str(primitive::StringData::register_on(arena)) {
+    new_expression::TypedValue get_typed(new_expression::WeakExpression expr) {
+      return new_expression::TypedValue{
+        .value = arena.copy(expr),
+        .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
+      };
+    }
+    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena), u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)), str_type(arena.axiom()), str_head(arena.axiom()), str(primitive::StringData::register_on(arena)), vec_type(arena.axiom()), empty_vec(arena.axiom()), cons_vec(arena.axiom()) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
       context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
@@ -92,9 +102,22 @@ namespace interactive {
       context.type_collector.type_of_primitive.set(str_type, arena.copy(context.primitives.type));
       name_external("String", str_type);
       externals_to_names.set(str_head, "str"); //this is internal, not to be exposed to user
+      /*
+        This is an ugly hack to allow use to use "parse_as_type" before the vector types are actually set up
+      */
+      context.type_collector.type_of_primitive.set(vec_type, arena.copy(context.primitives.type));
+      context.type_collector.type_of_primitive.set(empty_vec, arena.copy(context.primitives.type));
+      context.type_collector.type_of_primitive.set(cons_vec, arena.copy(context.primitives.type));
+
+      context.type_collector.type_of_primitive.set(vec_type, parse_as_type("Type -> Type"));
+      name_external("Vector", vec_type);
+      context.type_collector.type_of_primitive.set(empty_vec, parse_as_type("(T : Type) -> Vector T"));
+      name_external("empty_vec", empty_vec);
+      context.type_collector.type_of_primitive.set(cons_vec, parse_as_type("(T : Type)  -> T -> Vector T -> Vector T"));
+      name_external("cons_vec", cons_vec);
     }
     ~Impl() {
-      destroy_from_arena(arena, names_to_values, u64_type, u64_head, str_type, str_head);
+      destroy_from_arena(arena, names_to_values, u64_type, u64_head, str_type, str_head, vec_type, empty_vec, cons_vec);
     }
     mdb::Result<LexInfo, std::string> lex_code(SourceInfo input) {
       expression_parser::LexerInfo lexer_info {
@@ -149,7 +172,10 @@ namespace interactive {
       }
     }
     mdb::Result<ResolveInfo, std::string> resolve(ParseInfo input) {
-      std::vector<new_expression::TypedValue> embeds;
+      auto embeds = mdb::make_vector<new_expression::TypedValue>(
+        get_typed(empty_vec),
+        get_typed(cons_vec)
+      );
       std::unordered_map<std::string, std::uint64_t> names_to_embeds;
       auto resolved = expression_parser::resolve(expression_parser::resolved::ContextLambda {
         [&](std::string_view str) -> std::optional<std::uint64_t> { //lookup
@@ -221,7 +247,10 @@ namespace interactive {
       }
     }
     EvaluateInfo evaluate(ResolveInfo input) {
-      auto instructions = compiler::new_instruction::make_instructions(input.parser_resolved.root());
+      auto instructions = compiler::new_instruction::make_instructions(input.parser_resolved.root(), {
+        .empty_vec_embed_index = 0,
+        .cons_vec_embed_index = 1
+      });
       auto instruction_output = archive(std::move(instructions.output));
       auto instruction_locator = archive(std::move(instructions.locator));
       solver::Manager manager(context);
@@ -258,27 +287,6 @@ namespace interactive {
         [this](auto last) { return read_code(std::move(last)); },
         [this](auto last) { return resolve(std::move(last)); }
       ), [this](auto last) { return evaluate(std::move(last)); });
-    }
-    new_expression::OwnedExpression parse_as_type(std::string_view str) {
-      auto result = full_compile(str);
-      if(result.holds_error()) {
-        std::cerr << result.get_error() << "\n";
-        std::terminate();
-      }
-      auto& value = result.get_value();
-      if(!value.is_okay()) {
-        value.report_errors_to(std::cerr, externals_to_names);
-        std::terminate();
-      }
-      new_expression::EvaluationContext ctx{arena, context.rule_collector};
-      value.result.type = ctx.reduce(std::move(value.result.type));
-      if(value.result.type != context.primitives.type) {
-        std::cerr << "Type of declaration type is not type!\n";
-        std::terminate();
-      }
-      auto ret = arena.copy(value.result.value);
-      destroy_from_arena(arena, value);
-      return ret;
     }
     new_expression::OwnedExpression declare_of_type(std::string var_name, std::string_view str, bool axiom) {
       auto type = parse_as_type(str);
@@ -389,6 +397,27 @@ namespace interactive {
 
     However, for now, the project has a hacked-together front-end. :(
   */
+  new_expression::OwnedExpression Environment::Impl::parse_as_type(std::string_view str) {
+    auto result = full_compile(str);
+    if(result.holds_error()) {
+      std::cerr << result.get_error() << "\n";
+      std::terminate();
+    }
+    auto& value = result.get_value();
+    if(!value.is_okay()) {
+      value.report_errors_to(std::cerr, externals_to_names);
+      std::terminate();
+    }
+    new_expression::EvaluationContext ctx{arena, context.rule_collector};
+    value.result.type = ctx.reduce(std::move(value.result.type));
+    if(value.result.type != context.primitives.type) {
+      std::cerr << "Type of declaration type is not type!\n";
+      std::terminate();
+    }
+    auto ret = arena.copy(value.result.value);
+    destroy_from_arena(arena, value);
+    return ret;
+  }
 
   Environment::Environment(new_expression::Arena& arena):impl(std::make_unique<Impl>(arena)) {}
   Environment::Environment(Environment&&) = default;

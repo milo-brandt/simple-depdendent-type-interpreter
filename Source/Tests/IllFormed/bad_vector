@@ -1,3 +1,4 @@
+# TEST BEGIN
 # TEST NAME A vector with inconsistent types is rejected.
 # TEST FULL_SET compile_result
 
@@ -5,5 +6,5 @@
 
 # TEST DEFINITION
 
-REQUIRE(compile_result.has_result()); //no syntax errors
-REQUIRE(!compile_result.is_fully_solved());
+REQUIRE(compile_result.holds_success());
+REQUIRE(!compile_result.get_value().is_okay());
