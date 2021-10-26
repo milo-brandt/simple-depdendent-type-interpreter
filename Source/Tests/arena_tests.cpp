@@ -16,6 +16,47 @@ namespace {
     OwnedExpression modify_subexpressions(WeakExpression me, mdb::function<OwnedExpression(WeakExpression)>) { return arena.copy(me); };
   };
 }
+TEST_CASE("An arena that has done nothing is empty.") {
+  Arena arena;
+  REQUIRE(arena.empty());
+}
+TEST_CASE("An arena is empty after creating and dropping an axiom.") {
+  Arena arena;
+  auto a = arena.axiom();
+  arena.drop(std::move(a));
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("An arena that has a living axiom is not empty.") {
+  Arena arena;
+  auto a = arena.axiom();
+  REQUIRE(!arena.empty());
+  arena.drop(std::move(a));
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("An arena that has a living axiom is not empty, even if its first allocation was destroyed.") {
+  Arena arena;
+  auto a = arena.axiom();
+  auto b = arena.axiom();
+  REQUIRE(!arena.empty());
+  arena.drop(std::move(a));
+  arena.clear_orphaned_expressions();
+  REQUIRE(!arena.empty());
+  arena.drop(std::move(b));
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("An arena is empty after creating and dropping an application of axioms.") {
+  Arena arena;
+  auto a1 = arena.axiom();
+  auto a2 = arena.axiom();
+  auto app = arena.apply(std::move(a1), std::move(a2));
+  arena.drop(std::move(app));
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+
 TEST_CASE("Arenas give equal indices to equal applications.") {
   Arena arena;
   auto a1 = arena.axiom();

@@ -9,9 +9,11 @@ namespace solver {
   struct EquationSolved {};
   struct EquationStalled {
     EquationErrorInfo error;
+    static constexpr auto part_info = mdb::parts::simple<1>;
   };
   struct EquationFailed {
     mdb::Future<EquationErrorInfo> error;
+    static constexpr auto part_info = mdb::parts::simple<1>;
   };
   using EquationResult = std::variant<EquationFailed, EquationStalled, EquationSolved>;
 

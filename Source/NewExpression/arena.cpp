@@ -76,11 +76,25 @@ namespace new_expression {
         for(std::byte* allocation : allocations) {
           auto size = *(std::size_t*)allocation;
           auto begin = (ArenaEntry*)(allocation + sizeof(std::size_t));
-          for(std::size_t i = 0; i < size; ++i) {
+          for(std::size_t i = 0; i < size; ++i, ++begin) {
+            if(begin == uninit_begin) break; //avoid unitialized region
             if(begin->discriminator != discriminator_free) return false;
           }
         }
         return true;
+      }
+      template<class Callback>
+      void for_each(Callback&& callback) {
+        for(std::byte* allocation : allocations) {
+          auto size = *(std::size_t*)allocation;
+          auto begin = (ArenaEntry*)(allocation + sizeof(std::size_t));
+          for(std::size_t i = 0; i < size; ++i, ++begin) {
+            if(begin == uninit_begin) break; //avoid unitialized region
+            if(begin->discriminator != discriminator_free) {
+              callback(*begin);
+            }
+          }
+        }
       }
       void erase(ArenaEntry* ptr) {
         if(ptr->reference_count != 0) std::terminate();
@@ -410,21 +424,19 @@ namespace new_expression {
   void Arena::drop(OwnedExpression&& expr) { return impl->drop(std::move(expr)); }
   void Arena::deref_weak(WeakExpression expr) { impl->deref_entry((ArenaEntry*)expr.data()); }
   void Arena::debug_dump() const {
-    std::cout << "No.\n";/*
-    std::size_t index = 0;
-    for(auto& entry : impl->entries) {
-      std::cout << index++ << " [RefCt " << entry.reference_count << "]: ";
+    impl->pool.for_each([](ArenaEntry& entry) {
+      std::cout << &entry << " [RefCt " << entry.reference_count << "]: ";
       switch(entry.discriminator) {
-        case 0: std::cout << "Apply " << entry.data.apply.lhs.index() << " , " << entry.data.apply.rhs.index() << "\n"; break;
+        case 0: std::cout << "Apply " << entry.data.apply.lhs.data() << " , " << entry.data.apply.rhs.data() << "\n"; break;
         case 1: std::cout << "Axiom\n"; break;
         case 2: std::cout << "Declaration\n"; break;
         case 3: std::cout << "Data\n"; break;
         case 4: std::cout << "Argument " << entry.data.argument.index << "\n"; break;
         case 5: std::cout << "Conglomerate " << entry.data.conglomerate.index << "\n"; break;
         case 6: std::cout << "Free List " << entry.data.free_list_entry.next_free_entry << "\n"; break;
-        default: std::terminate();
+        default: std::cout << "Corrupted entry!\n"; break;
       }
-    }*/
+    });
   }
   WeakExpression Arena::weak_expression_of_data(Data const& data) {
     return WeakExpression{ //move the pointer backwards to the entry

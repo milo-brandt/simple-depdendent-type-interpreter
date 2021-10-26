@@ -84,11 +84,13 @@ namespace solver {
     bool primary_failed;
     std::vector<Equation> failures;
     std::vector<Equation> stalls;
+    static constexpr auto part_info = mdb::parts::simple<4>;
   };
   struct IndeterminateDefinition {
     new_expression::WeakExpression head;
     std::size_t arg_count;
     new_expression::OwnedExpression replacement;
+    static constexpr auto part_info = mdb::parts::simple<3>;
   };
   struct StackHandle {
     std::size_t index;

@@ -101,8 +101,8 @@ int main(int argc, char** argv) {
       }
     }
     std::string_view source = line;
-    interactive::Environment environment;
-    auto& arena = environment.arena();
+    new_expression::Arena arena;
+    interactive::Environment environment(arena);
     auto& context = environment.context();
     auto add_u64 = environment.declare("add", "U64 -> U64 -> U64");
     context.rule_collector.add_rule({

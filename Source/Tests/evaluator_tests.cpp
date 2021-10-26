@@ -17,11 +17,14 @@ auto make_embeder(new_expression::Arena& arena, new_expression::WeakExpression (
   };
 }
 template<class Embed>
-solver::ExternalInterfaceParts interface_from_embed(Embed embed, bool& okay_flag) {
+solver::ExternalInterfaceParts interface_from_embed(new_expression::Arena& arena, Embed embed, bool& okay_flag) {
   return solver::ExternalInterfaceParts{
     .explain_variable = [](auto&&...){},
     .embed = std::move(embed),
-    .report_error = [&](auto&&){ okay_flag = false; }
+    .report_error = [&](auto&& v){
+      destroy_from_arena(arena, v);
+      okay_flag = false;
+    }
   };
 }
 TEST_CASE("The evaluator can handle simple programs") {
@@ -50,7 +53,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);
@@ -82,7 +85,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);
@@ -106,7 +109,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       auto expected_value = arena.apply(
@@ -147,7 +150,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);
@@ -181,7 +184,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);
@@ -206,7 +209,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);
@@ -230,7 +233,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(!okay);
@@ -312,7 +315,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          make_embeder(arena, embeds), okay
+          arena, make_embeder(arena, embeds), okay
         ))
       );
       auto expected_value = arena.apply(
@@ -354,7 +357,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);
@@ -420,7 +423,7 @@ TEST_CASE("The evaluator can handle simple programs") {
       auto ret = solver::evaluator::evaluate(
         program_archive.root().get_program_root(),
         manager.get_evaluator_interface(interface_from_embed(
-          simple_embed, okay
+          arena, simple_embed, okay
         ))
       );
       REQUIRE(okay);

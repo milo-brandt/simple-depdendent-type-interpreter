@@ -1,9 +1,8 @@
 #include "test_utility.hpp"
 #include "../Utility/vector_utility.hpp"
 
-interactive::Environment setup_enviroment() {
-  interactive::Environment environment;
-  auto& arena = environment.arena();
+interactive::Environment setup_enviroment(new_expression::Arena& arena) {
+  interactive::Environment environment(arena);
   auto& context = environment.context();
   auto add_u64 = environment.declare("add", "U64 -> U64 -> U64");
   context.rule_collector.add_rule({

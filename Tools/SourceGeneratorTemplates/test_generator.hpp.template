@@ -12,51 +12,66 @@
 {{ test.preamble.body }}
 {%- endcall %}
 {%- endif %}
-TEST_CASE("{{ test.name }}"{% if test.tags -%}
-, "{% for tag in test.tags %}[{{tag}}]{% endfor %}"
-{%- endif %}) {
+TEST_CASE("{{ test.name }}", "[full_case]{% if test.tags %}{% for tag in test.tags %}[{{tag}}]{% endfor %}{% endif %}") {
   INFO("Test case from file: {{ test.filename }}");
-  auto environment = setup_enviroment();
-  new_expression::EvaluationContext reduction_context{environment.arena(), environment.context().rule_collector};
-  {%- for definition in test.definitions %}
-  {%- if definition.kind == "SET" %}
-  auto {{definition.var}}_full = environment.full_compile(R"#--#({{ definition.source }})#--#");
-  if({{definition.var}}_full.holds_error()) {
-    INFO({{definition.var}}_full.get_error());
-    FAIL("Failed while compiling variable {{definition.var}}");
-  }
-  if(!{{definition.var}}_full.get_value().is_okay()) {
-    std::stringstream error_message;
-    {{definition.var}}_full.get_value().report_errors_to(error_message, environment.externals_to_names());
-    INFO(error_message.str())
-    FAIL("Failed while compiling variable {{definition.var}}");
-  }
-  auto& {{definition.var}} = {{definition.var}}_full.get_value().result;
-  {{definition.var}}.value = reduction_context.reduce(std::move({{definition.var}}.value));
-  {{definition.var}}.type = reduction_context.reduce(std::move({{definition.var}}.type));
-  {%- elif definition.kind == "FULL_SET" %}
-  auto {{definition.var}} = environment.full_compile(R"#--#({{ definition.source }})#--#");
-  {%- elif definition.kind == "MUST_COMPILE" %}
+  new_expression::Arena arena;
   {
-    auto must_compile_result = environment.full_compile(R"#--#({{ definition.source }})#--#");
-    if(must_compile_result.holds_error()) {
-      INFO(must_compile_result.get_error());
-      FAIL("Failed while compiling MUST_COMPILE case.");
+    auto environment = setup_enviroment(arena);
+    new_expression::EvaluationContext reduction_context{environment.arena(), environment.context().rule_collector};
+    {%- for definition in test.definitions %}
+    {%- if definition.kind == "SET" %}
+    auto {{definition.var}}_full = environment.full_compile(R"#--#({{ definition.source }})#--#");
+    if({{definition.var}}_full.holds_error()) {
+      INFO({{definition.var}}_full.get_error());
+      FAIL("Failed while compiling variable {{definition.var}}");
     }
-    if(!must_compile_result.get_value().is_okay()) {
+    if(!{{definition.var}}_full.get_value().is_okay()) {
       std::stringstream error_message;
-      must_compile_result.get_value().report_errors_to(error_message, environment.externals_to_names());
+      {{definition.var}}_full.get_value().report_errors_to(error_message, environment.externals_to_names());
       INFO(error_message.str())
-      FAIL("Failed while compiling MUST_COMPILE case.");
+      FAIL("Failed while compiling variable {{definition.var}}");
     }
+    auto& {{definition.var}} = {{definition.var}}_full.get_value().result;
+    {{definition.var}}.value = reduction_context.reduce(arena.copy({{definition.var}}.value));
+    {{definition.var}}.type = reduction_context.reduce(arena.copy({{definition.var}}.type));
+    destroy_from_arena(arena, {{definition.var}}_full.get_value());
+    {%- elif definition.kind == "FULL_SET" %}
+    auto {{definition.var}} = environment.full_compile(R"#--#({{ definition.source }})#--#");
+    {%- elif definition.kind == "MUST_COMPILE" %}
+    {
+      auto must_compile_result = environment.full_compile(R"#--#({{ definition.source }})#--#");
+      if(must_compile_result.holds_error()) {
+        INFO(must_compile_result.get_error());
+        FAIL("Failed while compiling MUST_COMPILE case.");
+      }
+      if(!must_compile_result.get_value().is_okay()) {
+        std::stringstream error_message;
+        must_compile_result.get_value().report_errors_to(error_message, environment.externals_to_names());
+        INFO(error_message.str())
+        FAIL("Failed while compiling MUST_COMPILE case.");
+      }
+    }
+    {%- else %}
+    static_assert(false, "The source code generator did something wrong.")
+    {%- endif %}
+    {%- endfor %}
+    {%- if test.body %}
+    {{ test.body }}
+    {%- endif %}
+    {%- for definition in test.definitions %}
+    {%- if definition.kind == "SET" %}
+    destroy_from_arena(arena, {{definition.var}});
+    {%- elif definition.kind == "FULL_SET" %}
+    destroy_from_arena(arena, {{definition.var}});
+    {%- elif definition.kind == "MUST_COMPILE" %}
+    {# Nothing to do in this case. Value was already discarded. #}
+    {%- else %}
+    static_assert(false, "The source code generator did something wrong.")
+    {%- endif %}
+    {%- endfor %}
   }
-  {%- else %}
-  static_assert(false, "The source code generator did something wrong.")
-  {%- endif %}
-  {%- endfor %}
-  {%- if test.body %}
-  {{ test.body }}
-  {%- endif %}
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
 }
 {%- endmacro %}
 

@@ -106,11 +106,9 @@ namespace new_expression {
     OnArenaDestructor on_arena_destructor;
     std::unordered_map<WeakExpression, T, ExpressionHasher> underlying_map;
     void clear_map() {
-      if constexpr(!std::is_same_v<OnArenaDestructor, TrivialOnArenaDestructor>) {
-        for(auto& term : underlying_map) {
-          arena->deref_weak(term.first);
-          on_arena_destructor(*arena, term.second);
-        }
+      for(auto& term : underlying_map) {
+        arena->deref_weak(term.first);
+        on_arena_destructor(*arena, term.second);
       }
       underlying_map.clear();
     }

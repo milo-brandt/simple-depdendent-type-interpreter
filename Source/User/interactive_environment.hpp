@@ -7,13 +7,14 @@
 #include "../Pipeline/pipeline.hpp"
 #include "../Utility/result.hpp"
 #include "../Primitives/primitives.hpp"
+#include "../NewExpression/arena.hpp"
 
 namespace interactive {
   class Environment {
     struct Impl;
     std::unique_ptr<Impl> impl;
   public:
-    Environment();
+    Environment(new_expression::Arena&);
     Environment(Environment&&);
     Environment& operator=(Environment&&);
     ~Environment();

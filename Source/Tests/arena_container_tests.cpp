@@ -134,3 +134,90 @@ TEST_CASE("OwnedKeySet models appropriate lifetime of elements.") {
   arena.clear_orphaned_expressions();
   REQUIRE(arena.empty());
 }
+TEST_CASE("OwnedKeySet models appropriate lifetime of elements destroyed through its destructor.") {
+  Arena arena;
+  auto lhs = arena.axiom();
+  auto rhs = arena.axiom();
+  auto apply = arena.apply(std::move(lhs), std::move(rhs));
+
+  WeakExpression lhs_weak = lhs;
+  WeakExpression rhs_weak = rhs;
+  WeakExpression apply_weak = apply;
+
+  {
+    OwnedKeySet set(arena);
+
+    REQUIRE(set.insert(std::move(apply)));
+    REQUIRE(set.contains(apply_weak));
+
+    arena.clear_orphaned_expressions();
+
+    REQUIRE(set.contains(apply_weak));
+    //ensure that nothing was actually deleted.
+    REQUIRE(arena.holds_apply(apply_weak));
+    REQUIRE(arena.holds_axiom(lhs_weak));
+    REQUIRE(arena.holds_axiom(rhs_weak));
+  }
+
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("OwnedKeyMap models appropriate lifetime of elements.") {
+  Arena arena;
+  OwnedKeyMap<std::uint64_t> map(arena);
+  auto lhs = arena.axiom();
+  auto rhs = arena.axiom();
+  auto apply = arena.apply(std::move(lhs), std::move(rhs));
+
+  WeakExpression lhs_weak = lhs;
+  WeakExpression rhs_weak = rhs;
+  WeakExpression apply_weak = apply;
+  map.set(std::move(apply), 17);
+  REQUIRE(map.contains(apply_weak));
+  REQUIRE(map.at(apply_weak) == 17);
+
+  arena.clear_orphaned_expressions();
+
+  REQUIRE(map.contains(apply_weak));
+  REQUIRE(map.at(apply_weak) == 17);
+  //ensure that nothing was actually deleted.
+  REQUIRE(arena.holds_apply(apply_weak));
+  REQUIRE(arena.holds_axiom(lhs_weak));
+  REQUIRE(arena.holds_axiom(rhs_weak));
+
+  map.erase(apply_weak);
+  REQUIRE(!map.contains(apply_weak));
+
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}
+TEST_CASE("OwnedKeyMap models appropriate lifetime of elements destroyed through its destructor.") {
+  Arena arena;
+  auto lhs = arena.axiom();
+  auto rhs = arena.axiom();
+  auto apply = arena.apply(std::move(lhs), std::move(rhs));
+
+  WeakExpression lhs_weak = lhs;
+  WeakExpression rhs_weak = rhs;
+  WeakExpression apply_weak = apply;
+
+  {
+    OwnedKeyMap<std::uint64_t> map(arena);
+
+    map.set(std::move(apply), 17);
+    REQUIRE(map.contains(apply_weak));
+    REQUIRE(map.at(apply_weak) == 17);
+
+    arena.clear_orphaned_expressions();
+
+    REQUIRE(map.contains(apply_weak));
+    REQUIRE(map.at(apply_weak) == 17);
+    //ensure that nothing was actually deleted.
+    REQUIRE(arena.holds_apply(apply_weak));
+    REQUIRE(arena.holds_axiom(lhs_weak));
+    REQUIRE(arena.holds_axiom(rhs_weak));
+  }
+
+  arena.clear_orphaned_expressions();
+  REQUIRE(arena.empty());
+}

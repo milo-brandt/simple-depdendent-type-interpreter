@@ -327,8 +327,12 @@ namespace solver {
           info.failures.push_back(std::move(eq.equation));
         } else if(!eq.handled) {
           info.stalls.push_back(std::move(eq.equation));
+        } else {
+          //destroy any equation that's not an error.
+          destroy_from_arena(interface.arena, eq);
         }
       }
+      equations.clear();
       return info;
     }
     ~Impl() {

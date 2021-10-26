@@ -4,6 +4,6 @@
 #include "../User/interactive_environment.hpp"
 #include "../NewExpression/arena_utility.hpp"
 
-interactive::Environment setup_enviroment();
+interactive::Environment setup_enviroment(new_expression::Arena&);
 
 #endif

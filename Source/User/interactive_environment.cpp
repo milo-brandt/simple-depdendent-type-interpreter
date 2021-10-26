@@ -64,7 +64,7 @@ namespace interactive {
       }*/
   using namespace pipeline::compile;
   struct Environment::Impl {
-    new_expression::Arena arena;
+    new_expression::Arena& arena;
     solver::BasicContext context;
     //expression::data::SmallScalar<std::uint64_t> u64;
     //expression::data::SmallScalar<imported_type::StringHolder> str;
@@ -80,12 +80,15 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       }));
     }
-    Impl():arena(), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)) {
+    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena),u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
       context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
       name_external("U64", u64_type);
       externals_to_names.set(u64_head, "u64"); //this is internal, not to be exposed to user
+    }
+    ~Impl() {
+      destroy_from_arena(arena, names_to_values, u64_type, u64_head);
     }
     mdb::Result<LexInfo, std::string> lex_code(SourceInfo input) {
       expression_parser::LexerInfo lexer_info {
@@ -377,7 +380,7 @@ namespace interactive {
     However, for now, the project has a hacked-together front-end. :(
   */
 
-  Environment::Environment():impl(std::make_unique<Impl>()) {}
+  Environment::Environment(new_expression::Arena& arena):impl(std::make_unique<Impl>(arena)) {}
   Environment::Environment(Environment&&) = default;
   Environment& Environment::operator=(Environment&&) = default;
   Environment::~Environment() = default;
