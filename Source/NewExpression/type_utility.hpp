@@ -19,6 +19,7 @@ namespace new_expression {
   OwnedExpression get_type_of(Arena& arena, WeakExpression, TypeGetterContext const&);
   struct PrimitiveTypeCollector {
     WeakKeyMap<OwnedExpression, PartDestroyer> type_of_primitive;
+    void set_type_of(WeakExpression primitive, OwnedExpression type) { type_of_primitive.set(primitive, std::move(type)); }
   };
 }
 

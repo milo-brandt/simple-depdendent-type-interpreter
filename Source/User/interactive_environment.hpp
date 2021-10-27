@@ -32,7 +32,7 @@ namespace interactive {
     new_expression::WeakExpression str_type();
     primitive::StringData* str();
     new_expression::WeakKeyMap<std::string>& externals_to_names();
-
+    void name_primitive(std::string name, new_expression::WeakExpression primitive);
   };
 }
 

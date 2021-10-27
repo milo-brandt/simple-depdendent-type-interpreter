@@ -2,6 +2,7 @@
 #include "User/interactive_environment.hpp"
 #include "User/debug_format.hpp"
 #include "Utility/vector_utility.hpp"
+#include "Module/execute.hpp"
 
 
 void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpression expr) {
@@ -63,6 +64,69 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 #else
 
+expr_module::Core get_prelude() {
+  using namespace expr_module::step;
+  using namespace expr_module::rule_step;
+  using namespace expr_module::rule_replacement;
+  return expr_module::Core{
+    .value_import_size = 5, //Type, arrow, constant, U64, u64
+    .data_type_import_size = 1, //u64
+    .c_replacement_import_size = 1, //add
+    .register_count = 7,
+    .output_size = 1,
+    .steps = {
+      //First: Create a the value "U64 -> U64 -> U64"
+      //= arrow U64 (constant Type (arrow U64 (constant Type U64 U64)) U64)
+      Embed{0, 0},
+      Embed{1, 1},
+      Embed{2, 2},
+      Embed{3, 3},
+      Apply{1, 3, 4}, //arrow U64
+      Apply{2, 0, 5}, //constant Type
+      Apply{5, 3, 6}, //constant Type U64
+      Apply{6, 3, 6}, //constant Type U64 U64
+      Apply{4, 6, 6}, //arrow U64 (constant Type U64 U64)
+      Apply{5, 6, 6}, //constant Type (arrow U64 (constant Type U64 U64))
+      Apply{6, 3, 6}, //constant Type (arrow U64 (constant Type U64 U64)) U64
+      Apply{4, 6, 6}, //arrow U64 (constant Type (arrow U64 (constant Type U64 U64)) U64)
+      Declare{6, 0}, //add
+      Export{0},
+      Embed{4, 1},
+      Argument{0, 2},
+      Argument{2, 3},
+      Rule{
+        .head = 0,
+        .args_captured = 2,
+        .steps = {
+          PullArgument{},
+          PatternMatch{
+            .substitution = 2,
+            .expected_head = 1,
+            .args_captured = 1
+          },
+          DataCheck{
+            .capture_index = 1,
+            .data_type_index = 0
+          },
+          PullArgument{},
+          PatternMatch{
+            .substitution = 3,
+            .expected_head = 1,
+            .args_captured = 1
+          },
+          DataCheck{
+            .capture_index = 3,
+            .data_type_index = 0
+          }
+        },
+        .replacement = Function{
+          .function_index = 0
+        }
+      }
+    }
+  };
+}
+
 int main(int argc, char** argv) {
 
   /*if(argc == 2) {
@@ -117,47 +181,36 @@ int main(int argc, char** argv) {
     {
       interactive::Environment environment(arena);
       auto& context = environment.context();
-      auto add_u64 = environment.declare("add", "U64 -> U64 -> U64");
-      context.rule_collector.add_rule({
-        .pattern = {
-          .head = arena.copy(add_u64),
-          .body = {
-            .args_captured = 2,
-            .steps = mdb::make_vector<new_expression::PatternStep>(
-              new_expression::PullArgument{},
-              new_expression::PatternMatch{
-                .substitution = arena.argument(0),
-                .expected_head = arena.copy(environment.u64_head()),
-                .args_captured = 1
-              },
-              new_expression::DataCheck{
-                .capture_index = 1,
-                .expected_type = environment.u64()->type_index
-              },
-              new_expression::PullArgument{},
-              new_expression::PatternMatch{
-                .substitution = arena.argument(2),
-                .expected_head = arena.copy(environment.u64_head()),
-                .args_captured = 1
-              },
-              new_expression::DataCheck{
-                .capture_index = 3,
-                .expected_type = environment.u64()->type_index
-              }
-            )
-          }
+      auto add_replacement = [&](std::span<new_expression::WeakExpression> inputs) {
+        return arena.apply(
+          arena.copy(environment.u64_head()),
+          environment.u64()->make_expression(
+            environment.u64()->read_data(arena.get_data(inputs[1])) + environment.u64()->read_data(arena.get_data(inputs[3]))
+          )
+        );
+      };
+      auto ret = expr_module::execute({
+        .arena = arena,
+        .rule_collector = environment.context().rule_collector,
+        .type_collector = environment.context().type_collector
+      }, get_prelude(), {
+        .value_imports = mdb::make_vector(
+          arena.copy(environment.context().primitives.type),
+          arena.copy(environment.context().primitives.arrow),
+          arena.copy(environment.context().primitives.constant),
+          arena.copy(environment.u64_type()),
+          arena.copy(environment.u64_head())
+        ),
+        .data_type_import_indices = {
+          environment.u64()->type_index
         },
-        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
-          [&](std::span<new_expression::WeakExpression> inputs) {
-            return arena.apply(
-              arena.copy(environment.u64_head()),
-              environment.u64()->make_expression(
-                environment.u64()->read_data(arena.get_data(inputs[1])) + environment.u64()->read_data(arena.get_data(inputs[3]))
-              )
-            );
-          }
-        }
+        .c_replacement_imports = mdb::make_vector<mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)> >(
+          add_replacement
+        )
       });
+      environment.name_primitive("add", ret.exports[0]);
+      destroy_from_arena(arena, ret);
+
       auto mul_u64 = environment.declare("mul", "U64 -> U64 -> U64");
       context.rule_collector.add_rule({
         .pattern = {
@@ -367,7 +420,7 @@ int main(int argc, char** argv) {
         }
       });
       environment.debug_parse(source);
-      destroy_from_arena(arena, add_u64, mul_u64, sub_u64, exp_u64, len, substr);
+      destroy_from_arena(arena, mul_u64, sub_u64, exp_u64, len, substr);
     }
     arena.clear_orphaned_expressions();
     if(!arena.empty()) {

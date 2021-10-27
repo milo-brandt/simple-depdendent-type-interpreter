@@ -707,6 +707,9 @@ namespace interactive {
       std::cout << result.get_error() << "\n";
     }
   }
+  void Environment::name_primitive(std::string name, new_expression::WeakExpression primitive) {
+    impl->name_external(std::move(name), primitive);
+  }
 }
 /*
 Final: \$0.\$1.\$2.\$3.iterate $0 $1 $2 $3 of type
