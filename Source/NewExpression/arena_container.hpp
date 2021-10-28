@@ -96,6 +96,12 @@ namespace new_expression {
         underlying_map.insert_or_assign(key, std::move(value));
       }
     }
+    auto begin() {
+      return underlying_map.cbegin();
+    }
+    auto end() {
+      return underlying_map.cend();
+    }
     ~WeakKeyMap() {
       clear_map();
     }
@@ -150,6 +156,12 @@ namespace new_expression {
         //keep extra reference to key
       }
     }
+    auto begin() {
+      return underlying_map.cbegin();
+    }
+    auto end() {
+      return underlying_map.cend();
+    }
     ~OwnedKeyMap() {
       clear_map();
     }
@@ -189,6 +201,12 @@ namespace new_expression {
       } else {
         return false;
       }
+    }
+    auto begin() {
+      return inner.cbegin();
+    }
+    auto end() {
+      return inner.cend();
     }
     ~OwnedKeySet() {
       for(auto key : inner) {

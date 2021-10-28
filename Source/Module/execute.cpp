@@ -37,18 +37,18 @@ namespace expr_module {
         },
         [&](step::Declare const& declare) {
           auto ret = context.arena.declaration();
-          auto type = copy_register(declare.type);
-          //TODO: Check that "type" has type Type.
           context.rule_collector.register_declaration(ret);
-          context.type_collector.set_type_of(ret, std::move(type));
           set_register(declare.output, std::move(ret));
         },
         [&](step::Axiom const& axiom) {
           auto ret = context.arena.axiom();
-          auto type = copy_register(axiom.type);
-          //TODO: Check that "type" has type Type.
-          context.type_collector.set_type_of(ret, std::move(type));
           set_register(axiom.output, std::move(ret));
+        },
+        [&](step::RegisterType const& register_type) {
+          context.type_collector.set_type_of(
+            registers[register_type.index],
+            copy_register(register_type.type)
+          );
         },
         [&](step::Argument const& arg) {
           set_register(arg.output, context.arena.argument(arg.index));

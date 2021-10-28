@@ -3,6 +3,8 @@
 #include "User/debug_format.hpp"
 #include "Utility/vector_utility.hpp"
 #include "Module/execute.hpp"
+#include "Module/core_debug_print.hpp"
+#include "Module/store.hpp"
 
 
 void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpression expr) {
@@ -89,7 +91,8 @@ expr_module::Core get_prelude() {
       Apply{5, 6, 6}, //constant Type (arrow U64 (constant Type U64 U64))
       Apply{6, 3, 6}, //constant Type (arrow U64 (constant Type U64 U64)) U64
       Apply{4, 6, 6}, //arrow U64 (constant Type (arrow U64 (constant Type U64 U64)) U64)
-      Declare{6, 0}, //add
+      Declare{0}, //add
+      RegisterType{0, 6},
       Export{0},
       Embed{4, 1},
       Argument{0, 2},
@@ -148,6 +151,31 @@ int main(int argc, char** argv) {
   }*/
 
   //interactive mode
+  {
+    new_expression::Arena arena;
+    {
+      solver::BasicContext context(arena);
+      auto exports = mdb::make_vector<new_expression::OwnedExpression>(
+        arena.copy(context.primitives.type),
+        arena.copy(context.primitives.arrow)
+      );
+      std::cout << debug_format(expr_module::store({
+        .arena = arena,
+        .rule_collector = context.rule_collector,
+        .type_collector = context.type_collector,
+        .get_import_index_of = [](auto&&) { return std::nullopt; },
+        .get_import_size = []() -> std::uint32_t { return 0; }
+      }, {
+        .exports = std::move(exports)
+      })) << "\n";
+    }
+    arena.clear_orphaned_expressions();
+    if(!arena.empty()) {
+      std::cout << "Non-empty arena!\n";
+      arena.debug_dump();
+    }
+  }
+  std::cout << debug_format(get_prelude()) << "\n";
   std::string last_line = "";
   while(true) {
     std::string line;

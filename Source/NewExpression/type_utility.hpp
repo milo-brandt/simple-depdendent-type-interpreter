@@ -20,6 +20,8 @@ namespace new_expression {
   struct PrimitiveTypeCollector {
     WeakKeyMap<OwnedExpression, PartDestroyer> type_of_primitive;
     void set_type_of(WeakExpression primitive, OwnedExpression type) { type_of_primitive.set(primitive, std::move(type)); }
+    WeakExpression get_type_of(WeakExpression primitive) { return type_of_primitive.at(primitive); }
+    bool has_type(WeakExpression primitive) { return type_of_primitive.contains(primitive); }
   };
 }
 

@@ -54,12 +54,14 @@ namespace expr_module {
       std::uint32_t output;
     };
     struct Declare {
-      std::uint32_t type;
       std::uint64_t output;
     };
     struct Axiom {
-      std::uint32_t type;
       std::uint64_t output;
+    };
+    struct RegisterType {
+      std::uint32_t index; //should point to a primitive
+      std::uint32_t type;
     };
     struct Argument {
       std::uint32_t index;
@@ -77,7 +79,7 @@ namespace expr_module {
     struct Clear {
       std::uint32_t target; //remove the value from the target register
     };
-    using Any = std::variant<Embed, Apply, Declare, Axiom, Argument, Rule, Export, Clear>;
+    using Any = std::variant<Embed, Apply, Declare, Axiom, RegisterType, Argument, Rule, Export, Clear>;
   }
   struct Core {
     std::uint32_t value_import_size;
