@@ -66,6 +66,275 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 #else
 
+expr_module::Core get_other() {
+  using namespace expr_module::step;
+  using namespace expr_module::rule_step;
+  using namespace expr_module::rule_replacement;
+  return {
+  .value_import_size = 4,
+  .data_type_import_size = 0,
+  .c_replacement_import_size = 0,
+  .register_count = 20,
+  .output_size = 1,
+  .steps = {
+    Declare{0},
+    Declare{1},
+    Declare{2},
+    Declare{3},
+    Declare{4},
+    Declare{5},
+    Declare{6},
+    Declare{7},
+    Declare{8},
+    Declare{9},
+    Declare{10},
+    Declare{11},
+    Declare{12},
+    Declare{13},
+    Declare{14},
+    Declare{15},
+    Embed{0, 16},
+    RegisterType{15, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 13, 16},
+    RegisterType{14, 16},
+    Embed{0, 16},
+    RegisterType{13, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 13, 16},
+    RegisterType{0, 16},
+    Embed{0, 16},
+    RegisterType{7, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 13, 16},
+    Apply{12, 16, 16},
+    RegisterType{8, 16},
+    Apply{8, 0, 16},
+    RegisterType{1, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 7, 16},
+    RegisterType{5, 16},
+    Embed{1, 16},
+    Embed{3, 17},
+    Embed{0, 18},
+    Apply{17, 18, 17},
+    Apply{17, 13, 17},
+    Apply{16, 17, 16},
+    Embed{2, 17},
+    Embed{0, 18},
+    Apply{17, 18, 17},
+    Embed{0, 18},
+    Apply{17, 18, 17},
+    Embed{3, 18},
+    Embed{0, 19},
+    Apply{18, 19, 18},
+    Apply{18, 13, 18},
+    Apply{17, 18, 17},
+    Apply{16, 17, 16},
+    RegisterType{6, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 13, 16},
+    RegisterType{2, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 4, 16},
+    RegisterType{3, 16},
+    Embed{0, 16},
+    RegisterType{4, 16},
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Apply{16, 11, 16},
+    RegisterType{9, 16},
+    Apply{8, 2, 16},
+    RegisterType{10, 16},
+    Embed{0, 16},
+    RegisterType{11, 16},
+    Embed{0, 16},
+    Apply{12, 16, 16},
+    RegisterType{12, 16},
+    Rule{
+      .head = 15,
+      .args_captured = 0,
+      .steps = {
+      },
+      .replacement = Substitution{5}
+    },
+    Embed{0, 16},
+    Rule{
+      .head = 14,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{1, 16},
+    Apply{16, 5, 16},
+    Apply{16, 14, 16},
+    Rule{
+      .head = 13,
+      .args_captured = 0,
+      .steps = {
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{0, 16},
+    Rule{
+      .head = 0,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{0, 16},
+    Rule{
+      .head = 7,
+      .args_captured = 0,
+      .steps = {
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{3, 16},
+    Embed{0, 17},
+    Apply{16, 17, 16},
+    Argument{0, 17},
+    Apply{6, 17, 17},
+    Apply{16, 17, 16},
+    Rule{
+      .head = 8,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Argument{0, 16},
+    Rule{
+      .head = 1,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{0, 16},
+    Rule{
+      .head = 5,
+      .args_captured = 0,
+      .steps = {
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{1, 16},
+    Apply{16, 15, 16},
+    Argument{0, 17},
+    Apply{16, 17, 16},
+    Rule{
+      .head = 6,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Argument{0, 16},
+    Apply{1, 16, 16},
+    Apply{12, 16, 16},
+    Rule{
+      .head = 2,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{1, 16},
+    Argument{0, 17},
+    Apply{16, 17, 16},
+    Argument{0, 17},
+    Apply{10, 17, 17},
+    Apply{16, 17, 16},
+    Rule{
+      .head = 3,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{1, 16},
+    Apply{16, 5, 16},
+    Apply{16, 9, 16},
+    Rule{
+      .head = 4,
+      .args_captured = 0,
+      .steps = {
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{0, 16},
+    Rule{
+      .head = 9,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Argument{0, 16},
+    Rule{
+      .head = 10,
+      .args_captured = 2,
+      .steps = {
+        PullArgument{},
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Apply{12, 5, 16},
+    Rule{
+      .head = 11,
+      .args_captured = 0,
+      .steps = {
+      },
+      .replacement = Substitution{16}
+    },
+    Embed{1, 16},
+    Argument{0, 17},
+    Apply{16, 17, 16},
+    Embed{2, 17},
+    Embed{0, 18},
+    Apply{17, 18, 17},
+    Embed{0, 18},
+    Apply{17, 18, 17},
+    Argument{0, 18},
+    Apply{17, 18, 17},
+    Apply{16, 17, 16},
+    Rule{
+      .head = 12,
+      .args_captured = 1,
+      .steps = {
+        PullArgument{}
+      },
+      .replacement = Substitution{16}
+    },
+    Export{3}
+  }
+};
+}
 expr_module::Core get_prelude() {
   using namespace expr_module::step;
   using namespace expr_module::rule_step;
@@ -163,8 +432,14 @@ int main(int argc, char** argv) {
         .arena = arena,
         .rule_collector = context.rule_collector,
         .type_collector = context.type_collector,
-        .get_import_index_of = [](auto&&) { return std::nullopt; },
-        .get_import_size = []() -> std::uint32_t { return 0; }
+        .get_import_index_of = [&](new_expression::WeakExpression expr) -> std::optional<std::uint32_t> {
+          if(expr == context.primitives.arrow) {
+            return 0;
+          } else {
+            return std::nullopt;
+          }
+        },
+        .get_import_size = []() -> std::uint32_t { return 1; }
       }, {
         .exports = std::move(exports)
       })) << "\n";
@@ -237,6 +512,21 @@ int main(int argc, char** argv) {
         )
       });
       environment.name_primitive("add", ret.exports[0]);
+      destroy_from_arena(arena, ret);
+
+      ret = expr_module::execute({
+        .arena = arena,
+        .rule_collector = environment.context().rule_collector,
+        .type_collector = environment.context().type_collector
+      }, get_other(), {
+        .value_imports = mdb::make_vector(
+          arena.copy(environment.context().primitives.type),
+          arena.copy(environment.context().primitives.arrow),
+          arena.copy(environment.context().primitives.constant),
+          arena.copy(environment.context().primitives.id)
+        )
+      });
+      environment.name_primitive("Endo", ret.exports[0]);
       destroy_from_arena(arena, ret);
 
       auto mul_u64 = environment.declare("mul", "U64 -> U64 -> U64");
@@ -447,7 +737,65 @@ int main(int argc, char** argv) {
           }
         }
       });
-      environment.debug_parse(source);
+
+      {
+        auto result = environment.full_compile(source);
+        if(auto* value = result.get_if_value()) {
+          value->report_errors_to(std::cout, environment.externals_to_names());
+          auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
+            if(auto name = value->get_explicit_name_of(expr)) {
+              o << *name;
+            } else if(environment.externals_to_names().contains(expr)) {
+              o << environment.externals_to_names().at(expr);
+            } else if(arena.holds_declaration(expr)) {
+              o << "decl_" << expr.data();
+            } else if(arena.holds_axiom(expr)) {
+              o << "ax_" << expr.data();
+            } else {
+              o << "???";
+            }
+          };
+          std::cout << "RAW TYPE AND VALUE:\n";
+          std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
+          std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
+          std::cout << "REDUCED TYPE AND VALUE:\n";
+          new_expression::EvaluationContext ctx{arena, context.rule_collector};
+          value->result.value = ctx.reduce(std::move(value->result.value));
+          value->result.type = ctx.reduce(std::move(value->result.type));
+          std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
+          std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
+          auto exports = mdb::make_vector<new_expression::OwnedExpression>(
+            arena.copy(value->result.value)
+          );
+          std::cout << debug_format(expr_module::store({
+            .arena = arena,
+            .rule_collector = context.rule_collector,
+            .type_collector = context.type_collector,
+            .get_import_index_of = [&](new_expression::WeakExpression expr) -> std::optional<std::uint32_t> {
+              if(expr == environment.context().primitives.type) {
+                return 0;
+              } else if(expr == environment.context().primitives.arrow) {
+                return 1;
+              } else if(expr == environment.context().primitives.constant) {
+                return 2;
+              } else if(expr == environment.context().primitives.id) {
+                return 3;
+              } else {
+                return std::nullopt;
+              }
+            },
+            .get_import_size = []() -> std::uint32_t { return 4; }
+          }, {
+            .exports = std::move(exports)
+          })) << "\n";
+
+          destroy_from_arena(arena, *value);
+
+
+        } else {
+          std::cout << result.get_error() << "\n";
+        }
+      }
       destroy_from_arena(arena, mul_u64, sub_u64, exp_u64, len, substr);
     }
     arena.clear_orphaned_expressions();

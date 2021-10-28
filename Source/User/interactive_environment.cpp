@@ -367,7 +367,6 @@ namespace interactive {
         std::terminate();
       }
     }*/
-    void debug_parse(std::string_view expr, std::ostream& output);
     //ParseResult parse(std::string_view expr);
     /*bool deep_compare(tree::Expression lhs, tree::Expression rhs) {
       solver::StandardSolverContext context{expression_context};
@@ -436,9 +435,6 @@ namespace interactive {
   Environment::DeclarationInfo Environment::axiom_check(std::string name, std::string_view expr) {
     return impl->declare_or_axiom_check(std::move(name), expr, true);
   }*/
-  void Environment::debug_parse(std::string_view str, std::ostream& output) {
-    return impl->debug_parse(str, output);
-  }
   mdb::Result<pipeline::compile::EvaluateInfo, std::string> Environment::full_compile(std::string_view str) {
     return impl->full_compile(str);
   }
@@ -676,37 +672,6 @@ namespace interactive {
       }}};
     }
   }*/
-  void Environment::Impl::debug_parse(std::string_view expr, std::ostream& output)  {
-    auto result = full_compile(expr);
-    if(auto* value = result.get_if_value()) {
-      value->report_errors_to(output, externals_to_names);
-      auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
-        if(auto name = value->get_explicit_name_of(expr)) {
-          o << *name;
-        } else if(externals_to_names.contains(expr)) {
-          o << externals_to_names.at(expr);
-        } else if(arena.holds_declaration(expr)) {
-          o << "decl_" << expr.data();
-        } else if(arena.holds_axiom(expr)) {
-          o << "ax_" << expr.data();
-        } else {
-          o << "???";
-        }
-      };
-      std::cout << "RAW TYPE AND VALUE:\n";
-      std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
-      std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
-      std::cout << "REDUCED TYPE AND VALUE:\n";
-      new_expression::EvaluationContext ctx{arena, context.rule_collector};
-      value->result.value = ctx.reduce(std::move(value->result.value));
-      value->result.type = ctx.reduce(std::move(value->result.type));
-      std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
-      std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
-      destroy_from_arena(arena, *value);
-    } else {
-      std::cout << result.get_error() << "\n";
-    }
-  }
   void Environment::name_primitive(std::string name, new_expression::WeakExpression primitive) {
     impl->name_external(std::move(name), primitive);
   }

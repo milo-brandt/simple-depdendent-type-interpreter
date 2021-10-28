@@ -19,7 +19,6 @@ namespace interactive {
     Environment& operator=(Environment&&);
     ~Environment();
 
-    void debug_parse(std::string_view, std::ostream& output = std::cout);
     mdb::Result<pipeline::compile::EvaluateInfo, std::string> full_compile(std::string_view);
     new_expression::OwnedExpression declare(std::string, std::string_view);
     new_expression::OwnedExpression axiom(std::string, std::string_view);
