@@ -1,0 +1,16 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  module [
+    module_entry _ "Bool" Bool,
+    module_entry _ "yes" yes,
+    module_entry _ "no" no,
+    module_entry _ "not" not
+  ]
+}
