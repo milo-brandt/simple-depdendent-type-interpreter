@@ -7,11 +7,10 @@
 
 namespace primitive {
   struct U64Data : new_expression::DataType {
-    new_expression::Arena& arena;
-    U64Data(new_expression::Arena& arena, std::uint64_t type_index):arena(arena),type_index(type_index) {}
+    U64Data(new_expression::Arena& arena, std::uint64_t type_index):new_expression::DataType(arena, type_index) {}
     std::unordered_map<std::uint64_t, new_expression::WeakExpression> memoized;
   public:
-    static U64Data* register_on(new_expression::Arena& arena) {
+    static new_expression::SharedDataTypePointer<U64Data> register_on(new_expression::Arena& arena) {
       return arena.create_data_type([](new_expression::Arena& arena, std::uint64_t type_index) {
         return new U64Data{
           arena,
@@ -19,7 +18,6 @@ namespace primitive {
         };
       });
     }
-    std::uint64_t const type_index;
     std::uint64_t read_buffer(new_expression::Buffer const& buffer) {
       return (std::uint64_t const&)buffer;
     }
@@ -50,11 +48,10 @@ namespace primitive {
     new_expression::OwnedExpression modify_subexpressions(new_expression::Buffer const&, new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
   };
   struct StringData : new_expression::DataType {
-    new_expression::Arena& arena;
-    StringData(new_expression::Arena& arena, std::uint64_t type_index):arena(arena),type_index(type_index) {}
+    StringData(new_expression::Arena& arena, std::uint64_t type_index):new_expression::DataType(arena, type_index) {}
     std::unordered_map<StringHolder, new_expression::WeakExpression, StringHolderHasher> memoized;
   public:
-    static StringData* register_on(new_expression::Arena& arena) {
+    static new_expression::SharedDataTypePointer<StringData> register_on(new_expression::Arena& arena) {
       return arena.create_data_type([](new_expression::Arena& arena, std::uint64_t type_index) {
         return new StringData{
           arena,
@@ -62,7 +59,6 @@ namespace primitive {
         };
       });
     }
-    std::uint64_t const type_index;
     StringHolder const& read_buffer(new_expression::Buffer const& buffer) {
       return (StringHolder const&)buffer;
     }

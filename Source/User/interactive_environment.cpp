@@ -72,10 +72,10 @@ namespace interactive {
     new_expression::WeakKeyMap<std::string> externals_to_names;
     new_expression::OwnedExpression u64_type;
     new_expression::OwnedExpression u64_head;
-    primitive::U64Data* u64;
+    new_expression::SharedDataTypePointer<primitive::U64Data> u64;
     new_expression::OwnedExpression str_type;
     new_expression::OwnedExpression str_head;
-    primitive::StringData* str;
+    new_expression::SharedDataTypePointer<primitive::StringData> str;
     new_expression::OwnedExpression vec_type;
     new_expression::OwnedExpression empty_vec;
     new_expression::OwnedExpression cons_vec;
@@ -457,7 +457,7 @@ namespace interactive {
     return impl->u64_type;
   }
   primitive::U64Data* Environment::u64() {
-    return impl->u64;
+    return impl->u64.get();
   }
   new_expression::WeakExpression Environment::str_head() {
     return impl->str_head;
@@ -466,7 +466,7 @@ namespace interactive {
     return impl->str_type;
   }
   primitive::StringData* Environment::str() {
-    return impl->str;
+    return impl->str.get();
   }
   new_expression::WeakKeyMap<std::string>& Environment::externals_to_names() {
     return impl->externals_to_names;

@@ -53,15 +53,55 @@ namespace new_expression {
     }
   };
   using Buffer = std::aligned_storage_t<24,8>;
+  template<class T>
+  class SharedDataTypePointer;
   class DataType {
+    template<class T>
+    friend class SharedDataTypePointer;
+    friend Arena;
+    std::uint64_t ref_count = 1; //make this atomic if we multithread
+    void ref() { ++ref_count; }
+    void deref();
   public:
     //responsible for uniquing elements of this type.
+    Arena& arena;
+    const std::uint64_t type_index;
+    DataType(Arena& arena, std::uint64_t type_index):arena(arena), type_index(type_index) {}
     virtual void destroy(WeakExpression, Buffer&) = 0;
     virtual void debug_print(Buffer const&, std::ostream&) = 0;
     virtual void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) = 0;
     virtual bool all_subexpressions(Buffer const&, mdb::function<bool(WeakExpression)>) = 0;
     virtual OwnedExpression modify_subexpressions(Buffer const&, WeakExpression, mdb::function<OwnedExpression(WeakExpression)>) = 0;
     ~DataType() = default;
+  };
+  template<class T>
+  class SharedDataTypePointer {
+    T* ptr;
+    SharedDataTypePointer(T* ptr):ptr(ptr) {}
+    DataType* data_type() { return ptr; }
+    friend Arena;
+  public:
+    SharedDataTypePointer():ptr(nullptr) {}
+    SharedDataTypePointer(std::nullptr_t):ptr(nullptr) {}
+    SharedDataTypePointer(SharedDataTypePointer&& other):ptr(other.ptr) { other.ptr = nullptr; }
+    SharedDataTypePointer(SharedDataTypePointer const& other):ptr(other.ptr) { if(ptr) data_type()->ref(); }
+    SharedDataTypePointer& operator=(SharedDataTypePointer&& other) {
+      std::swap(ptr, other.ptr);
+      return *this;
+    }
+    SharedDataTypePointer& operator=(SharedDataTypePointer const& other) {
+      other.data_type()->ref();
+      if(ptr) data_type()->deref();
+      ptr = other.ptr;
+      return *this;
+    }
+    ~SharedDataTypePointer() {
+      if(ptr) data_type()->deref();
+    }
+    T* operator->() const { return ptr; }
+    T& operator*() const { return *ptr; }
+    T* get() const { return ptr; }
+    operator bool() const { return ptr != nullptr; }
   };
   struct Apply {
     WeakExpression lhs;
@@ -80,6 +120,7 @@ namespace new_expression {
     std::uint64_t index;
   };
   class Arena {
+    friend DataType;
     struct Impl;
     std::unique_ptr<Impl> impl;
     std::uint64_t next_type_index();
@@ -120,9 +161,9 @@ namespace new_expression {
       static_assert(!std::is_const_v<SpecificDataType>, "Data type factory must not return a pointer to a const value.");
       static_assert(std::is_base_of_v<DataType, SpecificDataType>, "Data type factory must return a pointer derived from DataType.");
       auto unique_type = std::unique_ptr<DataType>{std::move(new_type)}; //should work for both raw pointers and unique_ptrs.
-      SpecificDataType* ret = (SpecificDataType*)unique_type.get();
+      SpecificDataType* specific_ptr = (SpecificDataType*)unique_type.get();
       add_type(std::move(unique_type));
-      return ret;
+      return SharedDataTypePointer<SpecificDataType>{specific_ptr};
     }
     mdb::Event<std::span<WeakExpression> >& terms_erased();
     Apply const* get_if_apply(WeakExpression) const;

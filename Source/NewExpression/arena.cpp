@@ -198,6 +198,7 @@ namespace new_expression {
       }
     }
     std::pair<OwnedExpression, Buffer*> allocate_data(std::uint64_t type_index) {
+      data_types[type_index]->ref();
       auto ptr = pool.get_next_writable();
       ptr->discriminator = discriminator_data;
       ptr->data.data = Data{
@@ -220,6 +221,11 @@ namespace new_expression {
       terms_erased(std::span{cleared_list.data(), cleared_list.data() + cleared_list.size()});
     }
     bool empty() const {
+      for(auto const& ptr : data_types) {
+        if(ptr != nullptr) {
+          return false;
+        }
+      }
       return pool.empty();
     }
   };
@@ -254,6 +260,7 @@ namespace new_expression {
        break;
      case discriminator_data:
        data_types[ptr->data.data.type_index]->destroy(WeakExpression{ptr}, ptr->data.data.buffer);
+       data_types[ptr->data.data.type_index]->deref();
        break;
      default:
        if(ptr->discriminator >= discriminator_free) std::terminate();
@@ -445,5 +452,11 @@ namespace new_expression {
   }
   DataType* Arena::data_type_at_index(std::uint64_t type_index) {
     return impl->data_types[type_index].get();
+  }
+  void DataType::deref() {
+    if(--ref_count == 0) {
+      if(arena.impl->data_types[type_index].get() != this) std::terminate(); //???
+      arena.impl->data_types[type_index] = nullptr;
+    }
   }
 }
