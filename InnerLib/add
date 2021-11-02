@@ -1,0 +1,9 @@
+block {
+  declare add : U64 -> U64 -> U64;
+  declare sub : U64 -> U64 -> U64;
+  external_module "add.so"
+  [
+    module_entry _ "add" add,
+    module_entry _ "sub" sub
+  ]
+}

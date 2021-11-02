@@ -631,30 +631,54 @@ int main(int argc, char** argv) {
             auto exports = mdb::map([&](auto const& entry) {
               return arena.copy(entry.second);
             }, entries);
+            std::vector<std::string> import_list;
+            new_expression::WeakKeyMap<std::size_t> import_indices(arena);
+            new_expression::WeakKeyMap<std::string> import_positions(arena);
+            import_positions.set(context.context.primitives.type, "Type");
+            import_positions.set(context.context.primitives.arrow, "arrow");
+            import_positions.set(context.context.primitives.id, "id");
+            import_positions.set(context.context.primitives.constant, "constant");
+            import_positions.set(context.u64->type, "U64");
+            import_positions.set(context.str->type, "String");
+            import_positions.set(context.vec_type, "Vector");
+            import_positions.set(context.empty_vec, "empty_vec");
+            import_positions.set(context.cons_vec, "cons_vec");
+            import_positions.set(module_info.module_type, "Module");
+            import_positions.set(module_info.module_ctor, "module");
+            import_positions.set(module_info.module_entry_type, "ModuleEntry");
+            import_positions.set(module_info.module_entry_ctor, "module_entry");
+            for(auto const& entry : load_info.module_info) {
+              for(auto const& exported : entry.second.exported_terms) {
+                import_positions.set(exported.second.value, entry.first + "::" + exported.first);
+                import_positions.set(exported.second.type, entry.first + "::" + exported.first + ".type");
+              }
+            }
             auto core = expr_module::store({
               .arena = arena,
               .rule_collector = context.context.rule_collector,
               .type_collector = context.context.type_collector,
               .get_import_index_of = [&](new_expression::WeakExpression expr) -> std::optional<std::uint32_t> {
-                if(expr == context.context.primitives.type) {
-                  return 0;
-                } else if(expr == context.context.primitives.arrow) {
-                  return 1;
-                } else if(expr == context.context.primitives.constant) {
-                  return 2;
-                } else if(expr == context.context.primitives.id) {
-                  return 3;
-                } else if(expr == context.vec_type) {
-                  return 4;
+                if(import_indices.contains(expr)) {
+                  return (std::uint32_t)import_indices.at(expr);
+                } else if(import_positions.contains(expr)) {
+                  auto ret = import_list.size();
+                  import_list.push_back(import_positions.at(expr));
+                  import_indices.set(expr, ret);
+                  return (std::uint32_t)ret;
                 } else {
                   return std::nullopt;
                 }
               },
-              .get_import_size = []() -> std::uint32_t { return 5; }
+              .get_import_size = [&]() -> std::uint32_t { return (std::uint32_t)import_list.size(); }
             }, {
               .exports = std::move(exports)
             });
             std::cout << debug_format(core) << "\n";
+            std::cout << "Imports:";
+            for(auto const& i : import_list) {
+              std::cout << " " << i;
+            }
+            std::cout << "\n";
           }
           /*auto exports = mdb::make_vector<new_expression::OwnedExpression>(
             arena.copy(value->result.value)

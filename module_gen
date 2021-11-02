@@ -1,0 +1,13 @@
+block {
+  axiom NewModuleEntry : Type;
+  axiom new_module_entry : (T : Type) -> String -> T -> NewModuleEntry;
+  axiom NewModule : Type;
+  axiom new_full_module : String -> Vector NewModuleEntry -> NewModule;
+
+  module [
+    module_entry _ "ModuleEntry" NewModuleEntry,
+    module_entry _ "new_module_entry" new_module_entry,
+    module_entry _ "Module" NewModule,
+    module_entry _ "full_module" new_full_module
+  ]
+}
