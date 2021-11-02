@@ -4,6 +4,8 @@ DebugTest/**
 EmscriptenBuild/**
 WebBuild/**
 Dependencies/**
+Plugin/**
+AddPlugin/**
 Web/resources/codemirror/**
 **/*_impl.hpp
 **/*_impl.cpp

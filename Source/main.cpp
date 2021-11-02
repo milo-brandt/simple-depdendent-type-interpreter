@@ -8,6 +8,7 @@
 #include "NewExpression/arena_utility.hpp"
 #include "Pipeline/standard_compiler_context.hpp"
 #include "Pipeline/compile_stages.hpp"
+#include <dlfcn.h>
 
 void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpression expr) {
   std::cout << user::raw_format(arena, expr) << "\n";
@@ -177,6 +178,7 @@ struct ModuleLoadInfo {
       auto outer_unfolded = unfold(context.arena, compilation.result.value);
       auto load_name = std::string{context.str->read_data(context.arena.get_data(outer_unfolded.args[0])).get_string()};
       new_expression::WeakExpression module_head = outer_unfolded.args[1];
+      std::vector<new_expression::TypedValue> ordered_exports;
       while(true) {
         auto unfolded = unfold(context.arena, module_head);
         if(unfolded.args.size() != 3) break;
@@ -192,19 +194,37 @@ struct ModuleLoadInfo {
           destroy_from_arena(context.arena, exported_terms, compilation);
           return false;
         }
-        exported_terms.insert(std::make_pair(std::move(str), new_expression::TypedValue{
+        auto term = new_expression::TypedValue{
           .value = context.arena.copy(value),
           .type = context.arena.copy(type)
-        }));
+        };
+        exported_terms.insert(std::make_pair(std::move(str), copy_on_arena(context.arena, term)));
+        ordered_exports.push_back(std::move(term));
       }
       module_info.insert(std::make_pair(module_name, ModuleInfo{
         .exported_terms = std::move(exported_terms),
         .evaluate_info = std::move(compilation),
         .source = std::move(source)
       }));
+      if(!load_name.empty()) {
+        auto path = "./Plugin/" + load_name;
+        auto lib = dlopen(path.c_str(), RTLD_LAZY);
+        if(!lib) {
+          std::cout << "Failed to open shared library at " << path << "\n";
+          return false;
+        }
+        auto sym = dlsym(lib, "initialize");
+        if(!sym) {
+          std::cout << "Failed to get 'initialize' from shared library.\n";
+          return false;
+        }
+        auto initialize = (void(*)(pipeline::compile::StandardCompilerContext*, new_expression::TypedValue*, new_expression::TypedValue*))sym;
+        initialize(&context, ordered_exports.data(), ordered_exports.data() + ordered_exports.size());
+        dlclose(lib);
+      }
+      destroy_from_arena(context.arena, ordered_exports);
       modules_loading.erase(module_name);
       module_loading_stack.pop_back();
-      std::cout << "Want to load: " << load_name << "\n";
       return true;
     } else {
       std::cout << "Module " << module_name << " did not return a module object.\n";
