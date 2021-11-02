@@ -1,5 +1,5 @@
-#ifndef COMPILE_PIPELINE_HPP
-#define COMPILE_PIPELINE_HPP
+#ifndef COMPILE_PIPELINE_OUTPUTS_HPP
+#define COMPILE_PIPELINE_OUTPUTS_HPP
 
 #include "../Compiler/new_instructions.hpp"
 #include "../Solver/evaluator.hpp"

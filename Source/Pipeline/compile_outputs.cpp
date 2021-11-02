@@ -1,4 +1,4 @@
-#include "pipeline.hpp"
+#include "compile_outputs.hpp"
 #include "../CLI/format.hpp"
 
 namespace pipeline::compile {

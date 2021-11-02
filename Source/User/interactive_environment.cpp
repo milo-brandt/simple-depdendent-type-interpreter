@@ -7,7 +7,7 @@
 #include "../Solver/manager.hpp"
 #include "../Primitives/primitives.hpp"
 #include "../Utility/vector_utility.hpp"
-#include "../Pipeline/pipeline.hpp"
+#include "../Pipeline/compile_outputs.hpp"
 #include "debug_format.hpp"
 #include <sstream>
 
@@ -71,10 +71,8 @@ namespace interactive {
     std::unordered_map<std::string, new_expression::TypedValue> names_to_values;
     new_expression::WeakKeyMap<std::string> externals_to_names;
     new_expression::OwnedExpression u64_type;
-    new_expression::OwnedExpression u64_head;
     new_expression::SharedDataTypePointer<primitive::U64Data> u64;
     new_expression::OwnedExpression str_type;
-    new_expression::OwnedExpression str_head;
     new_expression::SharedDataTypePointer<primitive::StringData> str;
     new_expression::OwnedExpression vec_type;
     new_expression::OwnedExpression empty_vec;
@@ -93,15 +91,13 @@ namespace interactive {
         .type = arena.copy(context.type_collector.type_of_primitive.at(expr))
       };
     }
-    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena), u64_type(arena.axiom()), u64_head(arena.axiom()), u64(primitive::U64Data::register_on(arena)), str_type(arena.axiom()), str_head(arena.axiom()), str(primitive::StringData::register_on(arena)), vec_type(arena.axiom()), empty_vec(arena.axiom()), cons_vec(arena.axiom()) {
+    Impl(new_expression::Arena& arena):arena(arena), context(arena), externals_to_names(arena), u64_type(arena.axiom()), u64(primitive::U64Data::register_on(arena, arena.copy(u64_type))), str_type(arena.axiom()), str(primitive::StringData::register_on(arena, arena.copy(str_type))), vec_type(arena.axiom()), empty_vec(arena.axiom()), cons_vec(arena.axiom()) {
       name_external("Type", context.primitives.type);
       name_external("arrow", context.primitives.arrow);
       context.type_collector.type_of_primitive.set(u64_type, arena.copy(context.primitives.type));
       name_external("U64", u64_type);
-      externals_to_names.set(u64_head, "u64"); //this is internal, not to be exposed to user
       context.type_collector.type_of_primitive.set(str_type, arena.copy(context.primitives.type));
       name_external("String", str_type);
-      externals_to_names.set(str_head, "str"); //this is internal, not to be exposed to user
       /*
         This is an ugly hack to allow use to use "parse_as_type" before the vector types are actually set up
       */
@@ -117,7 +113,7 @@ namespace interactive {
       name_external("cons_vec", cons_vec);
     }
     ~Impl() {
-      destroy_from_arena(arena, names_to_values, u64_type, u64_head, str_type, str_head, vec_type, empty_vec, cons_vec);
+      destroy_from_arena(arena, names_to_values, u64_type, str_type, vec_type, empty_vec, cons_vec);
     }
     mdb::Result<LexInfo, std::string> lex_code(SourceInfo input) {
       expression_parser::LexerInfo lexer_info {
@@ -205,19 +201,13 @@ namespace interactive {
           std::visit(mdb::overloaded{
             [&](std::uint64_t literal) {
               embeds.push_back({
-                .value = arena.apply(
-                  arena.copy(u64_head),
-                  u64->make_expression(literal)
-                ),
+                .value = u64->make_expression(literal),
                 .type = arena.copy(u64_type)
               });
             },
             [&](std::string literal) {
               embeds.push_back({
-                .value = arena.apply(
-                  arena.copy(str_head),
-                  str->make_expression(primitive::StringHolder{literal})
-                ),
+                .value = str->make_expression(primitive::StringHolder{literal}),
                 .type = arena.copy(str_type)
               });
             }
@@ -450,23 +440,20 @@ namespace interactive {
   solver::BasicContext& Environment::context() {
     return impl->context;
   }
-  new_expression::WeakExpression Environment::u64_head() {
-    return impl->u64_head;
-  }
   new_expression::WeakExpression Environment::u64_type() {
     return impl->u64_type;
   }
   primitive::U64Data* Environment::u64() {
     return impl->u64.get();
   }
-  new_expression::WeakExpression Environment::str_head() {
-    return impl->str_head;
-  }
   new_expression::WeakExpression Environment::str_type() {
     return impl->str_type;
   }
   primitive::StringData* Environment::str() {
     return impl->str.get();
+  }
+  new_expression::WeakExpression Environment::vec_type() {
+    return impl->vec_type;
   }
   new_expression::WeakKeyMap<std::string>& Environment::externals_to_names() {
     return impl->externals_to_names;
