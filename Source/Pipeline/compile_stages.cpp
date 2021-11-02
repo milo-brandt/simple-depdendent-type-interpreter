@@ -42,7 +42,29 @@ namespace pipeline::compile {
     }
   }
   mdb::Result<ParseInfo, std::string> parse(LexInfo input) {
-    auto ret = expression_parser::parse_lexed(input.lexer_output);
+    auto ret = expression_parser::parse_lexed(input.lexer_output, [](std::uint64_t symbol) -> expression_parser::ExpressionSymbol {
+      switch(symbol) {
+        case 0: return expression_parser::ExpressionSymbol::block;
+        case 1: return expression_parser::ExpressionSymbol::declare;
+        case 2: return expression_parser::ExpressionSymbol::axiom;
+        case 3: return expression_parser::ExpressionSymbol::rule;
+        case 4: return expression_parser::ExpressionSymbol::let;
+        case 5: return expression_parser::ExpressionSymbol::arrow;
+        case 6: return expression_parser::ExpressionSymbol::colon;
+        case 7: return expression_parser::ExpressionSymbol::semicolon;
+        case 8: return expression_parser::ExpressionSymbol::equals;
+        case 9: return expression_parser::ExpressionSymbol::backslash;
+        case 10: return expression_parser::ExpressionSymbol::double_backslash;
+        case 11: return expression_parser::ExpressionSymbol::dot;
+        case 12: return expression_parser::ExpressionSymbol::underscore;
+        case 13: return expression_parser::ExpressionSymbol::comma;
+        case 14: return expression_parser::ExpressionSymbol::where;
+        case 15: return expression_parser::ExpressionSymbol::match;
+        case 16: return expression_parser::ExpressionSymbol::verify;
+        case 17: return expression_parser::ExpressionSymbol::require;
+        default: return expression_parser::ExpressionSymbol::unknown;
+      }
+    });
     if(auto* success = ret.get_if_value()) {
       return ParseInfo{
         std::move(input),

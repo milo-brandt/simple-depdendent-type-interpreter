@@ -198,7 +198,26 @@ TEST_CASE("The expression parser matches various expressions.") {
       FAIL("Lex Error: " << err->message << "\nAt: " << err->position);
     }
     auto lex_out = archive(lex.get_value().output);
-    auto ret = expression_parser::parse_lexed(lex_out);
+    auto ret = expression_parser::parse_lexed(lex_out, [&](std::uint64_t input) -> ExpressionSymbol {
+      switch(input) {
+        case 0: return ExpressionSymbol::block;
+        case 1: return ExpressionSymbol::declare;
+        case 2: return ExpressionSymbol::axiom;
+        case 3: return ExpressionSymbol::rule;
+        case 4: return ExpressionSymbol::let;
+        case 5: return ExpressionSymbol::arrow;
+        case 6: return ExpressionSymbol::colon;
+        case 7: return ExpressionSymbol::semicolon;
+        case 8: return ExpressionSymbol::equals;
+        case 9: return ExpressionSymbol::backslash;
+        case 10: return ExpressionSymbol::double_backslash;
+        case 11: return ExpressionSymbol::dot;
+        case 12: return ExpressionSymbol::underscore;
+        case 13: return ExpressionSymbol::comma;
+        case 14: return ExpressionSymbol::where;
+        default: std::terminate();
+      }
+    });
     if(auto* error = ret.get_if_error()) {
       FAIL("Failed to parse: " << error->message); //TODO: trace back through lexer
     } else {
