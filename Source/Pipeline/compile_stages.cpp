@@ -273,36 +273,4 @@ namespace pipeline::compile {
     }
     return ret;
   }
-  mdb::Result<std::pair<expression_parser::ModuleHeader, EvaluateInfo>, std::string> full_compile_module(new_expression::Arena& arena, std::string_view source, CombinedContext context) {
-    bool typed_values_used = false;
-    auto ret = bind(
-      lex({arena, source}),
-      [&](auto lexed) {
-        return parse_module(std::move(lexed));
-      },
-      [&](auto parsed) {
-        typed_values_used = true;
-        return map(
-          resolve(std::move(parsed.second), {
-            .names_to_values = context.names_to_values,
-            .u64 = context.u64,
-            .str = context.str,
-            .empty_vec = std::move(context.empty_vec),
-            .cons_vec = std::move(context.cons_vec)
-          }),
-          [&](auto resolved) {
-            return std::make_pair(std::move(parsed.first), evaluate(std::move(resolved), {
-              .context = context.context
-            }));
-          }
-        );
-      }
-    );
-    if(!typed_values_used) {
-      destroy_from_arena(arena, context.empty_vec, context.cons_vec);
-    }
-    return ret;
-
-  }
-
 }

@@ -1,0 +1,33 @@
+import * from bool;
+
+block {
+  declare not : Bool -> Bool;
+  not yes = no;
+  not no = yes;
+
+  declare and : Bool -> Bool -> Bool;
+  and yes yes = yes;
+  and x no = no;
+  and no x = no;
+
+  declare or : Bool -> Bool -> Bool;
+  or yes x = yes;
+  or x yes = yes;
+  or no no = no;
+
+  declare if : (T : Type) -> Bool -> T -> T -> T;
+  if _ yes if_branch _ = if_branch;
+  if _ no _ else_branch = else_branch;
+
+  declare bool_induct : (P : Bool -> Type) -> (P yes) -> (P no) -> (x : Bool) -> P x;
+  bool_induct _ if_branch _ yes = if_branch;
+  bool_induct _ _ else_branch no = else_branch;
+
+  module [
+    module_entry _ "not" not,
+    module_entry _ "and" and,
+    module_entry _ "or" or,
+    module_entry _ "if" if,
+    module_entry _ "bool_induct" bool_induct
+  ]
+}

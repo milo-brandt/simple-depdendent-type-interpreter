@@ -1,0 +1,11 @@
+import * from bool;
+
+block {
+  axiom Witness : Bool -> Type;
+  axiom witness : Witness yes;
+
+  module [
+    module_entry _ "Witness" Witness,
+    module_entry _ "witness" witness
+  ]
+}

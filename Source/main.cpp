@@ -7,6 +7,7 @@
 #include "Module/store.hpp"
 #include "NewExpression/arena_utility.hpp"
 #include "Pipeline/standard_compiler_context.hpp"
+#include "Pipeline/compile_stages.hpp"
 
 void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpression expr) {
   std::cout << user::raw_format(arena, expr) << "\n";
@@ -67,13 +68,163 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 #else
 
-struct NamedModule {
-  expr_module::Core core;
-  std::vector<std::string> names;
+struct ModuleInfo {
+  std::unordered_map<std::string, new_expression::TypedValue> exported_terms;
+  pipeline::compile::EvaluateInfo evaluate_info;
+  std::string source;
+  static constexpr auto part_info = mdb::parts::simple<3>;
 };
+struct ModuleLoadInfo {
+  std::unordered_set<std::string> modules_loading;
+  std::vector<std::string> module_loading_stack;
+  std::unordered_map<std::string, ModuleInfo> module_info;
+  static constexpr auto part_info = mdb::parts::simple<3>;
+  bool locate_and_prepare_module(std::string module_name, pipeline::compile::StandardCompilerContext& context, pipeline::compile::ModuleInfo const& module_primitives);
+  bool prepare_module(std::string module_name, std::string source, pipeline::compile::StandardCompilerContext& context, pipeline::compile::ModuleInfo const& module_primitives) {
+    if(module_info.contains(module_name)) return true;
+    if(modules_loading.contains(module_name)) {
+      std::cout << "Cyclic dependency in modules. Backtrace:\n";
+      bool found = false;
+      for(auto const& name : module_loading_stack) {
+        found = found || name == module_name;
+        if(found) {
+          std::cout << name << "\n";
+        }
+      }
+      modules_loading.clear();
+      module_loading_stack.clear();
+      return false;
+    }
+    modules_loading.insert(module_name);
+    module_loading_stack.push_back(module_name);
+    auto parsed_module_result = bind(
+      pipeline::compile::lex({context.arena, source}),
+      [&](auto lexed) {
+        return parse_module(std::move(lexed));
+      });
+    if(parsed_module_result.holds_error()) {
+      std::cout << parsed_module_result.get_error() << "\n";
+      return false;
+    }
+    auto& parsed_module = parsed_module_result.get_value();
+    std::unordered_map<std::string, new_expression::TypedValue> names_to_values;
+    new_expression::RAIIDestroyer destroyer{context.arena, names_to_values};
+    for(auto const& entry : context.names_to_values) {
+      names_to_values.insert(std::make_pair(entry.first, copy_on_arena(context.arena, entry.second)));
+    }
+    auto add_name = [&](std::string name, new_expression::TypedValue value) {
+      if(names_to_values.contains(name)) {
+        destroy_from_arena(context.arena, value);
+        std::cout << "Duplicated name " << name << " in imports of " << module_name << ".\n";
+        return false;
+      } else {
+        names_to_values.insert(std::make_pair(std::move(name), std::move(value)));
+        return true;
+      }
+    };
+    for(auto const& import_info : parsed_module.first.imports) {
+      if(!locate_and_prepare_module(import_info.module_name, context, module_primitives)) return false;
+      auto const& info = module_info.at(import_info.module_name);
+      if(import_info.request_all) {
+        for(auto const& entry : info.exported_terms) {
+          if(!add_name(entry.first, copy_on_arena(context.arena, entry.second))) return false;
+        }
+      } else {
+        for(auto const& request : import_info.requested_names) {
+          if(!info.exported_terms.contains(request)) {
+            std::cout << "No name " << request << " in module " << import_info.module_name << " requested from " << module_name << ".\n";
+            return false;
+          }
+          if(!add_name(request, copy_on_arena(context.arena, info.exported_terms.at(request)))) return false;
+        }
+      }
+    }
+    auto compilation_result = map(
+      resolve(std::move(parsed_module.second), {
+        .names_to_values = names_to_values,
+        .u64 = context.u64.get(),
+        .str = context.str.get(),
+        .empty_vec = new_expression::TypedValue{
+          .value = context.arena.copy(context.empty_vec),
+          .type = context.arena.copy(context.context.type_collector.get_type_of(context.empty_vec))
+        },
+        .cons_vec = new_expression::TypedValue{
+          .value = context.arena.copy(context.cons_vec),
+          .type = context.arena.copy(context.context.type_collector.get_type_of(context.cons_vec))
+        }
+      }),
+      [&](auto resolved) {
+        return evaluate(std::move(resolved), {
+          .context = context.context
+        });
+      }
+    );
+    if(compilation_result.holds_error()) {
+      std::cout << compilation_result.get_error() << "\n";
+      return false;
+    }
+    auto& compilation = compilation_result.get_value();
+    if(!compilation.is_okay()) {
+      new_expression::WeakKeyMap<std::string> externals_to_names(context.arena);
+      compilation.report_errors_to(std::cout, externals_to_names);
+      return false;
+    }
+    new_expression::EvaluationContext ctx{context.arena, context.context.rule_collector};
+    compilation.result.value = ctx.reduce(std::move(compilation.result.value));
+    compilation.result.type = ctx.reduce(std::move(compilation.result.type));
+    if(compilation.is_okay() && compilation.result.type == module_primitives.module_type) {
+      std::unordered_map<std::string, new_expression::TypedValue> exported_terms;
+      new_expression::WeakExpression module_head = unfold(context.arena, compilation.result.value).args[0];
+      while(true) {
+        auto unfolded = unfold(context.arena, module_head);
+        if(unfolded.args.size() != 3) break;
+        auto entry = unfolded.args[1]; //head;
+        auto entry_unfolded = unfold(context.arena, entry);
+        if(entry_unfolded.args.size() != 3) break; //???
+        auto str = std::string{context.str->read_data(context.arena.get_data(entry_unfolded.args[1])).get_string()};
+        auto type = entry_unfolded.args[0];
+        auto value = entry_unfolded.args[2];
+        module_head = unfolded.args[2];
+        if(exported_terms.contains(str)) {
+          std::cout << "Duplicated export " << str << " in module " << module_name << "\n";
+          destroy_from_arena(context.arena, exported_terms, compilation);
+          return false;
+        }
+        exported_terms.insert(std::make_pair(std::move(str), new_expression::TypedValue{
+          .value = context.arena.copy(value),
+          .type = context.arena.copy(type)
+        }));
+      }
+      module_info.insert(std::make_pair(module_name, ModuleInfo{
+        .exported_terms = std::move(exported_terms),
+        .evaluate_info = std::move(compilation),
+        .source = std::move(source)
+      }));
+      modules_loading.erase(module_name);
+      module_loading_stack.pop_back();
+      return true;
+    } else {
+      std::cout << "Module " << module_name << " did not return a module object.\n";
+      destroy_from_arena(context.arena, compilation);
+      return false;
+    }
+  }
+};
+bool ModuleLoadInfo::locate_and_prepare_module(std::string module_name, pipeline::compile::StandardCompilerContext& context, pipeline::compile::ModuleInfo const& module_primitives) {
+  if(module_info.contains(module_name)) return true;
+  std::string source;
+  std::ifstream f("InnerLib/" + module_name);
+  if(!f) {
+    std::cout << "Failed to read file \"" << ("InnerLib/" + module_name) << "\"\n";
+    return false;
+  } else {
+    std::getline(f, source, '\0'); //just read the whole file - assuming no null characters in it :P
+  }
+  return prepare_module(module_name, std::move(source), context, module_primitives);
+}
+
 
 int main(int argc, char** argv) {
-  std::vector<NamedModule> modules_loaded;
 
   /*if(argc == 2) {
     std::ifstream f(argv[1]);
@@ -140,10 +291,6 @@ int main(int argc, char** argv) {
     }
     last_line = line;
     if(line == "q") return 0;
-    if(line == "clear") {
-      modules_loaded.clear();
-      continue;
-    }
     if(line.starts_with("file ")) {
       std::ifstream f(line.substr(5));
       if(!f) {
@@ -310,6 +457,7 @@ int main(int argc, char** argv) {
 
       pipeline::compile::StandardCompilerContext context(arena);
       auto module_info = context.create_module_primitives();
+      ModuleLoadInfo load_info;
 
       /*for(auto const& mod : modules_loaded) {
         auto eval_result = execute(
@@ -333,6 +481,79 @@ int main(int argc, char** argv) {
       }*/
 
       {
+        auto parsed_module_result = bind(
+          pipeline::compile::lex({context.arena, line}),
+          [&](auto lexed) {
+            return parse_module(std::move(lexed));
+          });
+        if(parsed_module_result.holds_error()) {
+          std::cout << parsed_module_result.get_error() << "\n";
+          return false;
+        }
+        auto& parsed_module = parsed_module_result.get_value();
+        std::unordered_map<std::string, new_expression::TypedValue> names_to_values;
+        new_expression::RAIIDestroyer destroyer{arena, names_to_values};
+        for(auto const& entry : context.names_to_values) {
+          names_to_values.insert(std::make_pair(entry.first, copy_on_arena(context.arena, entry.second)));
+        }
+        auto add_name = [&](std::string name, new_expression::TypedValue value) {
+          if(names_to_values.contains(name)) {
+            destroy_from_arena(context.arena, value);
+            std::cout << "Duplicated name " << name << " in imports of main expression.\n";
+            return false;
+          } else {
+            names_to_values.insert(std::make_pair(std::move(name), std::move(value)));
+            return true;
+          }
+        };
+        for(auto const& import_info : parsed_module.first.imports) {
+          if(!load_info.locate_and_prepare_module(import_info.module_name, context, module_info)) {
+            std::terminate();
+          }
+          auto const& info = load_info.module_info.at(import_info.module_name);
+          if(import_info.request_all) {
+            for(auto const& entry : info.exported_terms) {
+              if(!add_name(entry.first, copy_on_arena(context.arena, entry.second))) {
+                std::terminate();
+              }
+            }
+          } else {
+            for(auto const& request : import_info.requested_names) {
+              if(!info.exported_terms.contains(request)) {
+                std::cout << "No name " << request << " in module " << import_info.module_name << " requested from  main.\n";
+                std::terminate();
+              }
+              if(!add_name(request, copy_on_arena(context.arena, info.exported_terms.at(request)))) {
+                std::terminate();
+              }
+            }
+          }
+        }
+        auto compilation_result = map(
+          resolve(std::move(parsed_module.second), {
+            .names_to_values = names_to_values,
+            .u64 = context.u64.get(),
+            .str = context.str.get(),
+            .empty_vec = new_expression::TypedValue{
+              .value = context.arena.copy(context.empty_vec),
+              .type = context.arena.copy(context.context.type_collector.get_type_of(context.empty_vec))
+            },
+            .cons_vec = new_expression::TypedValue{
+              .value = context.arena.copy(context.cons_vec),
+              .type = context.arena.copy(context.context.type_collector.get_type_of(context.cons_vec))
+            }
+          }),
+          [&](auto resolved) {
+            return evaluate(std::move(resolved), {
+              .context = context.context
+            });
+          }
+        );
+        if(compilation_result.holds_error()) {
+          std::cout << compilation_result.get_error() << "\n";
+          return false;
+        }
+
         new_expression::WeakKeyMap<std::string> externals_to_names(arena);
         externals_to_names.set(context.context.primitives.type, "Type");
         externals_to_names.set(context.context.primitives.arrow, "arrow");
@@ -346,24 +567,33 @@ int main(int argc, char** argv) {
         externals_to_names.set(module_info.module_entry_type, "ModuleEntry");
         externals_to_names.set(module_info.module_entry_ctor, "module_entry");
 
-        auto result = full_compile_module(arena, source, context.combined_context());
-        if(auto* module_value = result.get_if_value()) {
-          for(auto const& import : module_value->first.imports) {
+        if(auto* module_value = compilation_result.get_if_value()) {
+          /*for(auto const& import : module_value->first.imports) {
             std::cout << "Import: " << import.module_name;
             if(import.request_all) std::cout << " (all)";
             for(auto const& request : import.requested_names) {
               std::cout << " " << request;
             }
             std::cout << "\n";
-          }
-          auto* value = &module_value->second;
+          }*/
+          auto* value = module_value;//&module_value->second;
           value->report_errors_to(std::cout, {arena});
           auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
             if(auto name = value->get_explicit_name_of(expr)) {
               o << *name;
+              return;
             } else if(externals_to_names.contains(expr)) {
               o << externals_to_names.at(expr);
-            } else if(arena.holds_declaration(expr)) {
+              return;
+            } else {
+              for(auto const& entry : load_info.module_info) {
+                if(auto name = entry.second.evaluate_info.get_explicit_name_of(expr)) {
+                  o << entry.first << "::" << *name;
+                  return;
+                }
+              }
+            }
+            if(arena.holds_declaration(expr)) {
               o << "decl_" << expr.data();
             } else if(arena.holds_axiom(expr)) {
               o << "ax_" << expr.data();
@@ -425,12 +655,6 @@ int main(int argc, char** argv) {
               .exports = std::move(exports)
             });
             std::cout << debug_format(core) << "\n";
-            modules_loaded.push_back({
-              .core = std::move(core),
-              .names = mdb::map([&](auto&& entry) {
-                return std::move(entry.first);
-              }, std::move(entries))
-            });
           }
           /*auto exports = mdb::make_vector<new_expression::OwnedExpression>(
             arena.copy(value->result.value)
@@ -463,10 +687,10 @@ int main(int argc, char** argv) {
 
 
         } else {
-          std::cout << result.get_error() << "\n";
+          std::cout << compilation_result.get_error() << "\n";
         }
       }
-      destroy_from_arena(arena, module_info);
+      destroy_from_arena(arena, module_info, load_info);
       //destroy_from_arena(arena, mul_u64, sub_u64, exp_u64, len, substr, module_entry_ctor, module_ctor, module_type);
     }
     arena.clear_orphaned_expressions();

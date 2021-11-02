@@ -1,0 +1,11 @@
+block {
+  axiom Bool : Type;
+  axiom yes : Bool;
+  axiom no : Bool;
+
+  module [
+    module_entry _ "Bool" Bool,
+    module_entry _ "yes" yes,
+    module_entry _ "no" no
+  ]
+}

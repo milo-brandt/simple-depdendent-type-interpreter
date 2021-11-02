@@ -30,7 +30,6 @@ namespace pipeline::compile {
     solver::BasicContext& context;
   };
   mdb::Result<EvaluateInfo, std::string> full_compile(new_expression::Arena&, std::string_view source, CombinedContext);
-  mdb::Result<std::pair<expression_parser::ModuleHeader, EvaluateInfo>, std::string> full_compile_module(new_expression::Arena&, std::string_view source, CombinedContext);
 }
 
 #endif
