@@ -42,7 +42,7 @@ namespace pipeline::compile {
     }
   }
   mdb::Result<ParseInfo, std::string> parse(LexInfo input) {
-    auto ret = expression_parser::parse_lexed(input.lexer_output.root());
+    auto ret = expression_parser::parse_lexed(input.lexer_output);
     if(auto* success = ret.get_if_value()) {
       return ParseInfo{
         std::move(input),

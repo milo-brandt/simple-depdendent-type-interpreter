@@ -198,7 +198,7 @@ TEST_CASE("The expression parser matches various expressions.") {
       FAIL("Lex Error: " << err->message << "\nAt: " << err->position);
     }
     auto lex_out = archive(lex.get_value().output);
-    auto ret = expression_parser::parse_lexed(lex_out.root());
+    auto ret = expression_parser::parse_lexed(lex_out);
     if(auto* error = ret.get_if_error()) {
       FAIL("Failed to parse: " << error->message); //TODO: trace back through lexer
     } else {

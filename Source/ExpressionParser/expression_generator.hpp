@@ -13,9 +13,6 @@ match (f x) -> T {
 
 namespace expression_parser {
   using LexerIndex = lex_archive_index::Term;
-  struct LexerSpan {
-    LexerIndex parent;
-  };
   struct ParseError {
     LexerIndex position;
     std::string message;
@@ -42,7 +39,8 @@ namespace expression_parser {
     constexpr std::uint64_t underscore = 12;
     constexpr std::uint64_t comma = 13;
   };
-  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_output::archive_part::Term const&);
+  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_output::archive_root::Term const&, LexerSpanIndex);
+  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_output::archive_root::Term const&);
 }
 
 #endif

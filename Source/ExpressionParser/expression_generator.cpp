@@ -862,13 +862,42 @@ namespace expression_parser {
         .position = position
       }};
     }
-    mdb::Result<located_output::Expression, ParseError> parse_lexed_impl(lex_archive::Term const& term) {
+    /*mdb::Result<located_output::Expression, ParseError> parse_lexed_impl(LocatorInfo locator, LexerSpan span) {
       LexerSpan span = term.get_parenthesized_expression();
       LocatorInfo locator = term.get_parenthesized_expression();
       return parse_expression(locator, span);
+    }*/
+    lex_output::archive_part::SpanTerm::ConstIterator get_iterator(lex_archive_index::Term parent, std::uint64_t index, lex_output::archive_root::Term const& term) {
+      if(auto* parens = term[parent].get_if_parenthesized_expression()) {
+        return parens->body.begin() + index;
+      } else if(auto* bracket = term[parent].get_if_bracket_expression()) {
+        return bracket->body.begin() + index;
+      } else {
+        return term[parent].get_brace_expression().body.begin() + index;
+      }
+    }
+    LocatorInfo get_locator(lex_output::archive_part::Term const& term) {
+      if(auto* parens = term.get_if_parenthesized_expression()) {
+        return *parens;
+      } else if(auto* bracket = term.get_if_bracket_expression()) {
+        return *bracket;
+      } else {
+        return term.get_brace_expression();
+      }
     }
   }
-  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_archive::Term const& term) {
-    return parse_lexed_impl(term);
+  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_output::archive_root::Term const& term, LexerSpanIndex index) {
+    LexerSpan span{
+      get_iterator(index.parent, index.begin_index, term),
+      get_iterator(index.parent, index.end_index, term)
+    };
+    LocatorInfo locator = get_locator(term[index.parent]);
+    return parse_expression(locator, span);
   }
+  mdb::Result<located_output::Expression, ParseError> parse_lexed(lex_output::archive_root::Term const& term) {
+    LexerSpan span = term.root().get_parenthesized_expression();
+    LocatorInfo locator = term.root().get_parenthesized_expression();
+    return parse_expression(locator, span);
+  }
+
 }
