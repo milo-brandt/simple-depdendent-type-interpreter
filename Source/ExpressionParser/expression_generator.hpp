@@ -13,12 +13,6 @@ match (f x) -> T {
 */
 
 namespace expression_parser {
-  using LexerIndex = lex_archive_index::Term;
-  struct ParseError {
-    LexerIndex position;
-    std::string message;
-    std::vector<std::pair<LexerIndex, std::string> > secondary_positions;
-  };
   enum class ExpressionSymbol {
     block, declare, axiom, rule, let, where, match, verify, require, arrow, colon, semicolon, equals, backslash, double_backslash, dot, underscore, comma, unknown
   };

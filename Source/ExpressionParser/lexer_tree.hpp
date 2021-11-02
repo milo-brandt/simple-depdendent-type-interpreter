@@ -43,6 +43,13 @@ namespace expression_parser {
   std::string_view position_of(LexerSpanIndex const&, lex_locator::archive_root::Term const&);
 
   mdb::Result<lex_located_output::Term, LexerError> lex_string(std::string_view, LexerInfo const&); //not really parenthesized; just a convenient way to return vector
+
+  using LexerIndex = lex_archive_index::Term;
+  struct ParseError {
+    LexerIndex position;
+    std::string message;
+    std::vector<std::pair<LexerIndex, std::string> > secondary_positions;
+  };
 }
 
 #endif

@@ -8,6 +8,8 @@ Need to re-add support for U64s, Strings, Vectors.
 
 Verify should probably allow deduction of holes *defined within verify itself*.
 
+it crashes if there's an empty string (or empty string after import header)
+
 *************
 High priority
 *************

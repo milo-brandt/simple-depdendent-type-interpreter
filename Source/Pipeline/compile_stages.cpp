@@ -16,6 +16,9 @@ namespace pipeline::compile {
         {"match", 15},
         {"verify", 16},
         {"require", 17},
+        {"import", 18},
+        {"*", 19},
+        {"from", 20},
         {"->", 5},
         {":", 6},
         {";", 7},
@@ -77,6 +80,64 @@ namespace pipeline::compile {
       err << "Error: " << error.message << "\nAt " << format_error(expression_parser::position_of(input.lexer_locator[error.position]), input.source);
       return err.str();
     }
+  }
+  mdb::Result<std::pair<expression_parser::ModuleHeader, ParseInfo>, std::string> parse_module(LexInfo input) {
+    auto module_parse_result = expression_parser::parse_module_header(input.lexer_output, [](std::uint64_t symbol) -> expression_parser::HeaderSymbol {
+      switch(symbol) {
+        case 7: return expression_parser::HeaderSymbol::semicolon;
+        case 13: return expression_parser::HeaderSymbol::comma;
+        case 18: return expression_parser::HeaderSymbol::import;
+        case 19: return expression_parser::HeaderSymbol::star;
+        case 20: return expression_parser::HeaderSymbol::from;
+        default: return expression_parser::HeaderSymbol::unknown;
+      }
+    });
+    if(auto* module_success = module_parse_result.get_if_value()) {
+      auto ret = expression_parser::parse_lexed(input.lexer_output, module_success->remaining, [](std::uint64_t symbol) -> expression_parser::ExpressionSymbol {
+        switch(symbol) {
+          case 0: return expression_parser::ExpressionSymbol::block;
+          case 1: return expression_parser::ExpressionSymbol::declare;
+          case 2: return expression_parser::ExpressionSymbol::axiom;
+          case 3: return expression_parser::ExpressionSymbol::rule;
+          case 4: return expression_parser::ExpressionSymbol::let;
+          case 5: return expression_parser::ExpressionSymbol::arrow;
+          case 6: return expression_parser::ExpressionSymbol::colon;
+          case 7: return expression_parser::ExpressionSymbol::semicolon;
+          case 8: return expression_parser::ExpressionSymbol::equals;
+          case 9: return expression_parser::ExpressionSymbol::backslash;
+          case 10: return expression_parser::ExpressionSymbol::double_backslash;
+          case 11: return expression_parser::ExpressionSymbol::dot;
+          case 12: return expression_parser::ExpressionSymbol::underscore;
+          case 13: return expression_parser::ExpressionSymbol::comma;
+          case 14: return expression_parser::ExpressionSymbol::where;
+          case 15: return expression_parser::ExpressionSymbol::match;
+          case 16: return expression_parser::ExpressionSymbol::verify;
+          case 17: return expression_parser::ExpressionSymbol::require;
+          default: return expression_parser::ExpressionSymbol::unknown;
+        }
+      });
+      if(auto* success = ret.get_if_value()) {
+        return std::make_pair(
+          std::move(module_success->header),
+          ParseInfo{
+            std::move(input),
+            archive(std::move(success->output)),
+            archive(std::move(success->locator))
+          }
+        );
+      } else {
+        auto const& error = ret.get_error();
+        std::stringstream err;
+        err << "Error: " << error.message << "\nAt " << format_error(expression_parser::position_of(input.lexer_locator[error.position]), input.source);
+        return err.str();
+      }
+    } else {
+      auto const& error = module_parse_result.get_error();
+      std::stringstream err;
+      err << "Error: " << error.message << "\nAt " << format_error(expression_parser::position_of(input.lexer_locator[error.position]), input.source);
+      return err.str();
+    }
+
   }
   mdb::Result<ResolveInfo, std::string> resolve(ParseInfo input, ResolutionContext context) {
     auto embeds = mdb::make_vector<new_expression::TypedValue>(
@@ -212,4 +273,36 @@ namespace pipeline::compile {
     }
     return ret;
   }
+  mdb::Result<std::pair<expression_parser::ModuleHeader, EvaluateInfo>, std::string> full_compile_module(new_expression::Arena& arena, std::string_view source, CombinedContext context) {
+    bool typed_values_used = false;
+    auto ret = bind(
+      lex({arena, source}),
+      [&](auto lexed) {
+        return parse_module(std::move(lexed));
+      },
+      [&](auto parsed) {
+        typed_values_used = true;
+        return map(
+          resolve(std::move(parsed.second), {
+            .names_to_values = context.names_to_values,
+            .u64 = context.u64,
+            .str = context.str,
+            .empty_vec = std::move(context.empty_vec),
+            .cons_vec = std::move(context.cons_vec)
+          }),
+          [&](auto resolved) {
+            return std::make_pair(std::move(parsed.first), evaluate(std::move(resolved), {
+              .context = context.context
+            }));
+          }
+        );
+      }
+    );
+    if(!typed_values_used) {
+      destroy_from_arena(arena, context.empty_vec, context.cons_vec);
+    }
+    return ret;
+
+  }
+
 }

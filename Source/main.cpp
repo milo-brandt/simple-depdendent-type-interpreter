@@ -346,8 +346,17 @@ int main(int argc, char** argv) {
         externals_to_names.set(module_info.module_entry_type, "ModuleEntry");
         externals_to_names.set(module_info.module_entry_ctor, "module_entry");
 
-        auto result = full_compile(arena, source, context.combined_context());
-        if(auto* value = result.get_if_value()) {
+        auto result = full_compile_module(arena, source, context.combined_context());
+        if(auto* module_value = result.get_if_value()) {
+          for(auto const& import : module_value->first.imports) {
+            std::cout << "Import: " << import.module_name;
+            if(import.request_all) std::cout << " (all)";
+            for(auto const& request : import.requested_names) {
+              std::cout << " " << request;
+            }
+            std::cout << "\n";
+          }
+          auto* value = &module_value->second;
           value->report_errors_to(std::cout, {arena});
           auto namer = [&](std::ostream& o, new_expression::WeakExpression expr) {
             if(auto name = value->get_explicit_name_of(expr)) {
