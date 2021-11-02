@@ -444,6 +444,13 @@ namespace new_expression {
         default: std::cout << "Corrupted entry!\n"; break;
       }
     });
+    std::size_t bad_data_type_count = 0;
+    for(auto const& ptr : impl->data_types) {
+      if(ptr != nullptr) ++bad_data_type_count;
+    }
+    if(bad_data_type_count > 0) {
+      std::cout << "Data types not destroyed: " << bad_data_type_count << "\n";
+    }
   }
   WeakExpression Arena::weak_expression_of_data(Data const& data) {
     return WeakExpression{ //move the pointer backwards to the entry

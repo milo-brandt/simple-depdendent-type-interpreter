@@ -7,14 +7,16 @@
 
 namespace primitive {
   struct U64Data : new_expression::DataType {
-    U64Data(new_expression::Arena& arena, std::uint64_t type_index):new_expression::DataType(arena, type_index) {}
+    U64Data(new_expression::Arena& arena, std::uint64_t type_index, new_expression::OwnedExpression type):new_expression::DataType(arena, type_index), type(std::move(type)) {}
     std::unordered_map<std::uint64_t, new_expression::WeakExpression> memoized;
   public:
-    static new_expression::SharedDataTypePointer<U64Data> register_on(new_expression::Arena& arena) {
-      return arena.create_data_type([](new_expression::Arena& arena, std::uint64_t type_index) {
+    new_expression::OwnedExpression type;
+    static new_expression::SharedDataTypePointer<U64Data> register_on(new_expression::Arena& arena, new_expression::OwnedExpression u64_type) {
+      return arena.create_data_type([&](new_expression::Arena& arena, std::uint64_t type_index) {
         return new U64Data{
           arena,
-          type_index
+          type_index,
+          std::move(u64_type)
         };
       });
     }
@@ -46,16 +48,22 @@ namespace primitive {
     };
     bool all_subexpressions(new_expression::Buffer const&, mdb::function<bool(new_expression::WeakExpression)>) { return true; };
     new_expression::OwnedExpression modify_subexpressions(new_expression::Buffer const&, new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
+    new_expression::OwnedExpression type_of(new_expression::Buffer const&) { return arena.copy(type); }
+    ~U64Data() {
+      arena.drop(std::move(type));
+    }
   };
   struct StringData : new_expression::DataType {
-    StringData(new_expression::Arena& arena, std::uint64_t type_index):new_expression::DataType(arena, type_index) {}
+    StringData(new_expression::Arena& arena, std::uint64_t type_index, new_expression::OwnedExpression type):new_expression::DataType(arena, type_index), type(std::move(type)) {}
     std::unordered_map<StringHolder, new_expression::WeakExpression, StringHolderHasher> memoized;
   public:
-    static new_expression::SharedDataTypePointer<StringData> register_on(new_expression::Arena& arena) {
-      return arena.create_data_type([](new_expression::Arena& arena, std::uint64_t type_index) {
+    new_expression::OwnedExpression type;
+    static new_expression::SharedDataTypePointer<StringData> register_on(new_expression::Arena& arena, new_expression::OwnedExpression str_type) {
+      return arena.create_data_type([&](new_expression::Arena& arena, std::uint64_t type_index) {
         return new StringData{
           arena,
-          type_index
+          type_index,
+          std::move(str_type)
         };
       });
     }
@@ -87,6 +95,10 @@ namespace primitive {
     };
     bool all_subexpressions(new_expression::Buffer const&, mdb::function<bool(new_expression::WeakExpression)>) { return true; };
     new_expression::OwnedExpression modify_subexpressions(new_expression::Buffer const&, new_expression::WeakExpression me, mdb::function<new_expression::OwnedExpression(new_expression::WeakExpression)>) { return arena.copy(me); };
+    new_expression::OwnedExpression type_of(new_expression::Buffer const&) { return arena.copy(type); }
+    ~StringData() {
+      arena.drop(std::move(type));
+    }
   };
 }
 

@@ -72,7 +72,15 @@ namespace new_expression {
     virtual void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) = 0;
     virtual bool all_subexpressions(Buffer const&, mdb::function<bool(WeakExpression)>) = 0;
     virtual OwnedExpression modify_subexpressions(Buffer const&, WeakExpression, mdb::function<OwnedExpression(WeakExpression)>) = 0;
-    ~DataType() = default;
+    virtual OwnedExpression type_of(Buffer const&) = 0;
+    /*
+    todo: utilities for shape compatibility, shape destructuring
+    virtual bool is_shared_compatible(Buffer const&, Buffer const&);
+    virtual bool all_corresponding_parts(Buffer const&, Buffer const&, mdb::function<bool(WeakExpression, WeakExpression)>);
+    ...should also require that we can make an appropriate conglomerate shape by calling modify_subexpressions and
+    just returning new conglomerates in order.
+    */
+    virtual ~DataType() = default;
   };
   template<class T>
   class SharedDataTypePointer {
