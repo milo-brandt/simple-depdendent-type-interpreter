@@ -1,3 +1,5 @@
+Need better type utilities
+
 Add test to ensure that axioms can't be defined by rules
 
 Need to ensure that indeterminates are not defined from contexts with more assumptions.

@@ -1,3 +1,4 @@
+import * from module_helper;
 import * from bool;
 
 block {

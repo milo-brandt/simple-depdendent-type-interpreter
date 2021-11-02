@@ -174,7 +174,9 @@ struct ModuleLoadInfo {
     compilation.result.type = ctx.reduce(std::move(compilation.result.type));
     if(compilation.is_okay() && compilation.result.type == module_primitives.module_type) {
       std::unordered_map<std::string, new_expression::TypedValue> exported_terms;
-      new_expression::WeakExpression module_head = unfold(context.arena, compilation.result.value).args[0];
+      auto outer_unfolded = unfold(context.arena, compilation.result.value);
+      auto load_name = std::string{context.str->read_data(context.arena.get_data(outer_unfolded.args[0])).get_string()};
+      new_expression::WeakExpression module_head = outer_unfolded.args[1];
       while(true) {
         auto unfolded = unfold(context.arena, module_head);
         if(unfolded.args.size() != 3) break;
@@ -202,6 +204,7 @@ struct ModuleLoadInfo {
       }));
       modules_loading.erase(module_name);
       module_loading_stack.pop_back();
+      std::cout << "Want to load: " << load_name << "\n";
       return true;
     } else {
       std::cout << "Module " << module_name << " did not return a module object.\n";
@@ -563,7 +566,7 @@ int main(int argc, char** argv) {
         externals_to_names.set(context.empty_vec, "empty_vec");
         externals_to_names.set(context.cons_vec, "cons_vec");
         externals_to_names.set(module_info.module_type, "Module");
-        externals_to_names.set(module_info.module_ctor, "module");
+        externals_to_names.set(module_info.full_module_ctor, "full_module");
         externals_to_names.set(module_info.module_entry_type, "ModuleEntry");
         externals_to_names.set(module_info.module_entry_ctor, "module_entry");
 
@@ -612,7 +615,7 @@ int main(int argc, char** argv) {
           std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
           if(value->is_okay() && value->result.type == module_info.module_type) {
             std::cout << "Module!\n";
-            new_expression::WeakExpression module_head = unfold(arena, value->result.value).args[0];
+            new_expression::WeakExpression module_head = unfold(arena, value->result.value).args[1];
             std::vector<std::pair<std::string, new_expression::WeakExpression> > entries;
             while(true) {
               auto unfolded = unfold(arena, module_head);
@@ -644,7 +647,7 @@ int main(int argc, char** argv) {
             import_positions.set(context.empty_vec, "empty_vec");
             import_positions.set(context.cons_vec, "cons_vec");
             import_positions.set(module_info.module_type, "Module");
-            import_positions.set(module_info.module_ctor, "module");
+            import_positions.set(module_info.full_module_ctor, "module");
             import_positions.set(module_info.module_entry_type, "ModuleEntry");
             import_positions.set(module_info.module_entry_ctor, "module_entry");
             for(auto const& entry : load_info.module_info) {

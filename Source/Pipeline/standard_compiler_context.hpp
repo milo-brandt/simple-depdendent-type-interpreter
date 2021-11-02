@@ -7,7 +7,7 @@
 namespace pipeline::compile {
   struct ModuleInfo {
     new_expression::OwnedExpression module_type;
-    new_expression::OwnedExpression module_ctor;
+    new_expression::OwnedExpression full_module_ctor; //String -> Vector ModuleEntry -> Module;
     new_expression::OwnedExpression module_entry_type;
     new_expression::OwnedExpression module_entry_ctor;
     static constexpr auto part_info = mdb::parts::simple<4>;

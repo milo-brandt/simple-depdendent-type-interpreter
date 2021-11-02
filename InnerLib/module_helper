@@ -1,0 +1,5 @@
+block {
+  full_module "" [
+    module_entry _ "module" (full_module "")
+  ]
+}

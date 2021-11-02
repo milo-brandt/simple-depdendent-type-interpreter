@@ -1,3 +1,5 @@
+import * from module_helper;
+
 block {
   axiom Bool : Type;
   axiom yes : Bool;
