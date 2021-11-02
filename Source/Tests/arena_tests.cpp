@@ -6,12 +6,15 @@ using namespace new_expression;
 
 namespace {
   struct U64Data : DataType {
-    U64Data(Arena& arena, std::uint64_t index):DataType(arena, index) {}
+    OwnedExpression type;
+    U64Data(Arena& arena, std::uint64_t index, OwnedExpression type):DataType(arena, index), type(std::move(type)) {}
     void destroy(WeakExpression, Buffer&) {};
     void debug_print(Buffer const&, std::ostream&) {};
     void pretty_print(Buffer const&, std::ostream&, mdb::function<void(WeakExpression)>) {};
     bool all_subexpressions(Buffer const&, mdb::function<bool(WeakExpression)>) { return true; };
     OwnedExpression modify_subexpressions(Buffer const&, WeakExpression me, mdb::function<OwnedExpression(WeakExpression)>) { return arena.copy(me); };
+    OwnedExpression type_of(Buffer const&) { return arena.copy(type); }
+    ~U64Data() { arena.drop(std::move(type)); }
   };
 }
 TEST_CASE("An arena that has done nothing is empty.") {
@@ -71,8 +74,9 @@ TEST_CASE("Arenas give equal indices to equal applications.") {
 }
 TEST_CASE("Scalar C++ types embedded in arena are sensibly handled.") {
   Arena arena;
-  auto u64 = arena.create_data_type([](Arena& arena, std::uint64_t index) {
-    return new U64Data{arena, index};
+  auto u64_type = arena.axiom();
+  auto u64 = arena.create_data_type([&](Arena& arena, std::uint64_t index) {
+    return new U64Data{arena, index, arena.copy(u64_type)};
   });
   auto data = arena.data(u64->type_index, [](Buffer* buffer){
     new (buffer) std::uint64_t{51};
@@ -90,6 +94,7 @@ TEST_CASE("Scalar C++ types embedded in arena are sensibly handled.") {
 
   arena.drop(std::move(data));
   arena.drop(std::move(data_modified));
+  arena.drop(std::move(u64_type));
 
   u64 = nullptr; //release reference
   arena.clear_orphaned_expressions();
@@ -98,7 +103,7 @@ TEST_CASE("Scalar C++ types embedded in arena are sensibly handled.") {
 TEST_CASE("Scalar C++ types are not destroyed early.") {
   Arena arena;
   auto u64 = arena.create_data_type([](Arena& arena, std::uint64_t index) {
-    return new U64Data{arena, index};
+    return new U64Data{arena, index, arena.axiom()};
   });
   auto data = arena.data(u64->type_index, [](Buffer* buffer){
     new (buffer) std::uint64_t{51};
@@ -120,7 +125,7 @@ TEST_CASE("Scalar C++ types are not destroyed early.") {
 TEST_CASE("Data in arenas can be recovered by getters.") {
   Arena arena;
   auto u64 = arena.create_data_type([](Arena& arena, std::uint64_t index) {
-    return new U64Data{arena, index};
+    return new U64Data{arena, index, arena.axiom()};
   });
   auto apply_lhs = arena.axiom();
   auto apply_rhs = arena.axiom();

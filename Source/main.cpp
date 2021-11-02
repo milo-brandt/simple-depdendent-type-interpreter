@@ -310,17 +310,6 @@ int main(int argc, char** argv) {
 
       pipeline::compile::StandardCompilerContext context(arena);
       auto module_info = context.create_module_primitives();
-      auto possible_module_imports = mdb::make_vector<new_expression::OwnedExpression>(
-        arena.copy(context.context.primitives.type),
-        arena.copy(context.context.primitives.arrow),
-        arena.copy(context.context.primitives.constant),
-        arena.copy(context.context.primitives.id),
-        arena.copy(context.vec_type),
-        arena.copy(context.empty_vec),
-        arena.copy(context.cons_vec),
-        arena.copy(context.u64->type),
-        arena.copy(context.str->type)
-      );
 
       /*for(auto const& mod : modules_loaded) {
         auto eval_result = execute(
