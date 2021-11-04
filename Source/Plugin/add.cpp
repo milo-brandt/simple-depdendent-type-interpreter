@@ -2,6 +2,7 @@
 #include "../Utility/vector_utility.hpp"
 #include <iostream>
 #include <type_traits>
+#include "../Utility/function_info.hpp"
 
 /*
 
@@ -81,16 +82,55 @@ void operator>>(SimplePattern<Args...> pattern, Callback callback) {
   });
 }
 
+template<class... Handlers>
+struct RuleBuilder {
+  pipeline::compile::StandardCompilerContext* context;
+  std::tuple<Handlers...> handlers;
+  template<class T, std::size_t index = 0>
+  auto const& handler_for() {
+    if constexpr(index < sizeof...(Handlers)) {
+      auto const& handler = std::get<index>(handlers);
+      using ReadType = decltype(handler->read_data(std::declval<new_expression::Data>()));
+      if constexpr(std::is_same_v<std::decay_t<ReadType>, T>) {
+        return handler;
+      } else {
+        return handler_for<T, index + 1>();
+      }
+    } else {
+      static_assert(index < sizeof...(Handlers), "Handler not found for type.");
+    }
+  }
+  template<class Callback>
+  void operator()(new_expression::WeakExpression head, Callback callback) {
+    [&]<class Ret, class... Args>(mdb::FunctionInfo<Ret(Args...)>) {
+      return simple_pattern_builder(context)(head, handler_for<Args>()...) >> [callback = std::move(callback), ret_handler = handler_for<Ret>()]<class... Passed>(Passed&&... passed) {
+        return ret_handler->make_expression(callback(std::forward<Passed>(passed)...));
+      };
+    }(mdb::FunctionInfoFor<Callback>{});
+  }
+};
+template<class... Handlers>
+RuleBuilder<Handlers...> get_rule_builder(pipeline::compile::StandardCompilerContext* context, Handlers... handlers) {
+  return {
+    .context = context,
+    .handlers = std::make_tuple(std::move(handlers)...)
+  };
+}
+
+/*
+  Better: bind(add, [](std::uint64_t x, std::uint64_t y) {
+    return x + y;
+  });
+*/
+
 
 extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, new_expression::TypedValue* import_start, new_expression::TypedValue* import_end) {
   auto const& [add, mul] = map_span<2>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
-  auto simple_pattern = simple_pattern_builder(context);
-
-  simple_pattern(add, context->u64, context->u64) >> [context](std::uint64_t x, std::uint64_t y) {
-    return context->u64->make_expression(x + y);
-  };
-  simple_pattern(mul, context->u64, context->u64) >> [context](std::uint64_t x, std::uint64_t y) {
-    return context->u64->make_expression(x * y);
-  };
-
+  auto rule_builder = get_rule_builder(context, context->u64);
+  rule_builder(add, [](std::uint64_t x, std::uint64_t y) {
+    return x + y;
+  });
+  rule_builder(mul, [](std::uint64_t x, std::uint64_t y) {
+    return x * y;
+  });
 }
