@@ -1,0 +1,13 @@
+import * from module_helper;
+
+block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
+  module [
+    module_entry _ "Nat" Nat,
+    module_entry _ "zero" zero,
+    module_entry _ "succ" succ
+  ]
+}
