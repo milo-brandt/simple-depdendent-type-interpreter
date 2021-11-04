@@ -16,7 +16,6 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
   auto rule_builder = plugin::get_rule_builder(
     context,
     plugin::BoolHandler{
-      context->arena,
       yes,
       no
     },

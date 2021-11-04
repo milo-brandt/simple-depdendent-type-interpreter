@@ -183,23 +183,12 @@ namespace plugin {
     }
   };
   struct BoolHandler {
-    new_expression::Arena& arena;
     new_expression::WeakExpression yes;
     new_expression::WeakExpression no;
-    struct Embedder : detail::SelfDestroyerCRTP<Embedder> {
-      new_expression::OwnedExpression yes;
-      new_expression::OwnedExpression no;
-      static constexpr auto part_info = mdb::parts::apply_call([](auto& v, auto&& callback) { callback(v.yes, v.no); });
-      new_expression::OwnedExpression operator()(new_expression::Arena& arena, bool b) const {
-        return arena.copy(b ? yes : no);
-      }
-    };
     template<class R> requires std::is_same_v<std::decay_t<R>, bool>
     auto get_embedder() {
-      return Embedder{
-        arena,
-        arena.copy(yes),
-        arena.copy(no)
+      return [*this](new_expression::Arena& arena, bool b) {
+        return arena.copy(b ? yes : no);
       };
     }
   };

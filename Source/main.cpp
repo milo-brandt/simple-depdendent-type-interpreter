@@ -71,9 +71,10 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 struct ModuleInfo {
   std::unordered_map<std::string, new_expression::TypedValue> exported_terms;
+  std::vector<new_expression::TypedValue> export_list;
   pipeline::compile::EvaluateInfo evaluate_info;
   std::string source;
-  static constexpr auto part_info = mdb::parts::simple<3>;
+  static constexpr auto part_info = mdb::parts::simple<4>;
 };
 struct ModuleLoadInfo {
   std::unordered_set<std::string> modules_loading;
@@ -203,11 +204,6 @@ struct ModuleLoadInfo {
         } //don't export empty names
         ordered_exports.push_back(std::move(term));
       }
-      module_info.insert(std::make_pair(module_name, ModuleInfo{
-        .exported_terms = std::move(exported_terms),
-        .evaluate_info = std::move(compilation),
-        .source = std::move(source)
-      }));
       if(!load_name.empty()) {
         auto path = "./Plugin/" + load_name;
         auto lib = dlopen(path.c_str(), RTLD_LAZY);
@@ -222,8 +218,15 @@ struct ModuleLoadInfo {
         }
         auto initialize = (void(*)(pipeline::compile::StandardCompilerContext*, new_expression::TypedValue*, new_expression::TypedValue*))sym;
         initialize(&context, ordered_exports.data(), ordered_exports.data() + ordered_exports.size());
+        //Note: passed span will be kept alive while module is alive
         //dlclose(lib);
       }
+      module_info.insert(std::make_pair(module_name, ModuleInfo{
+        .exported_terms = std::move(exported_terms),
+        .export_list = std::move(ordered_exports),
+        .evaluate_info = std::move(compilation),
+        .source = std::move(source)
+      }));
       destroy_from_arena(context.arena, ordered_exports);
       modules_loading.erase(module_name);
       module_loading_stack.pop_back();
