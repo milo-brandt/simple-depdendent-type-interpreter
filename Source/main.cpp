@@ -222,7 +222,7 @@ struct ModuleLoadInfo {
         }
         auto initialize = (void(*)(pipeline::compile::StandardCompilerContext*, new_expression::TypedValue*, new_expression::TypedValue*))sym;
         initialize(&context, ordered_exports.data(), ordered_exports.data() + ordered_exports.size());
-        dlclose(lib);
+        //dlclose(lib);
       }
       destroy_from_arena(context.arena, ordered_exports);
       modules_loading.erase(module_name);

@@ -37,12 +37,17 @@ clean:
 	rm -r -f Build
 	rm -r -f WebBuild
 	rm -r -f EmscriptenBuild
+	rm -r -f Plugin
 	rm -f Source/Tests/full_cases_impl.cpp
 {%- for source_generator in source_generators %}
 {%- for output in source_generator.outputs %}
 	rm -f {{ output }}
 {%- endfor %}
 {%- endfor %}
+
+Plugin/add.so: PluginSource/add.cpp
+	@mkdir -p $(@D)
+	g++-10 -std=c++20 -ggdb -O0 -fpic PluginSource/add.cpp -shared -o Plugin/add.so
 
 Source/Tests/full_cases_impl.cpp: $(test_files)
 	python3 Tools/test_generator.py Source/Tests/full_cases_impl.cpp $(test_files)

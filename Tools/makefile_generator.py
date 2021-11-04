@@ -133,14 +133,14 @@ makefile = jinja_env.get_template('makefile_template').render(
             "objects": objects_to_compile("Source/main.cpp", "Debug"),
             "compiler": "$(compiler)",
             "compile_options": "-std=c++20 -ggdb -O0",
-            "link_options": "-std=c++20 -ggdb -O0 -ldl"
+            "link_options": "-std=c++20 -ggdb -O0 -rdynamic -ldl"
         },
         {
             "program": "Build/program",
             "objects": objects_to_compile("Source/main.cpp", "Build"),
             "compiler": "$(compiler)",
             "compile_options": "-std=c++20 -O3",
-            "link_options": "-std=c++20 -O3 -ldl"
+            "link_options": "-std=c++20 -O3 -rdynamic -ldl"
         },
         {
             "program": "DebugTest/program",
@@ -155,13 +155,6 @@ makefile = jinja_env.get_template('makefile_template').render(
             "compiler": "$(compiler)",
             "compile_options": "-std=c++20 -O3",
             "link_options": "-std=c++20 -O3"
-        },
-        {
-            "program": "Plugin/add.so",
-            "objects": objects_to_compile("Source/Plugin/add.cpp", "AddPlugin"),
-            "compiler": "$(compiler)",
-            "compile_options": "-std=c++20 -ggdb -O0 -fpic",
-            "link_options": "-std=c++20 -ggdb -O0 -shared"
         }
     ],
     source_generators = source_generators
