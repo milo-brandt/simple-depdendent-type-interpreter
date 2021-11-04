@@ -125,12 +125,18 @@ RuleBuilder<Handlers...> get_rule_builder(pipeline::compile::StandardCompilerCon
 
 
 extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, new_expression::TypedValue* import_start, new_expression::TypedValue* import_end) {
-  auto const& [add, mul] = map_span<2>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
+  auto const& [add, sub, mul, idiv] = map_span<4>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
   auto rule_builder = get_rule_builder(context, context->u64);
   rule_builder(add, [](std::uint64_t x, std::uint64_t y) {
     return x + y;
   });
+  rule_builder(sub, [](std::uint64_t x, std::uint64_t y) {
+    return x - y;
+  });
   rule_builder(mul, [](std::uint64_t x, std::uint64_t y) {
     return x * y;
+  });
+  rule_builder(idiv, [](std::uint64_t x, std::uint64_t y) {
+    return x / y;
   });
 }
