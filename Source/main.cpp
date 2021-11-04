@@ -198,7 +198,9 @@ struct ModuleLoadInfo {
           .value = context.arena.copy(value),
           .type = context.arena.copy(type)
         };
-        exported_terms.insert(std::make_pair(std::move(str), copy_on_arena(context.arena, term)));
+        if(!str.empty()) {
+          exported_terms.insert(std::make_pair(std::move(str), copy_on_arena(context.arena, term)));
+        } //don't export empty names
         ordered_exports.push_back(std::move(term));
       }
       module_info.insert(std::make_pair(module_name, ModuleInfo{

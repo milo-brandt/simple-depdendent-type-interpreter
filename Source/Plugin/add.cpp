@@ -40,6 +40,76 @@ decltype(auto) read_arg(new_expression::Arena& arena, new_expression::WeakExpres
   return ptr->read_data(arena.get_data(expr));
 }
 
+namespace builder {
+  template<class Final, class F1, class... Fs>
+  decltype(auto) call_getters(Final&& final, F1&& f1, Fs&&... fs) { //f_n(g) should call g(x1, x2, x3) for some set of args.
+    if constexpr(sizeof...(Fs) == 0) {
+      return f1(std::forward<Final>(final));
+    } else {
+      return call_getters([&]<class... Args>(Args&&... args){
+        return f1([&]<class... F1Args>(F1Args&&... f1_args) {
+          return final(std::forward<F1Args>(f1_args)..., std::forward<Args>(args)...);
+        });
+      }, std::forward<Fs>(fs)...);
+    }
+  }
+  template<class Final>
+  decltype(auto) ordered_eval(Final&& final) {
+    return final();
+  }
+  template<class Final, class F1, class... Fs>
+  decltype(auto) ordered_eval(Final&& final, F1&& f1, Fs&&... fs) {
+    return ordered_eval([&, arg = f1()]<class... Rest>(Rest&&... rest) mutable -> decltype(auto) {
+      return final(std::forward<decltype(f1())>(arg), std::forward<Rest>(rest)...);
+    }, std::forward<Fs>(fs)...);
+  }
+  /*
+  struct NotBuilder {
+    static constexpr bool is_reader = false;
+    static constexpr bool is_writer = false;
+  };
+
+  template<class T, class R>
+  struct BuilderData : NotBuilder {};
+
+  template<class T, class R>
+  struct SharedDataPointerBuilder {
+    static auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, new_expression::SharedDataTypePointer<T> ptr) {
+      steps.push_back(new_expression::DataCheck{
+        .capture_index = capture_index,
+        .expected_type = ptr->type_index
+      });
+      return [capture_index, ptr = std::move(ptr)](new_expression::Arena& arena, std::span<new_expression::WeakExpression> const& args, auto&& callback) -> decltype(auto) {
+        return callback(ptr->read_data(arena.get_data(args[capture_index])));
+      };
+    }
+  };*/
+
+  template<class R, class T>
+  auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, new_expression::SharedDataTypePointer<T> ptr)
+    requires requires{ (R)ptr->read_data(std::declval<new_expression::Data>()); }
+  {
+    steps.push_back(new_expression::DataCheck{
+      .capture_index = capture_index,
+      .expected_type = ptr->type_index
+    });
+    return [capture_index, ptr = std::move(ptr)](new_expression::Arena& arena, std::span<new_expression::WeakExpression> const& args, auto&& callback) -> decltype(auto) {
+      return callback(ptr->read_data(arena.get_data(args[capture_index])));
+    };
+  }
+  template<class R, class T>
+  auto get_embedder(new_expression::SharedDataTypePointer<T> ptr)
+    requires requires{ ptr->make_expression(std::declval<R>()); }
+  {
+    return [ptr = std::move(ptr)](new_expression::Arena& arena, R value) {
+      return ptr->make_expression(std::move(value));
+    };
+  };
+}
+
+/*
+
+*/
 
 
 auto simple_pattern_builder(pipeline::compile::StandardCompilerContext* context) {
@@ -87,26 +157,60 @@ struct RuleBuilder {
   pipeline::compile::StandardCompilerContext* context;
   std::tuple<Handlers...> handlers;
   template<class T, std::size_t index = 0>
-  auto const& handler_for() {
+  auto pull_argument(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps) {
     if constexpr(index < sizeof...(Handlers)) {
       auto const& handler = std::get<index>(handlers);
-      using ReadType = decltype(handler->read_data(std::declval<new_expression::Data>()));
-      if constexpr(std::is_same_v<std::decay_t<ReadType>, T>) {
-        return handler;
+      if constexpr(requires{ builder::add_constraints_and_get_arg_puller<T>(capture_index, steps, handler); }) {
+        return builder::add_constraints_and_get_arg_puller<T>(capture_index, steps, handler);
       } else {
-        return handler_for<T, index + 1>();
+        return pull_argument<T, index + 1>(capture_index, steps);
       }
     } else {
       static_assert(index < sizeof...(Handlers), "Handler not found for type.");
     }
   }
+  template<class T, std::size_t index = 0>
+  auto embedder_for() {
+    if constexpr(index < sizeof...(Handlers)) {
+      auto const& handler = std::get<index>(handlers);
+      if constexpr(requires{ builder::get_embedder<T>(handler); }) {
+        return builder::get_embedder<T>(handler);
+      } else {
+        return embedder_for<T, index + 1>();
+      }
+    } else {
+      static_assert(index < sizeof...(Handlers), "Handler not found for type.");
+    }
+  }
+
   template<class Callback>
   void operator()(new_expression::WeakExpression head, Callback callback) {
     [&]<class Ret, class... Args>(mdb::FunctionInfo<Ret(Args...)>) {
-      return simple_pattern_builder(context)(head, handler_for<Args>()...) >> [callback = std::move(callback), ret_handler = handler_for<Ret>()]<class... Passed>(Passed&&... passed) {
-        return ret_handler->make_expression(callback(std::forward<Passed>(passed)...));
-      };
-    }(mdb::FunctionInfoFor<Callback>{});
+      std::vector<new_expression::PatternStep> steps;
+      std::size_t capture_count = 0;
+      auto arg_puller_tuple = builder::ordered_eval([&]<class... ArgPuller>(ArgPuller&&... arg_pullers) {
+        return std::make_tuple(std::move(arg_pullers)...);
+      }, [&] {
+        steps.push_back(new_expression::PullArgument{});
+        return pull_argument<Args>(capture_count++, steps);
+      }...);
+      auto& arena = context->arena;
+      context->context.rule_collector.add_rule({
+        .pattern = {
+          .head = arena.copy(head),
+          .body = {
+            .args_captured = sizeof...(Args),
+            .steps = std::move(steps)
+          }
+        },
+        .replacement = mdb::function<new_expression::OwnedExpression(std::span<new_expression::WeakExpression>)>{
+          [capture_count, &context = *context, callback = std::move(callback), arg_puller_tuple = std::move(arg_puller_tuple), embedder = embedder_for<Ret>()](std::span<new_expression::WeakExpression> inputs) {
+            if(inputs.size() != capture_count) std::terminate();
+            return embedder(context.arena, std::apply([&](auto const&... getters) { return builder::call_getters(callback, [&](auto&& callback) { return getters(context.arena, inputs, callback); }...); }, arg_puller_tuple));
+          }
+        }
+      });
+    }(mdb::FunctionInfoFor<Callback>());
   }
 };
 template<class... Handlers>
