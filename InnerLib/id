@@ -1,0 +1,11 @@
+import * from module_helper;
+
+block {
+  axiom Id : (T : Type) -> T -> T -> Type;
+  axiom refl : (T : Type) -> (x : T) -> Id T x x;
+
+  module [
+    module_entry _ "Id" Id,
+    module_entry _ "refl" refl
+  ]
+}

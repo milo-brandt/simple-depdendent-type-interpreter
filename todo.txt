@@ -12,6 +12,10 @@ Verify should probably allow deduction of holes *defined within verify itself*.
 
 it crashes if there's an empty string (or empty string after import header)
 
+could be worthwhile adding support for more general expression routines -
+let C++ ask to manipulate reducer to avoid intermediate states needing to
+be saved when we want to match something.
+
 *************
 High priority
 *************

@@ -12,13 +12,17 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
     eq,
     lt,
     gt,
+    lte,
+    gte,
+    zero_min,
+    lte_refl,
     add,
     sub,
     mul,
     idiv,
     mod,
     to_nat
-  ] = mdb::map_span<14>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
+  ] = mdb::map_span<18>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
 
   auto rule_builder = plugin::get_rule_builder(
     context,
@@ -45,6 +49,18 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
   });
   rule_builder(lt, [](std::uint64_t x, std::uint64_t y) {
     return x < y;
+  });
+  rule_builder(gte, [](std::uint64_t x, std::uint64_t y) {
+    return x >= y;
+  });
+  rule_builder(lte, [](std::uint64_t x, std::uint64_t y) {
+    return x <= y;
+  });
+  rule_builder(lte_refl, [witness](std::uint64_t x) {
+    return witness;
+  });
+  rule_builder(zero_min, [witness](std::uint64_t x) {
+    return witness;
   });
   rule_builder(add, [](std::uint64_t x, std::uint64_t y) {
     return x + y;

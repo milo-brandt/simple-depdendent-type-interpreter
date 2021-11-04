@@ -1,0 +1,27 @@
+import * from arithmetic;
+import * from witness;
+import * from bool;
+import and from bool_fn;
+
+block {
+  declare len : String -> U64;
+  declare substr : (str : String)
+                -> (begin : U64)
+                -> (end : U64)
+                -> Witness (lte begin end)
+                -> Witness (lte end (len str))
+                -> String;
+  declare starts_with : String -> String -> Bool;
+  declare starts_with_len_lte : (prefix : String) -> (str : String) -> Witness (starts_with prefix str) -> Witness (lte (len prefix) (len str));
+
+  full_module "string.so"
+  [
+    module_entry _ "" witness,
+    module_entry _ "" yes,
+    module_entry _ "" no,
+    module_entry _ "len" len,
+    module_entry _ "substr" substr,
+    module_entry _ "starts_with" starts_with,
+    module_entry _ "starts_with_len_lte" starts_with_len_lte
+  ]
+}

@@ -45,9 +45,13 @@ clean:
 {%- endfor %}
 {%- endfor %}
 
-Plugin/add.so: PluginSource/add.cpp
+Plugin/arithmetic.so: PluginSource/arithmetic.cpp
 	@mkdir -p $(@D)
-	g++-10 -std=c++20 -ggdb -O0 -fpic PluginSource/add.cpp -shared -o Plugin/add.so
+	g++-10 -std=c++20 -ggdb -O0 -fpic PluginSource/arithmetic.cpp -shared -o Plugin/arithmetic.so
+
+Plugin/string.so: PluginSource/string.cpp
+	@mkdir -p $(@D)
+	g++-10 -std=c++20 -ggdb -O0 -fpic PluginSource/string.cpp -shared -o Plugin/string.so
 
 Source/Tests/full_cases_impl.cpp: $(test_files)
 	python3 Tools/test_generator.py Source/Tests/full_cases_impl.cpp $(test_files)

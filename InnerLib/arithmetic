@@ -7,6 +7,11 @@ block {
   declare eq : U64 -> U64 -> Bool;
   declare lt : U64 -> U64 -> Bool;
   declare gt : U64 -> U64 -> Bool;
+  declare lte : U64 -> U64 -> Bool;
+  declare gte : U64 -> U64 -> Bool;
+
+  declare zero_min : (x : U64) -> Witness (lte 0 x);
+  declare lte_refl : (x : U64) -> Witness (lte x x);
 
   declare add : U64 -> U64 -> U64;
   declare sub : U64 -> U64 -> U64;
@@ -16,7 +21,7 @@ block {
 
   declare to_nat : U64 -> Nat;
 
-  full_module "add.so"
+  full_module "arithmetic.so"
   [
     module_entry _ "" zero,
     module_entry _ "" succ,
@@ -26,6 +31,10 @@ block {
     module_entry _ "eq" eq,
     module_entry _ "lt" lt,
     module_entry _ "gt" gt,
+    module_entry _ "lte" lte,
+    module_entry _ "gte" gte,
+    module_entry _ "zero_min" zero_min,
+    module_entry _ "lte_refl" lte_refl,
     module_entry _ "add" add,
     module_entry _ "sub" sub,
     module_entry _ "mul" mul,

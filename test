@@ -1,0 +1,17 @@
+import * from witness;
+import * from string;
+import * from bool;
+import lte_refl from arithmetic;
+
+block {
+  declare remove_prefix_if_possible : String -> String -> String;
+  remove_prefix_if_possible prefix str = match(starts_with prefix str) {
+    yes -> match(starts_with_len_lte prefix str witness) {
+      witness -> match(lte_refl (len str)) {
+        witness -> substr str (len prefix) (len str) witness witness;
+      };
+    };
+    no -> str;
+  };
+  remove_prefix_if_possible "a" "abc"
+}
