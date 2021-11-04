@@ -63,27 +63,26 @@ namespace builder {
       return final(std::forward<decltype(f1())>(arg), std::forward<Rest>(rest)...);
     }, std::forward<Fs>(fs)...);
   }
-  /*
-  struct NotBuilder {
-    static constexpr bool is_reader = false;
-    static constexpr bool is_writer = false;
+
+
+  struct Ignore{};
+  constexpr Ignore ignore{};
+
+  struct ExpressionHandler{};
+  constexpr ExpressionHandler expression_handler{};
+
+  template<class R> requires std::is_same_v<std::decay_t<R>, Ignore>
+  auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, Ignore) {
+    return [](new_expression::Arena& arena, std::span<new_expression::WeakExpression> const& args, auto&& callback) {
+      return callback(ignore);
+    };
   };
-
-  template<class T, class R>
-  struct BuilderData : NotBuilder {};
-
-  template<class T, class R>
-  struct SharedDataPointerBuilder {
-    static auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, new_expression::SharedDataTypePointer<T> ptr) {
-      steps.push_back(new_expression::DataCheck{
-        .capture_index = capture_index,
-        .expected_type = ptr->type_index
-      });
-      return [capture_index, ptr = std::move(ptr)](new_expression::Arena& arena, std::span<new_expression::WeakExpression> const& args, auto&& callback) -> decltype(auto) {
-        return callback(ptr->read_data(arena.get_data(args[capture_index])));
-      };
-    }
-  };*/
+  template<class R> requires std::is_same_v<R, new_expression::WeakExpression>
+  auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, ExpressionHandler) {
+    return [capture_index](new_expression::Arena& arena, std::span<new_expression::WeakExpression> const& args, auto&& callback) {
+      return callback(args[capture_index]);
+    };
+  };
 
   template<class R, class T>
   auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, new_expression::SharedDataTypePointer<T> ptr)
@@ -105,6 +104,32 @@ namespace builder {
       return ptr->make_expression(std::move(value));
     };
   };
+  template<class R> requires std::is_same_v<std::decay_t<R>, new_expression::WeakExpression>
+  auto get_embedder(ExpressionHandler) {
+    return [](new_expression::Arena& arena, R value) {
+      return arena.copy(value);
+    };
+  };
+  template<class R> requires std::is_same_v<R, new_expression::OwnedExpression>
+  auto get_embedder(ExpressionHandler) {
+    return [](new_expression::Arena& arena, R value) {
+      return std::move(value);
+    };
+  };
+  template<class R> requires std::is_same_v<R, new_expression::OwnedExpression&&>
+  auto get_embedder(ExpressionHandler) {
+    return [](new_expression::Arena& arena, R value) {
+      return std::move(value);
+    };
+  };
+  template<class R> requires std::is_same_v<R, new_expression::OwnedExpression const&>
+  auto get_embedder(ExpressionHandler) {
+    return [](new_expression::Arena& arena, R value) {
+      return arena.copy(value);
+    };
+  };
+
+
 }
 
 /*
@@ -229,18 +254,26 @@ RuleBuilder<Handlers...> get_rule_builder(pipeline::compile::StandardCompilerCon
 
 
 extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, new_expression::TypedValue* import_start, new_expression::TypedValue* import_end) {
-  auto const& [add, sub, mul, idiv] = map_span<4>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
-  auto rule_builder = get_rule_builder(context, context->u64);
+  auto const& [zero, succ, add, sub, to_nat] = map_span<5>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
+  auto rule_builder = get_rule_builder(context, context->u64, builder::ignore, builder::expression_handler);
+  auto& arena = context->arena;
   rule_builder(add, [](std::uint64_t x, std::uint64_t y) {
     return x + y;
   });
   rule_builder(sub, [](std::uint64_t x, std::uint64_t y) {
     return x - y;
   });
-  rule_builder(mul, [](std::uint64_t x, std::uint64_t y) {
-    return x * y;
-  });
-  rule_builder(idiv, [](std::uint64_t x, std::uint64_t y) {
-    return x / y;
+  rule_builder(to_nat, [&arena, zero, succ, to_nat, u64 = context->u64](std::uint64_t x) {
+    if(x == 0) {
+      return arena.copy(zero);
+    } else {
+      return arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(to_nat),
+          u64->make_expression(x - 1)
+        )
+      );
+    }
   });
 }

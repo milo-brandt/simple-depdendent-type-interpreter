@@ -1,14 +1,19 @@
 block {
+  axiom Nat : Type;
+  axiom zero : Nat;
+  axiom succ : Nat -> Nat;
+
   declare add : U64 -> U64 -> U64;
   declare sub : U64 -> U64 -> U64;
   declare mul : U64 -> U64 -> U64;
-  declare idiv : U64 -> U64 -> U64;
+  declare to_nat : U64 -> Nat;
 
   full_module "add.so"
   [
+    module_entry _ "" zero,
+    module_entry _ "" succ,
     module_entry _ "add" add,
     module_entry _ "sub" sub,
-    module_entry _ "mul" mul,
-    module_entry _ "idiv" idiv    
+    module_entry _ "to_nat" to_nat
   ]
 }
