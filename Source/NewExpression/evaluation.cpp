@@ -6,74 +6,180 @@
 
 namespace new_expression {
   namespace {
+    struct ReduceByPatternContext {
+      Arena& arena;
+      std::vector<WeakExpression>& weak_stack;
+      std::vector<OwnedExpression>& strong_stack;
+      std::pair<std::size_t, WeakExpression> unfold(WeakExpression input) {
+        auto base_size = weak_stack.size();
+        std::size_t arg_count = 0;
+        while(auto* apply = arena.get_if_apply(input)) {
+          weak_stack.push_back(apply->rhs);
+          input = apply->lhs;
+          ++arg_count;
+        }
+        std::reverse(weak_stack.begin() + base_size, weak_stack.end());
+        return std::make_pair(arg_count, input);
+      }
+    };
+    namespace reduction_step_result {
+      struct RequestReduce {
+        std::size_t strong_stack_index;
+      };
+      struct Reduced {
+        OwnedExpression result;
+      };
+      struct Finished {};
+      using Any = std::variant<RequestReduce, Reduced, Finished>;
+    };
+    struct ReduceByPatternState {
+      new_expression::WeakExpression head;
+      std::size_t weak_stack_base;  //layout of stack above this: arg0, arg1, ... , argn, capture0, capture1, ...
+      std::size_t weak_stack_next_arg;
+      std::size_t weak_stack_pattern_base;
+      std::size_t strong_stack_base;
+      RuleBody const* current_rule;
+      RuleBody const* end_rule;
+      PatternStep const* current_step; //should point to a PatternMatch or DataCheck.
+      PatternStep const* end_step;
+      void cleanup(ReduceByPatternContext context) {
+        for(auto it = context.strong_stack.begin() + strong_stack_base; it != context.strong_stack.end(); ++it) {
+          context.arena.drop(std::move(*it));
+        }
+        context.strong_stack.erase(context.strong_stack.begin() + strong_stack_base, context.strong_stack.end());
+        context.weak_stack.erase(context.weak_stack.begin() + weak_stack_base, context.weak_stack.end());
+      }
+      reduction_step_result::Any pattern_matched(ReduceByPatternContext context) {
+        std::span<WeakExpression> pattern_stack{context.weak_stack.data() + weak_stack_pattern_base, context.weak_stack.data() + context.weak_stack.size()};
+        auto new_expr = std::visit(mdb::overloaded{
+          [&](OwnedExpression const& expr) {
+            return substitute_into(context.arena, expr, pattern_stack);
+          },
+          [&](mdb::function<OwnedExpression(std::span<WeakExpression>)> const& func) {
+            return func(pattern_stack);
+          }
+        }, current_rule->replacement);
+        for(;weak_stack_next_arg < weak_stack_pattern_base; ++weak_stack_next_arg) {
+          new_expr = context.arena.apply(
+            std::move(new_expr),
+            context.arena.copy(context.weak_stack[weak_stack_next_arg])
+          );
+        }
+        cleanup(context);
+        return reduction_step_result::Reduced{
+          std::move(new_expr)
+        };
+      }
+      reduction_step_result::Any run_step(ReduceByPatternContext context) {
+        for(;current_step < end_step; ++current_step) {
+          if(auto const* match = std::get_if<PatternMatch>(current_step)) {
+            auto new_expr = substitute_into(context.arena, match->substitution, {context.weak_stack.data() + weak_stack_pattern_base, context.weak_stack.data() + context.weak_stack.size()});
+            auto strong_stack_index = context.strong_stack.size();
+            context.strong_stack.push_back(std::move(new_expr));
+            return reduction_step_result::RequestReduce{
+              .strong_stack_index = strong_stack_index
+            };
+          } else if(auto const* check = std::get_if<DataCheck>(current_step)) {
+            auto strong_stack_index = context.strong_stack.size();
+            context.strong_stack.push_back(context.arena.copy(context.weak_stack[weak_stack_pattern_base + check->capture_index]));
+            return reduction_step_result::RequestReduce{
+              .strong_stack_index = strong_stack_index
+            };
+          } else {
+            context.weak_stack.push_back(context.weak_stack[weak_stack_next_arg++]);
+          }
+        }
+        return pattern_matched(context); //if we find we need to reduce, we return before reaching here
+      }
+      reduction_step_result::Any next_step(ReduceByPatternContext context) {
+        ++current_step;
+        return run_step(context);
+      }
+      reduction_step_result::Any all_patterns_failed(ReduceByPatternContext context) {
+        cleanup(context);
+        return reduction_step_result::Finished{};
+      }
+      reduction_step_result::Any run_pattern(ReduceByPatternContext context) {
+      RUN_PATTERN:
+        if(current_rule == end_rule) {
+          return all_patterns_failed(context);
+        } else {
+          if(current_rule->pattern_body.args_captured > weak_stack_pattern_base - weak_stack_base) {
+            ++current_rule;
+            goto RUN_PATTERN;
+          }
+          current_step = current_rule->pattern_body.steps.data();
+          end_step = current_rule->pattern_body.steps.data() + current_rule->pattern_body.steps.size();
+          return run_step(context);
+        }
+      }
+      reduction_step_result::Any pattern_failed(ReduceByPatternContext context) {
+        context.weak_stack.erase(context.weak_stack.begin() + weak_stack_pattern_base, context.weak_stack.end());
+        ++current_rule;
+        weak_stack_next_arg = weak_stack_base;
+        return run_pattern(context);
+      }
+      reduction_step_result::Any resume(ReduceByPatternContext context, WeakExpression result) {
+        //should clean self up if returning Reduced or Finished.
+        if(auto const* match = std::get_if<PatternMatch>(current_step)) {
+          auto [args, head] = context.unfold(result);
+          if(args != match->args_captured || head != match->expected_head) {
+            return pattern_failed(context);
+          }
+          return next_step(context);
+        } else {
+          auto const& check = std::get<DataCheck>(*current_step);
+          if(auto* data = context.arena.get_if_data(result)) {
+            if(data->type_index == check.expected_type) {
+              return next_step(context);
+            }
+          }
+          return pattern_failed(context);
+        }
+      }
+    };
     template<class Base> //Base must provide Arena& arena and OwnedExpression reduce()
     struct ReducerCRTP {
       Base& me() { return *(Base*)this; }
       bool reduce_by_pattern(OwnedExpression& expr, RuleCollector const& collector) {
         auto& arena = me().arena;
-        auto unfolded = unfold(arena, expr);
-        if(arena.holds_declaration(unfolded.head)) {
-          auto const& declaration_info = collector.declaration_info(unfolded.head);
-          for(auto const& rule : declaration_info.rules) {
-            if(rule.pattern_body.args_captured <= unfolded.args.size()) {
-              auto next_arg = unfolded.args.begin();
-              std::vector<WeakExpression> pattern_stack;
-              std::vector<OwnedExpression> novel_roots; //storage for new expressions we create
-              for(auto const& step : rule.pattern_body.steps) {
-                if(auto* match = std::get_if<PatternMatch>(&step)) {
-                  auto new_expr = substitute_into(arena, match->substitution, mdb::as_span(pattern_stack));
-                  new_expr = me().reduce(std::move(new_expr));
-                  auto match_unfold = unfold(arena, new_expr);
-                  novel_roots.push_back(std::move(new_expr)); //keep reference for later deletion
-                  if(match_unfold.head != match->expected_head) goto PATTERN_FAILED;
-                  if(match_unfold.args.size() != match->args_captured) goto PATTERN_FAILED;
-                  pattern_stack.insert(pattern_stack.end(), match_unfold.args.begin(), match_unfold.args.end());
-                } else if(auto* data_check = std::get_if<DataCheck>(&step)) {
-                  auto new_expr = arena.copy(pattern_stack[data_check->capture_index]);
-                  new_expr = me().reduce(std::move(new_expr));
-                  pattern_stack[data_check->capture_index] = new_expr;
-                  bool success = [&] {
-                    if(auto* data = arena.get_if_data(new_expr)) {
-                      return data->type_index == data_check->expected_type;
-                    } else {
-                      return false;
-                    }
-                  }();
-                  novel_roots.push_back(std::move(new_expr));
-                  if(!success) goto PATTERN_FAILED;
-                } else {
-                  if(!std::holds_alternative<PullArgument>(step)) std::terminate(); //make sure we hit every case
-                  pattern_stack.push_back(*next_arg);
-                  ++next_arg;
-                }
-              }
-              //if we get here, the pattern succeeded.
-              {
-                auto new_expr = std::visit(mdb::overloaded{
-                  [&](OwnedExpression const& expr) {
-                    return substitute_into(arena, expr, mdb::as_span(pattern_stack));
-                  },
-                  [&](mdb::function<OwnedExpression(std::span<WeakExpression>)> const& func) {
-                    return func(mdb::as_span(pattern_stack));
-                  }
-                }, rule.replacement);
-                for(std::size_t i = rule.pattern_body.args_captured; i < unfolded.args.size(); ++i) {
-                  new_expr = me().arena.apply(
-                    std::move(new_expr),
-                    me().arena.copy(unfolded.args[i])
-                  );
-                }
-                arena.drop(std::move(expr));
-                expr = std::move(new_expr);
-                destroy_from_arena(arena, novel_roots);
-                return true;
-              }
-            PATTERN_FAILED:
-              destroy_from_arena(arena, novel_roots);
+        std::vector<WeakExpression> weak_stack;
+        std::vector<OwnedExpression> strong_stack;
+        ReduceByPatternContext context{
+          .arena = arena,
+          .weak_stack = weak_stack,
+          .strong_stack = strong_stack
+        };
+        auto [args, head] = context.unfold(expr);
+        if(arena.holds_declaration(head)) {
+          auto const& declaration_info = collector.declaration_info(head);
+          ReduceByPatternState state{
+            .head = head,
+            .weak_stack_base = 0,
+            .weak_stack_next_arg = 0,
+            .weak_stack_pattern_base = args,
+            .strong_stack_base = 0,
+            .current_rule = declaration_info.rules.data(),
+            .end_rule = declaration_info.rules.data() + declaration_info.rules.size()
+          };
+          auto last_result = state.run_pattern(context);
+          while(true) {
+            if(auto* request_reduce = std::get_if<reduction_step_result::RequestReduce>(&last_result)) {
+              auto reduced = me().reduce(std::move(context.strong_stack[request_reduce->strong_stack_index]));
+              WeakExpression result = reduced;
+              context.strong_stack[request_reduce->strong_stack_index] = std::move(reduced);
+              last_result = state.resume(context, result);
+            } else if(auto* reduced = std::get_if<reduction_step_result::Reduced>(&last_result)) {
+              arena.drop(std::move(expr));
+              expr = std::move(reduced->result);
+              return true;
+            } else {
+              return false;
             }
           }
+        } else {
+          return false;
         }
-        return false;
       }
     };
     struct SimpleReducer : ReducerCRTP<SimpleReducer> {
