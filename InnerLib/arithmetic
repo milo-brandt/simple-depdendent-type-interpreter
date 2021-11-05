@@ -18,6 +18,7 @@ block {
   declare mul : U64 -> U64 -> U64;
   declare idiv : U64 -> (y : U64) -> Witness (gt y 0) -> U64;
   declare mod : U64 -> (y : U64) -> Witness (gt y 0) -> U64;
+  declare exp : U64 -> U64 -> U64;
 
   declare to_nat : U64 -> Nat;
 
@@ -40,6 +41,7 @@ block {
     module_entry _ "mul" mul,
     module_entry _ "idiv" idiv,
     module_entry _ "mod" mod,
+    module_entry _ "exp" exp,
     module_entry _ "to_nat" to_nat
   ]
 }

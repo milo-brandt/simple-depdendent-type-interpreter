@@ -1,0 +1,193 @@
+import * from nat;
+import * from bool;
+import * from arithmetic;
+import * from string;
+import * from witness;
+
+block {
+  declare lfold_vec : (S : Type) -> (T : Type) -> S -> (S -> T -> S) -> Vector T -> S;
+  lfold_vec _ _ init combine (empty_vec _) = init;
+  lfold_vec _ _ init combine (cons_vec _ head tail) = lfold_vec _ _ (combine init head) combine tail;
+
+  declare push_vec : (T : Type) -> Vector T -> T -> Vector T;
+  push_vec _ (empty_vec _) v = [v];
+  push_vec _ (cons_vec _ head tail) v = cons_vec _ head (push_vec _ tail v);
+
+  axiom Unit : Type;
+  axiom unit : Unit;
+
+  axiom Hold : Type;        # This is a hack to force pattern matching - which ensures that overzealous simplifiers don't get stuck in a loop
+  axiom unhold : Hold;
+
+  axiom ParseResult : Type -> Type;
+  axiom success : (T : Type) -> T -> String -> ParseResult T;
+  axiom failure : (T : Type) -> ParseResult T;
+
+  declare if : (T : Type) -> Bool -> T -> T -> T;
+  rule if T yes x y = x;
+  rule if T no x y = y;
+
+  declare is_success : (T : Type) -> ParseResult T -> Bool;
+  rule is_success T (success T x rest) = yes;
+  rule is_success T (failure T) = no;
+
+  declare get_success : (T : Type) -> (result : ParseResult T) -> (if _ (is_success _ result) T Unit);
+  rule get_success T (success T x rest) = x;
+  rule get_success T (failure T) = unit;
+
+  declare remove_prefix : (prefix : String) -> (str : String) -> Witness (starts_with prefix str) -> String;
+  rule remove_prefix prefix str witness = substr str (len prefix) (len str) (starts_with_len_lte prefix str witness) (lte_refl (len str));
+
+  let Parser = \T.String -> ParseResult T;
+
+  declare held_bind_impl : (S : Type) -> (T : Type) -> ParseResult S -> (Hold -> S -> Parser T) -> ParseResult T;
+  rule held_bind_impl S T (success S value rest) then = then unhold value rest;
+  rule held_bind_impl S T (failure S) then = failure T;
+
+  declare held_bind : (S : Type) -> (T : Type) -> Parser S -> (Hold -> S -> Parser T) -> Parser T;
+  rule held_bind S T parser then = \str.held_bind_impl S T (parser str) then;
+
+  declare pure : (T : Type) -> T -> Parser T;
+  rule pure T x str = success T x str;
+
+  declare pure_fail : (T : Type) -> Parser T;
+  rule pure_fail T str = failure T;
+
+  declare recognize : String -> Parser Unit;
+  rule recognize symbol string = match(starts_with symbol string) {
+    yes -> success _ unit (remove_prefix symbol string witness);
+    no -> failure _;
+  };
+
+  declare or_default_impl : (T : Type) -> T -> String -> ParseResult T -> ParseResult T;
+  rule or_default_impl T x str (success T value rest) = (success T value rest);
+  rule or_default_impl T x str (failure T) = success T x str;
+
+  declare or_default : (T : Type) -> T -> Parser T -> Parser T;
+  rule or_default T x f = \str.or_default_impl T x str (f str);
+
+  declare or_impl : (T : Type) -> String -> ParseResult T -> Parser T -> ParseResult T;
+  rule or_impl T string (success T value rest) alternate = success T value rest;
+  rule or_impl T string (failure T) alternate = alternate string;
+
+  declare or : (T : Type) -> Parser T -> Parser T -> Parser T;
+  rule or T parser alternate = \str.or_impl T str (parser str) alternate;
+
+  declare kleene_star : (T : Type) -> Parser T -> Parser (Vector T);
+  rule kleene_star T parser = block {
+    declare held_recursor : Vector T -> Hold -> Parser (Vector T);
+    rule held_recursor base unhold =
+      or_default _ base \\
+      held_bind _ _ parser (\hold.\next.held_recursor (push_vec _ base next) hold);
+
+    held_recursor (empty_vec _) unhold
+  };
+
+  declare bind : (S : Type) -> (T : Type) -> Parser S -> (S -> Parser T) -> Parser T;
+  rule bind S T f g = held_bind S T f (\.g);
+
+  declare map : (S : Type) -> (T : Type) -> Parser S -> (S -> T) -> Parser T;
+  rule map S T f g = bind S T f \x.pure T (g x);
+
+  axiom Pair : (S : Type) -> (T : Type) -> Type;
+  axiom pair : (S : Type) -> (T : Type) -> S -> T -> Pair S T;
+
+  declare first : (S : Type) -> (T : Type) -> Pair S T -> S;
+  rule first S T (pair S T s t) = s;
+  declare second : (S : Type) -> (T : Type) -> Pair S T -> T;
+  rule second S T (pair S T s t) = t;
+
+  declare parse_lookup : (T : Type) -> Vector (Pair String T) -> Parser T;
+  rule parse_lookup T table = block {
+    declare recognize_pair : Pair String T -> Parser T;
+    rule recognize_pair (pair String T symbol value) =
+      map _ _ (recognize symbol) \.value;
+    lfold_vec _ _
+      (pure_fail _)
+      (\parser.\next_pair.or _ parser (recognize_pair next_pair))
+      table
+  };
+
+  declare parse_digit : Parser U64;
+  rule parse_digit = parse_lookup U64 [
+    pair _ _ "0" 0,
+    pair _ _ "1" 1,
+    pair _ _ "2" 2,
+    pair _ _ "3" 3,
+    pair _ _ "4" 4,
+    pair _ _ "5" 5,
+    pair _ _ "6" 6,
+    pair _ _ "7" 7,
+    pair _ _ "8" 8,
+    pair _ _ "9" 9
+  ];
+
+  let Binop = U64 -> U64 -> U64;
+
+  declare parse_left_associative : Parser U64 -> Vector (Pair String Binop) -> Parser U64;
+  rule parse_left_associative parse_term operations = block {
+    let parse_extend = bind _ _ (parse_lookup _ operations) \op.
+      map _ _ parse_term \rhs.pair _ _ op rhs;
+
+    declare apply_op : U64 -> Pair Binop U64 -> U64;
+    rule apply_op lhs op_pair = (first _ _ op_pair) lhs (second _ _ op_pair);
+
+    bind _ _ parse_term \head.
+    map _ _ (kleene_star _ parse_extend) \ops.
+    lfold_vec _ _ head apply_op ops
+  };
+  declare parse_right_associative : Parser U64 -> Vector (Pair String Binop) -> Parser U64;
+  rule parse_right_associative parse_term operations = block {
+    declare parse_held : Hold -> Parser U64;
+    rule parse_held unhold =
+      held_bind _ _ parse_term \hold.\lhs.
+      or_default _ lhs \\
+      bind _ _ (parse_lookup _ operations) \op.
+      map _ _ (parse_held hold) \rhs.op lhs rhs;
+    parse_held unhold
+  };
+
+  axiom PrecedenceLevel : Type;
+  axiom left_assoc : Vector (Pair String Binop) -> PrecedenceLevel;
+  axiom right_assoc : Vector (Pair String Binop) -> PrecedenceLevel;
+
+  declare extend_by_level : Parser U64 -> PrecedenceLevel -> Parser U64;
+  rule extend_by_level parse_term (left_assoc operations) = parse_left_associative parse_term operations;
+  rule extend_by_level parse_term (right_assoc operations) = parse_right_associative parse_term operations;
+
+  declare extend_by_level_vec : Parser U64 -> Vector PrecedenceLevel -> Parser U64;
+  rule extend_by_level_vec parse_term levels = lfold_vec _ _ parse_term extend_by_level levels;
+
+  declare parenthesized_expr_with_terms : Parser U64 -> Vector PrecedenceLevel -> Parser U64;
+  rule parenthesized_expr_with_terms parse_term levels = block {
+    declare parse_held : Hold -> Parser U64;
+    let parse_parenthesized_expr : Parser U64 =
+      held_bind _ _ (recognize "(") \hold.\.
+      bind _ _ (parse_held hold) \ret.
+      map _ _ (recognize ")") \.ret;
+    let true_term = or _ parse_term parse_parenthesized_expr;
+    let parse_full = extend_by_level_vec true_term levels;
+    rule parse_held unhold = parse_full;
+    parse_full
+  };
+
+  let parse_integer : Parser U64 =
+    bind _ _ parse_digit \first_digit.
+    map _ _ (kleene_star _ parse_digit) \remaining_digits.
+    lfold_vec _ _ first_digit (\x.\y.add (mul 10 x) y) remaining_digits;
+
+  let parse_expr = parenthesized_expr_with_terms parse_integer [
+    right_assoc [
+      (pair _ _ "^" exp)
+    ],
+    left_assoc [
+      (pair _ _ "*" mul)
+    ],
+    left_assoc [
+      pair _ _ "+" add,
+      pair _ _ "-" sub
+    ]
+  ];
+
+  parse_expr "(1+5*(2+3))^(8-5-1)^3"
+}

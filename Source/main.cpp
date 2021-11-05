@@ -16,18 +16,6 @@ void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpressi
 void debug_print_expr(new_expression::Arena& arena, new_expression::OwnedExpression const& expr) {
   std::cout << user::raw_format(arena, expr) << "\n";
 }
-std::uint64_t exponent(std::uint64_t base, std::uint64_t power) {
-  std::uint64_t ret = 1;
-  std::uint64_t pow = 1;
-  while(pow <= power) {
-    if(pow & power) {
-      ret *= base;
-    }
-    base *= base;
-    pow *= 2;
-  }
-  return ret;
-}
 
 #ifdef COMPILE_FOR_EMSCRIPTEN
 

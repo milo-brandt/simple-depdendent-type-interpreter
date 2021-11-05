@@ -21,8 +21,9 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
     mul,
     idiv,
     mod,
+    exp,
     to_nat
-  ] = mdb::map_span<18>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
+  ] = mdb::map_span<19>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
 
   auto rule_builder = plugin::get_rule_builder(
     context,
@@ -75,6 +76,18 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
   });
   rule_builder(mod, [](std::uint64_t x, std::uint64_t y, Witness) {
     return x % y;
+  });
+  rule_builder(exp, [](std::uint64_t base, std::uint64_t power) {
+    std::uint64_t ret = 1;
+    std::uint64_t pow = 1;
+    while(pow <= power) {
+      if(pow & power) {
+        ret *= base;
+      }
+      base *= base;
+      pow *= 2;
+    }
+    return ret;
   });
   rule_builder(to_nat, [&arena, zero, succ, to_nat, u64 = context->u64](std::uint64_t x) {
     if(x == 0) {
