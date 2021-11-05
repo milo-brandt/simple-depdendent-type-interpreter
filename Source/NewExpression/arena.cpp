@@ -72,6 +72,9 @@ namespace new_expression {
           return ret;
         }
       }
+      bool next_write_allocates() const {
+        return next_free_entry == nullptr;
+      }
       bool empty() const {
         for(std::byte* allocation : allocations) {
           auto size = *(std::size_t*)allocation;
@@ -123,6 +126,12 @@ namespace new_expression {
     void deref_entry(ArenaEntry*);
     void destroy_entry(ArenaEntry*);
     bool clear_orphans(); //returns true if space was cleared.
+    ArenaEntry* get_next_writable() {
+      if(pool.next_write_allocates() && orphan_entries.size() > 256) {
+        clear_orphans();
+      }
+      return pool.get_next_writable();
+    }
 
     std::uint64_t next_type_index() {
       return data_types.size();
@@ -152,7 +161,7 @@ namespace new_expression {
         drop(std::move(rhs));
         return copy(existing_apply.at(key));
       } else {
-        auto ptr = pool.get_next_writable();
+        auto ptr = get_next_writable();
         ptr->discriminator = discriminator_apply;
         ptr->data.apply = Apply{
           .lhs = lhs,
@@ -164,13 +173,13 @@ namespace new_expression {
       }
     }
     OwnedExpression axiom() {
-      auto ptr = pool.get_next_writable();
+      auto ptr = get_next_writable();
       ptr->discriminator = discriminator_axiom;
       ptr->data.axiom = Axiom{};
       return OwnedExpression{ptr};
     }
     OwnedExpression declaration() {
-      auto ptr = pool.get_next_writable();
+      auto ptr = get_next_writable();
       ptr->discriminator = discriminator_declaration;
       ptr->data.declaration = Declaration{};
       return OwnedExpression{ptr};
@@ -179,7 +188,7 @@ namespace new_expression {
       if(existing_argument.contains(arg_index)) {
         return copy(existing_argument.at(arg_index));
       } else {
-        auto ptr = pool.get_next_writable();
+        auto ptr = get_next_writable();
         ptr->discriminator = discriminator_argument;
         ptr->data.argument = Argument{arg_index};
         existing_argument.insert(std::make_pair(arg_index, WeakExpression{ptr}));
@@ -190,7 +199,7 @@ namespace new_expression {
       if(existing_conglomerate.contains(conglomerate_index)) {
         return copy(existing_conglomerate.at(conglomerate_index));
       } else {
-        auto ptr = pool.get_next_writable();
+        auto ptr = get_next_writable();
         ptr->discriminator = discriminator_conglomerate;
         ptr->data.conglomerate = Conglomerate{conglomerate_index};
         existing_conglomerate.insert(std::make_pair(conglomerate_index, WeakExpression{ptr}));
@@ -199,7 +208,7 @@ namespace new_expression {
     }
     std::pair<OwnedExpression, Buffer*> allocate_data(std::uint64_t type_index) {
       data_types[type_index]->ref();
-      auto ptr = pool.get_next_writable();
+      auto ptr = get_next_writable();
       ptr->discriminator = discriminator_data;
       ptr->data.data = Data{
         .type_index = type_index
