@@ -74,7 +74,7 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
       )
     });
 
-    SECTION("doubler zero evaluates to zero") {
+    SECTION("doubler zero evaluates to zero under reduce_head") {
       auto result = evaluator.reduce_head(arena.apply(
         arena.copy(doubler),
         arena.copy(zero)
@@ -82,7 +82,15 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
       REQUIRE(result == zero);
       destroy_from_arena(arena, result);
     }
-    SECTION("doubler (doubler zero) evaluates to zero") {
+    SECTION("doubler zero evaluates to zero under reduce") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.copy(zero)
+      ));
+      REQUIRE(result == zero);
+      destroy_from_arena(arena, result);
+    }
+    SECTION("doubler (doubler zero) evaluates to zero under reduce_head") {
       auto result = evaluator.reduce_head(arena.apply(
         arena.copy(doubler),
         arena.apply(
@@ -93,7 +101,18 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
       REQUIRE(result == zero);
       destroy_from_arena(arena, result);
     }
-    SECTION("doubler (succ zero) evaluates to succ (succ (doubler zero))") {
+    SECTION("doubler (doubler zero) evaluates to zero under reduce") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.apply(
+          arena.copy(doubler),
+          arena.copy(zero)
+        )
+      ));
+      REQUIRE(result == zero);
+      destroy_from_arena(arena, result);
+    }
+    SECTION("doubler (succ zero) evaluates to succ (succ (doubler zero)) under reduce_head") {
       auto result = evaluator.reduce_head(arena.apply(
         arena.copy(doubler),
         arena.apply(
@@ -114,7 +133,25 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
       REQUIRE(result == expectation);
       destroy_from_arena(arena, result, expectation);
     }
-    SECTION("doubler (succ (succ zero)) evaluates to succ (succ (doubler (succ zero)))") {
+    SECTION("doubler (succ zero) evaluates to succ (succ zero) under reduce") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.apply(
+          arena.copy(succ),
+          arena.copy(zero)
+        )
+      ));
+      auto expectation = arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(succ),
+          arena.copy(zero)
+        )
+      );
+      REQUIRE(result == expectation);
+      destroy_from_arena(arena, result, expectation);
+    }
+    SECTION("doubler (succ (succ zero)) evaluates to succ (succ (doubler (succ zero))) under reduce_head") {
       auto result = evaluator.reduce_head(arena.apply(
         arena.copy(doubler),
         arena.apply(
@@ -141,7 +178,47 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
       REQUIRE(result == expectation);
       destroy_from_arena(arena, result, expectation);
     }
-
+    SECTION("doubler (succ (succ zero)) evaluates to succ (succ (succ (succ zero))) under reduce") {
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        arena.apply(
+          arena.copy(succ),
+          arena.apply(
+            arena.copy(succ),
+            arena.copy(zero)
+          )
+        )
+      ));
+      auto expectation = arena.apply(
+        arena.copy(succ),
+        arena.apply(
+          arena.copy(succ),
+          arena.apply(
+            arena.copy(succ),
+            arena.apply(
+              arena.copy(succ),
+              arena.copy(zero)
+            )
+          )
+        )
+      );
+      REQUIRE(result == expectation);
+      destroy_from_arena(arena, result, expectation);
+    }
+    SECTION("doubler can be applied to a thousand succs successfully and reduced") { //doesn't scale without memoization
+      OwnedExpression input = arena.copy(zero);
+      OwnedExpression expectation = arena.copy(zero);
+      for(std::size_t i = 0; i < 1000; ++i) {
+        input = arena.apply(arena.copy(succ), std::move(input));
+        expectation = arena.apply(arena.copy(succ), arena.apply(arena.copy(succ), std::move(expectation)));
+      }
+      auto result = evaluator.reduce(arena.apply(
+        arena.copy(doubler),
+        std::move(input)
+      ));
+      REQUIRE(result == expectation);
+      destroy_from_arena(arena, result, expectation);
+    }
     destroy_from_arena(arena, doubler, succ, zero);
   }
   arena.clear_orphaned_expressions();

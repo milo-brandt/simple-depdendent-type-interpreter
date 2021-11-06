@@ -12,6 +12,7 @@ namespace new_expression {
   public:
     SimpleEvaluationContext(Arena&, RuleCollector&);
     OwnedExpression reduce_head(OwnedExpression);
+    OwnedExpression reduce(OwnedExpression);
   };
   struct EvaluationError{};
   struct AssumptionClass {

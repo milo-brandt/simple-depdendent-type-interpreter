@@ -22,16 +22,28 @@ namespace new_expression {
     };
     namespace reduction_step_result {
       struct Finished {};
-      struct RequestReduce {
-        std::size_t strong_stack_index;
-      };
       struct Reduced {
         OwnedExpression result;
+        bool should_reduce_more = true;
       };
-      using Any = std::variant<RequestReduce, Reduced, Finished>;
+      template<class T>
+      struct RequestReduce {
+        std::size_t strong_stack_index;
+        T then;
+      };
+      template<class T>
+      using Any = std::variant<Finished, Reduced, RequestReduce<T> >;
+      template<class T, class F, class S = std::invoke_result_t<F, T> >
+      Any<S> map(F&& map, Any<T> input) {
+        return std::visit(mdb::overloaded{
+          [&](Finished&) -> Any<S> { return Finished{}; },
+          [&](Reduced& reduced) -> Any<S> { return std::move(reduced); },
+          [&](RequestReduce<T>& request) -> Any<S> { return RequestReduce<S>{request.strong_stack_index, map(std::move(request.then))}; }
+        }, input);
+      }
     };
     struct ReduceByPatternState {
-      new_expression::WeakExpression head;
+      using Result = reduction_step_result::Any<ReduceByPatternState>;
       std::size_t weak_stack_base;  //layout of stack above this: arg0, arg1, ... , argn, capture0, capture1, ...
       std::size_t weak_stack_next_arg;
       std::size_t weak_stack_pattern_base;
@@ -47,7 +59,7 @@ namespace new_expression {
         context.strong_stack.erase(context.strong_stack.begin() + strong_stack_base, context.strong_stack.end());
         context.weak_stack.erase(context.weak_stack.begin() + weak_stack_base, context.weak_stack.end());
       }
-      reduction_step_result::Any pattern_matched(ReduceByPatternContext context) {
+      Result pattern_matched(ReduceByPatternContext context) {
         std::span<WeakExpression> pattern_stack{context.weak_stack.data() + weak_stack_pattern_base, context.weak_stack.data() + context.weak_stack.size()};
         auto new_expr = std::visit(mdb::overloaded{
           [&](OwnedExpression const& expr) {
@@ -68,20 +80,22 @@ namespace new_expression {
           std::move(new_expr)
         };
       }
-      reduction_step_result::Any run_step(ReduceByPatternContext context) {
+      Result run_step(ReduceByPatternContext context) {
         for(;current_step < end_step; ++current_step) {
           if(auto const* match = std::get_if<PatternMatch>(current_step)) {
             auto new_expr = substitute_into(context.arena, match->substitution, {context.weak_stack.data() + weak_stack_pattern_base, context.weak_stack.data() + context.weak_stack.size()});
             auto strong_stack_index = context.strong_stack.size();
             context.strong_stack.push_back(std::move(new_expr));
-            return reduction_step_result::RequestReduce{
-              .strong_stack_index = strong_stack_index
+            return reduction_step_result::RequestReduce<ReduceByPatternState>{
+              .strong_stack_index = strong_stack_index,
+              .then = std::move(*this)
             };
           } else if(auto const* check = std::get_if<DataCheck>(current_step)) {
             auto strong_stack_index = context.strong_stack.size();
             context.strong_stack.push_back(context.arena.copy(context.weak_stack[weak_stack_pattern_base + check->capture_index]));
-            return reduction_step_result::RequestReduce{
-              .strong_stack_index = strong_stack_index
+            return reduction_step_result::RequestReduce<ReduceByPatternState>{
+              .strong_stack_index = strong_stack_index,
+              .then = std::move(*this)
             };
           } else {
             context.weak_stack.push_back(context.weak_stack[weak_stack_next_arg++]);
@@ -89,15 +103,15 @@ namespace new_expression {
         }
         return pattern_matched(context); //if we find we need to reduce, we return before reaching here
       }
-      reduction_step_result::Any next_step(ReduceByPatternContext context) {
+      Result next_step(ReduceByPatternContext context) {
         ++current_step;
         return run_step(context);
       }
-      reduction_step_result::Any all_patterns_failed(ReduceByPatternContext context) {
+      Result all_patterns_failed(ReduceByPatternContext context) {
         cleanup(context);
         return reduction_step_result::Finished{};
       }
-      reduction_step_result::Any run_pattern(ReduceByPatternContext context) {
+      Result run_pattern(ReduceByPatternContext context) {
       RUN_PATTERN:
         if(current_rule == end_rule) {
           return all_patterns_failed(context);
@@ -111,13 +125,13 @@ namespace new_expression {
           return run_step(context);
         }
       }
-      reduction_step_result::Any pattern_failed(ReduceByPatternContext context) {
+      Result pattern_failed(ReduceByPatternContext context) {
         context.weak_stack.erase(context.weak_stack.begin() + weak_stack_pattern_base, context.weak_stack.end());
         ++current_rule;
         weak_stack_next_arg = weak_stack_base;
         return run_pattern(context);
       }
-      reduction_step_result::Any resume(ReduceByPatternContext context, WeakExpression result) {
+      Result resume(ReduceByPatternContext context, WeakExpression result) {
         //should clean self up if returning Reduced or Finished.
         if(auto const* match = std::get_if<PatternMatch>(current_step)) {
           auto [args, head] = context.unfold(result);
@@ -135,26 +149,8 @@ namespace new_expression {
           return pattern_failed(context);
         }
       }
-      static std::optional<ReduceByPatternState> get_pattern_reducer(ReduceByPatternContext context, WeakExpression expr, RuleCollector const& collector) {
-        auto base = context.weak_stack.size();
-        auto [args, head] = context.unfold(expr);
-        if(context.arena.holds_declaration(head)) {
-          auto const& declaration_info = collector.declaration_info(head);
-          return ReduceByPatternState{
-            .head = head,
-            .weak_stack_base = base,
-            .weak_stack_next_arg = base,
-            .weak_stack_pattern_base = base + args,
-            .strong_stack_base = context.strong_stack.size(),
-            .current_rule = declaration_info.rules.data(),
-            .end_rule = declaration_info.rules.data() + declaration_info.rules.size()
-          };
-        } else {
-          context.weak_stack.erase(context.weak_stack.begin() + base, context.weak_stack.end());
-          return std::nullopt;
-        }
-      }
     };
+
 
     template<class Base> //Base must provide Arena& arena and OwnedExpression reduce()
     struct ReducerCRTP {
@@ -171,7 +167,6 @@ namespace new_expression {
         if(me().arena.holds_declaration(head)) {
           auto const& declaration_info = collector.declaration_info(head);
           ReduceByPatternState state{
-            .head = head,
             .weak_stack_base = 0,
             .weak_stack_next_arg = 0,
             .weak_stack_pattern_base = args,
@@ -181,7 +176,7 @@ namespace new_expression {
           };
           auto last_result = state.run_pattern(context);
           while(true) {
-            if(auto* request_reduce = std::get_if<reduction_step_result::RequestReduce>(&last_result)) {
+            if(auto* request_reduce = std::get_if<2>(&last_result)) {
               auto reduced = me().reduce(std::move(context.strong_stack[request_reduce->strong_stack_index]));
               WeakExpression result = reduced;
               context.strong_stack[request_reduce->strong_stack_index] = std::move(reduced);
@@ -199,73 +194,239 @@ namespace new_expression {
         }
       }
     };
-    struct SimpleReducer : ReducerCRTP<SimpleReducer> {
-      Arena& arena;
+    struct ReductionConfiguration {
+      using ResumptionKind = ReduceByPatternState;
       RuleCollector const& rule_collector;
-      OwnedExpression reduce(OwnedExpression expr) {
-        std::vector<WeakExpression> weak_stack;
-        std::vector<OwnedExpression> strong_stack;
-        ReduceByPatternContext context{
-          .arena = me().arena,
-          .weak_stack = weak_stack,
-          .strong_stack = strong_stack
+      ReduceByPatternState::Result reduce(ReduceByPatternContext context, WeakExpression target) {
+        auto base = context.weak_stack.size();
+        auto [args, head] = context.unfold(target);
+        if(context.arena.holds_declaration(head)) {
+          auto const& declaration_info = rule_collector.declaration_info(head);
+          return ReduceByPatternState{
+            .weak_stack_base = base,
+            .weak_stack_next_arg = base,
+            .weak_stack_pattern_base = base + args,
+            .strong_stack_base = context.strong_stack.size(),
+            .current_rule = declaration_info.rules.data(),
+            .end_rule = declaration_info.rules.data() + declaration_info.rules.size()
+          }.run_pattern(context);
+        } else {
+          context.weak_stack.erase(context.weak_stack.begin() + base, context.weak_stack.end());
+          return reduction_step_result::Finished{};
+        }
+      }
+      ReduceByPatternState::Result resume(ReduceByPatternContext context, ResumptionKind resumer, WeakExpression target) {
+        return resumer.resume(context, target);
+      }
+    };
+    struct ArgumentReducer {
+      using Result = reduction_step_result::Any<ArgumentReducer>;
+      WeakExpression head;
+      std::size_t weak_stack_base;
+      std::size_t weak_stack_next_arg;
+      std::size_t weak_stack_end;
+      std::size_t strong_stack_base;
+      Result run(ReduceByPatternContext context) {
+        if(weak_stack_next_arg != weak_stack_end) {
+          //request the next argument
+          auto strong_stack_index = context.strong_stack.size();
+          context.strong_stack.push_back(context.arena.copy(context.weak_stack[weak_stack_next_arg]));
+          return reduction_step_result::RequestReduce<ArgumentReducer> {
+            strong_stack_index,
+            std::move(*this)
+          };
+        } else {
+          //put the expression back together and cleanup
+          auto reduction = context.arena.copy(head);
+          for(std::size_t i = 0; i < weak_stack_end - weak_stack_base; ++i) {
+            reduction = context.arena.apply(
+              std::move(reduction),
+              std::move(context.strong_stack[strong_stack_base + i])
+            );
+          }
+          context.strong_stack.erase(context.strong_stack.begin() + strong_stack_base, context.strong_stack.end());
+          context.weak_stack.erase(context.weak_stack.begin() + weak_stack_base, context.weak_stack.end());
+          return reduction_step_result::Reduced{
+            .result = std::move(reduction),
+            .should_reduce_more = false
+          };
+        }
+      }
+      Result resume(ReduceByPatternContext context, WeakExpression) {
+        ++weak_stack_next_arg;
+        return run(context);
+      }
+    };
+    struct ArgumentReducerConfig {
+      using ResumptionKind = ArgumentReducer;
+      ArgumentReducer::Result reduce(ReduceByPatternContext context, WeakExpression target) {
+        auto base = context.weak_stack.size();
+        auto [args, head] = context.unfold(target);
+        return ArgumentReducer{
+          .head = head,
+          .weak_stack_base = base,
+          .weak_stack_next_arg = base,
+          .weak_stack_end = context.weak_stack.size(),
+          .strong_stack_base = context.strong_stack.size()
+        }.run(context);
+      }
+      ArgumentReducer::Result resume(ReduceByPatternContext context, ResumptionKind resumer, WeakExpression result) {
+        return resumer.resume(context, result);
+      }
+    };
+    template<class... Ts>
+    struct PipelineReduction {
+      std::size_t strong_stack_best;
+      std::variant<typename Ts::ResumptionKind...> data;
+    };
+    template<class... Ts>
+    struct PipelineConfig {
+      using ResumptionKind = PipelineReduction<Ts...>;
+      using Result = reduction_step_result::Any<ResumptionKind>;
+      std::tuple<Ts...> implementations;
+      PipelineConfig(Ts... ts):implementations(std::move(ts)...) {}
+      void cleanup(ReduceByPatternContext context) {
+        context.arena.drop(std::move(context.strong_stack.back()));
+        context.strong_stack.pop_back();
+      }
+      template<std::size_t index>
+      Result map_result(ReduceByPatternContext context, reduction_step_result::Any<typename std::decay_t<decltype(std::get<index>(implementations))>::ResumptionKind> result, std::size_t strong_stack_best);
+      template<std::size_t index>
+      Result reduce_impl(ReduceByPatternContext context, std::size_t strong_stack_best) {
+        if constexpr(index == sizeof...(Ts)) {
+          Result ret = reduction_step_result::Reduced{
+            .result = std::move(context.strong_stack.back()),
+            .should_reduce_more = false
+          };
+          context.strong_stack.pop_back();
+          return ret;
+        } else {
+          WeakExpression target = context.strong_stack[strong_stack_best];
+          return map_result<index>(context, std::get<index>(implementations).reduce(context, target), strong_stack_best);
+        }
+      }
+      Result reduce(ReduceByPatternContext context, WeakExpression target) {
+        auto strong_stack_index = context.strong_stack.size();
+        context.strong_stack.push_back(context.arena.copy(target));
+        return reduce_impl<0>(context, strong_stack_index);
+      }
+      template<std::size_t index>
+      Result resume_impl(ReduceByPatternContext context, ResumptionKind& resumption, WeakExpression result) {
+        if constexpr(index == sizeof...(Ts)) {
+          std::terminate(); //unreachable.
+        } else {
+          if(resumption.data.index() == index) {
+            return map_result<index>(context, std::get<index>(implementations).resume(context, std::move(std::get<index>(resumption.data)), result), resumption.strong_stack_best);
+          } else {
+            return resume_impl<index + 1>(context, resumption, result);
+          }
+        }
+      }
+      Result resume(ReduceByPatternContext context, ResumptionKind resumption, WeakExpression result) {
+        return resume_impl<0>(context, resumption, result);
+      }
+    };
+    template<class... Ts>
+    PipelineConfig(Ts...) -> PipelineConfig<Ts...>;
+    template<class... Ts>
+    template<std::size_t index>
+    typename PipelineConfig<Ts...>::Result PipelineConfig<Ts...>::map_result(ReduceByPatternContext context, reduction_step_result::Any<typename std::decay_t<decltype(std::get<index>(implementations))>::ResumptionKind> result, std::size_t strong_stack_best) {
+      if(auto* finished = std::get_if<reduction_step_result::Finished>(&result)) {
+        if(context.strong_stack.size() != strong_stack_best + 1) std::terminate();
+        return reduce_impl<index + 1>(context, strong_stack_best);
+      } else if(auto* reduced = std::get_if<reduction_step_result::Reduced>(&result)) {
+        if(context.strong_stack.size() != strong_stack_best + 1) std::terminate();
+        if(reduced->should_reduce_more) {
+          cleanup(context);
+          return std::move(*reduced);
+        } else {
+          auto& best = context.strong_stack[strong_stack_best];
+          context.arena.drop(std::move(best));
+          best = std::move(reduced->result);
+          return reduce_impl<index + 1>(context, strong_stack_best);
+        }
+      } else {
+        auto& request = std::get<2>(result);
+        return reduction_step_result::RequestReduce<ResumptionKind>{
+          .strong_stack_index = request.strong_stack_index,
+          .then = PipelineReduction<Ts...>{
+            .strong_stack_best = strong_stack_best,
+            .data = std::move(request.then)
+          }
         };
-        std::vector<ReduceByPatternState> state;
-        std::vector<std::size_t> waiting_reduction_indices; //0 followed by the index the non-top elements of state want to reduce.
-        reduction_step_result::Any last_result;
-        strong_stack.push_back(std::move(expr));
-        waiting_reduction_indices.push_back(0);
-        if(auto base = ReduceByPatternState::get_pattern_reducer(context, expr, rule_collector)) {
-          state.push_back(std::move(*base));
-          goto START_BACK_STATE;
-        } else {
-          return std::move(strong_stack[0]); //nothing to do
-        }
+      }
+    }
 
-      START_BACK_STATE:
-        //Invariant: state is a non-empty vector and all but its last element are waiting for resumption.
-        //The last element is waiting to start.
-        last_result = state.back().run_pattern(context);
-        goto PROCESS_NEW_RESULT;
-      PROCESS_NEW_RESULT:
-        if(auto* request_reduce = std::get_if<reduction_step_result::RequestReduce>(&last_result)) {
-          if(auto next_reducer = ReduceByPatternState::get_pattern_reducer(context, strong_stack[request_reduce->strong_stack_index], rule_collector)) {
-            state.push_back(std::move(*next_reducer));
-            waiting_reduction_indices.push_back(request_reduce->strong_stack_index);
-            goto START_BACK_STATE;
-          } else {
-            last_result = state.back().resume(context, strong_stack[request_reduce->strong_stack_index]);
-            goto PROCESS_NEW_RESULT;
-          }
+    template<class ReductionConfiguration>
+    OwnedExpression reduce_generic(Arena& arena, OwnedExpression expr, ReductionConfiguration config) {
+      reduction_step_result::Any<typename ReductionConfiguration::ResumptionKind> last_result;
+      std::vector<typename ReductionConfiguration::ResumptionKind> resumptions;
+      std::vector<std::size_t> waiting_reduction_indices;
+      std::vector<WeakExpression> weak_stack;
+      std::vector<OwnedExpression> strong_stack;
+      ReduceByPatternContext context{
+        .arena = arena,
+        .weak_stack = weak_stack,
+        .strong_stack = strong_stack
+      };
+      strong_stack.push_back(std::move(expr));
+      waiting_reduction_indices.push_back(0);
+      /*
+        Algorithm:
+          Routine: Reduce the top element of waiting_reduction_indices
+            1. Get the result of reduce the top element.
+          Routine: Handle a result.
+            1. If the result is...
+              a. Finished -> Resume the routine that called this one. (Or return if outer)
+              b. Reduced -> Replace the relevant strong_stack index. Reduce the top waiting element.
+              c. RequestReduce -> Push the resumer on to the stack and push the requested reduction onto the stack. Reduce the top waiting element.
+      */
+
+    START_REDUCE_TOP:
+      last_result = config.reduce(context, strong_stack[waiting_reduction_indices.back()]);
+    HANDLE_RESULT:
+      if(auto* finished = std::get_if<reduction_step_result::Finished>(&last_result)) {
+        if(resumptions.empty()) {
+          if(strong_stack.size() != 1) std::terminate(); //unreachable
+          return std::move(strong_stack[0]);
         } else {
-          state.pop_back();
-          auto reduced_index = waiting_reduction_indices.back();
-          if(auto* reduced = std::get_if<reduction_step_result::Reduced>(&last_result)) {
-            arena.drop(std::move(strong_stack[reduced_index]));
-            strong_stack[reduced_index] = std::move(reduced->result);
-            if(auto next_reducer = ReduceByPatternState::get_pattern_reducer(context, strong_stack[reduced_index], rule_collector)) {
-              state.push_back(std::move(*next_reducer));
-              goto START_BACK_STATE;
-            }
-          }
+          WeakExpression result = strong_stack[waiting_reduction_indices.back()];
           waiting_reduction_indices.pop_back();
-          if(state.empty()) {
-            if(strong_stack.size() != 1) std::terminate(); //unreachable
-            return std::move(strong_stack[0]);
-          } else {
-            last_result = state.back().resume(context, strong_stack[reduced_index]);
-            goto PROCESS_NEW_RESULT;
-          }
+          last_result = config.resume(context, std::move(resumptions.back()), result);
+          resumptions.pop_back();
+          goto HANDLE_RESULT;
         }
+      } else if(auto* reduced = std::get_if<reduction_step_result::Reduced>(&last_result)) {
+        auto& reduced_expr = strong_stack[waiting_reduction_indices.back()];
+        arena.drop(std::move(reduced_expr));
+        reduced_expr = std::move(reduced->result);
+        if(reduced->should_reduce_more) {
+          goto START_REDUCE_TOP;
+        } else {
+          last_result = reduction_step_result::Finished{};
+          goto HANDLE_RESULT;
+        }
+      } else {
+        auto& request = std::get<2>(last_result);
+        resumptions.push_back(std::move(request.then));
+        waiting_reduction_indices.push_back(request.strong_stack_index);
+        goto START_REDUCE_TOP;
       }
     };
   }
   SimpleEvaluationContext::SimpleEvaluationContext(Arena& arena, RuleCollector& rule_collector):arena(&arena), rule_collector(&rule_collector) {}
   OwnedExpression SimpleEvaluationContext::reduce_head(OwnedExpression expr) {
-    return SimpleReducer{
-      .arena = *arena,
-      .rule_collector = *rule_collector
-    }.reduce(std::move(expr));
+    return reduce_generic(*arena, std::move(expr), ReductionConfiguration{*rule_collector});
+  }
+  OwnedExpression SimpleEvaluationContext::reduce(OwnedExpression expr) {
+    return reduce_generic(
+      *arena,
+      std::move(expr),
+      PipelineConfig{
+        ReductionConfiguration{*rule_collector},
+        ArgumentReducerConfig{}
+      }
+    );
   }
   namespace {
     namespace conglomerate_status {
@@ -832,6 +993,32 @@ namespace new_expression {
         }
         return std::nullopt;
       }
+    };
+
+    struct SeriouslyNormalConglomerateReducer {
+      Arena& arena;
+      RuleCollector const& rule_collector;
+      ConglomerateSolveState& solve_state;
+      std::optional<OwnedExpression> get_conglomerate_reduction(WeakExpression expr) {
+        if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
+          if(solve_state.conglomerate_has_definition(conglomerate->index)) {
+            return solve_state.get_conglomerate_replacement(conglomerate->index);
+          } else {
+            return std::nullopt; //conglomerates can't be reducers
+          }
+        }
+        for(std::size_t class_index = 0; class_index < solve_state.conglomerate_class_info.size(); ++class_index) {
+          auto& class_info = solve_state.conglomerate_class_info[class_index];
+          for(std::size_t reducer_index = 0; reducer_index < class_info.reducers.active.size(); ++reducer_index) {
+            auto& reducer = class_info.reducers.active[reducer_index];
+            if(expr == reducer) {
+              return solve_state.get_conglomerate_class_replacement(class_index);
+            }
+          }
+        }
+        return std::nullopt;
+      }
+
     };
     struct NormalConglomerateReducer : ConglomerateReducerCRTP<NormalConglomerateReducer> {
       ConglomerateSolveState& solve_state;
