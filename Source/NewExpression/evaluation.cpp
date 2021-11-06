@@ -143,6 +143,7 @@ namespace new_expression {
           auto const& check = std::get<DataCheck>(*current_step);
           if(auto* data = context.arena.get_if_data(result)) {
             if(data->type_index == check.expected_type) {
+              context.weak_stack[weak_stack_pattern_base + check.capture_index] = result;
               return next_step(context);
             }
           }
