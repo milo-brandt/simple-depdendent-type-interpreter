@@ -356,12 +356,39 @@ namespace new_expression {
         };
       }
     }
-
-    template<class ReductionConfiguration>
-    OwnedExpression reduce_generic(Arena& arena, OwnedExpression expr, ReductionConfiguration config) {
+    struct TrivialMemoizer {
+      std::optional<OwnedExpression> lookup(WeakExpression key) {
+        return std::nullopt;
+      }
+      void memoize(std::span<OwnedExpression const> preimages, WeakExpression result) {}
+    };
+    struct WeakKeyMemoizer {
+      Arena& arena;
+      WeakKeyMap<OwnedExpression, PartDestroyer> results;
+      WeakKeyMemoizer(Arena& arena):arena(arena), results(arena) {}
+      std::optional<OwnedExpression> lookup(WeakExpression key) {
+        if(results.contains(key)) {
+          return arena.copy(results.at(key));
+        } else {
+          return std::nullopt;
+        }
+      }
+      void memoize(std::span<OwnedExpression const> preimages, WeakExpression result) {
+        for(auto const& preimage : preimages) {
+          results.set(preimage, arena.copy(result));
+        }
+      }
+    };
+    struct ReductionInfo {
+      std::size_t reduction_index;
+      std::size_t preimages_start;
+      std::size_t preimages_end;
+    };
+    template<class ReductionConfiguration, class Memoizer>
+    OwnedExpression reduce_generic(Arena& arena, OwnedExpression expr, ReductionConfiguration config, Memoizer memoizer = TrivialMemoizer{}) {
       reduction_step_result::Any<typename ReductionConfiguration::ResumptionKind> last_result;
       std::vector<typename ReductionConfiguration::ResumptionKind> resumptions;
-      std::vector<std::size_t> waiting_reduction_indices;
+      std::vector<ReductionInfo> reduction_info;
       std::vector<WeakExpression> weak_stack;
       std::vector<OwnedExpression> strong_stack;
       ReduceByPatternContext context{
@@ -370,7 +397,14 @@ namespace new_expression {
         .strong_stack = strong_stack
       };
       strong_stack.push_back(std::move(expr));
-      waiting_reduction_indices.push_back(0);
+      auto get_reduction_info_for = [&](std::size_t index) {
+        return ReductionInfo{
+          index,
+          strong_stack.size(),
+          strong_stack.size()
+        };
+      };
+      reduction_info.push_back(get_reduction_info_for(0));
       /*
         Algorithm:
           Routine: Reduce the top element of waiting_reduction_indices
@@ -383,23 +417,46 @@ namespace new_expression {
       */
 
     START_REDUCE_TOP:
-      last_result = config.reduce(context, strong_stack[waiting_reduction_indices.back()]);
+      if(auto memoized_result = memoizer.lookup(strong_stack[reduction_info.back().reduction_index])) {
+        last_result = reduction_step_result::Reduced{
+          .result = std::move(*memoized_result),
+          .should_reduce_more = false
+        };
+      } else {
+        last_result = config.reduce(context, strong_stack[reduction_info.back().reduction_index]);
+      }
     HANDLE_RESULT:
       if(auto* finished = std::get_if<reduction_step_result::Finished>(&last_result)) {
+        WeakExpression result = strong_stack[reduction_info.back().reduction_index];
+        /*
+          This block of code handles the memoization service.
+        */
+        if(strong_stack.size() != reduction_info.back().preimages_end) std::terminate(); //preimages should be on top of stack at this point
+        memoizer.memoize({
+          strong_stack.data() + reduction_info.back().preimages_start,
+          strong_stack.data() + reduction_info.back().preimages_end
+        }, result);
+        for(std::size_t i = reduction_info.back().preimages_start; i < strong_stack.size(); ++i) {
+          arena.drop(std::move(strong_stack[i]));
+        }
+        strong_stack.erase(strong_stack.begin() + reduction_info.back().preimages_start, strong_stack.end());
+        /*
+          Now we move down the stack and pass the result to the last listener
+        */
         if(resumptions.empty()) {
           if(strong_stack.size() != 1) std::terminate(); //unreachable
           return std::move(strong_stack[0]);
         } else {
-          WeakExpression result = strong_stack[waiting_reduction_indices.back()];
-          waiting_reduction_indices.pop_back();
+          reduction_info.pop_back();
           last_result = config.resume(context, std::move(resumptions.back()), result);
           resumptions.pop_back();
           goto HANDLE_RESULT;
         }
       } else if(auto* reduced = std::get_if<reduction_step_result::Reduced>(&last_result)) {
-        auto& reduced_expr = strong_stack[waiting_reduction_indices.back()];
-        arena.drop(std::move(reduced_expr));
-        reduced_expr = std::move(reduced->result);
+        if(strong_stack.size() != reduction_info.back().preimages_end) std::terminate(); //preimages should be on top of stack at this point
+        strong_stack.push_back(std::move(strong_stack[reduction_info.back().reduction_index])); //push old value as a new preimage.
+        ++reduction_info.back().preimages_end; //remember that we pushed the new preimage
+        strong_stack[reduction_info.back().reduction_index] = std::move(reduced->result);
         if(reduced->should_reduce_more) {
           goto START_REDUCE_TOP;
         } else {
@@ -409,14 +466,18 @@ namespace new_expression {
       } else {
         auto& request = std::get<2>(last_result);
         resumptions.push_back(std::move(request.then));
-        waiting_reduction_indices.push_back(request.strong_stack_index);
+        reduction_info.push_back(get_reduction_info_for(request.strong_stack_index));
         goto START_REDUCE_TOP;
       }
     };
   }
+  template<class ReductionConfiguration>
+  OwnedExpression reduce_generic(Arena& arena, OwnedExpression expr, ReductionConfiguration config) {
+    return reduce_generic(arena, std::move(expr), std::move(config), TrivialMemoizer{});
+  }
   SimpleEvaluationContext::SimpleEvaluationContext(Arena& arena, RuleCollector& rule_collector):arena(&arena), rule_collector(&rule_collector) {}
   OwnedExpression SimpleEvaluationContext::reduce_head(OwnedExpression expr) {
-    return reduce_generic(*arena, std::move(expr), ReductionConfiguration{*rule_collector});
+    return reduce_generic(*arena, std::move(expr), ReductionConfiguration{*rule_collector}, WeakKeyMemoizer{*arena});
   }
   OwnedExpression SimpleEvaluationContext::reduce(OwnedExpression expr) {
     return reduce_generic(
@@ -425,7 +486,8 @@ namespace new_expression {
       PipelineConfig{
         ReductionConfiguration{*rule_collector},
         ArgumentReducerConfig{}
-      }
+      },
+      WeakKeyMemoizer{*arena}
     );
   }
   namespace {

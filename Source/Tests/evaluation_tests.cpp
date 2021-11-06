@@ -208,7 +208,7 @@ TEST_CASE("SimpleEvaluationContext can handle the double : Nat -> Nat function."
     SECTION("doubler can be applied to a thousand succs successfully and reduced") { //doesn't scale without memoization
       OwnedExpression input = arena.copy(zero);
       OwnedExpression expectation = arena.copy(zero);
-      for(std::size_t i = 0; i < 1000; ++i) {
+      for(std::size_t i = 0; i < 1000000; ++i) {
         input = arena.apply(arena.copy(succ), std::move(input));
         expectation = arena.apply(arena.copy(succ), arena.apply(arena.copy(succ), std::move(expectation)));
       }
