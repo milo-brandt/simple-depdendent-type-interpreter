@@ -1082,29 +1082,50 @@ namespace new_expression {
       }
 
     };
+    std::optional<OwnedExpression> get_normal_conglomerate_reduction(Arena& arena, ConglomerateSolveState& solve_state, WeakExpression expr) {
+      if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
+        if(solve_state.conglomerate_has_definition(conglomerate->index)) {
+          return solve_state.get_conglomerate_replacement(conglomerate->index);
+        } else {
+          return std::nullopt; //conglomerates can't be reducers
+        }
+      }
+      for(std::size_t class_index = 0; class_index < solve_state.conglomerate_class_info.size(); ++class_index) {
+        auto& class_info = solve_state.conglomerate_class_info[class_index];
+        for(std::size_t reducer_index = 0; reducer_index < class_info.reducers.active.size(); ++reducer_index) {
+          auto& reducer = class_info.reducers.active[reducer_index];
+          if(expr == reducer) {
+            return solve_state.get_conglomerate_class_replacement(class_index);
+          }
+        }
+      }
+      return std::nullopt;
+    }
+    struct ConglomerateReducerState{};
+    struct ConglomerateReducerConfig {
+      using ResumptionKind = ConglomerateReducerState;
+      using Result = reduction_step_result::Any<ConglomerateReducerState>;
+      ConglomerateSolveState& solve_state;
+      Result reduce(ReduceByPatternContext context, WeakExpression expr) {
+        if(auto reduction = get_normal_conglomerate_reduction(context.arena, solve_state, expr)) {
+          return reduction_step_result::Reduced{
+            .result = std::move(*reduction)
+          };
+        } else {
+          return reduction_step_result::Finished{};
+        }
+      }
+      Result resume(ReduceByPatternContext context, ConglomerateReducerState, WeakExpression) {
+        std::terminate(); //unreachable
+      }
+    };
     struct NormalConglomerateReducer : ConglomerateReducerCRTP<NormalConglomerateReducer> {
       ConglomerateSolveState& solve_state;
       NormalConglomerateReducer(Arena& arena, RuleCollector const& rule_collector, ConglomerateSolveState& solve_state):
         ConglomerateReducerCRTP<NormalConglomerateReducer>(arena, rule_collector),
         solve_state(solve_state){}
       std::optional<OwnedExpression> get_conglomerate_reduction(WeakExpression expr, bool) {
-        if(auto* conglomerate = arena.get_if_conglomerate(expr)) {
-          if(solve_state.conglomerate_has_definition(conglomerate->index)) {
-            return solve_state.get_conglomerate_replacement(conglomerate->index);
-          } else {
-            return std::nullopt; //conglomerates can't be reducers
-          }
-        }
-        for(std::size_t class_index = 0; class_index < solve_state.conglomerate_class_info.size(); ++class_index) {
-          auto& class_info = solve_state.conglomerate_class_info[class_index];
-          for(std::size_t reducer_index = 0; reducer_index < class_info.reducers.active.size(); ++reducer_index) {
-            auto& reducer = class_info.reducers.active[reducer_index];
-            if(expr == reducer) {
-              return solve_state.get_conglomerate_class_replacement(class_index);
-            }
-          }
-        }
-        return std::nullopt;
+        return get_normal_conglomerate_reduction(arena, solve_state, expr);
       }
       bool is_lambda_like(WeakExpression expr) {
         auto unfolded = unfold(arena, expr);
@@ -1328,9 +1349,16 @@ namespace new_expression {
       destroy_from_arena(arena, solve_state);
     }
     OwnedExpression reduce(OwnedExpression expr) {
-      return NormalConglomerateReducer{
-        arena, rule_collector, solve_state
-      }.reduce_outer(std::move(expr));
+      return reduce_generic(
+        arena,
+        std::move(expr),
+        PipelineConfig{
+          ReductionConfiguration{rule_collector},
+          ArgumentReducerConfig{},
+          ConglomerateReducerConfig{solve_state}
+        },
+        WeakKeyMemoizer{arena}
+      );
     }
     OwnedExpression eliminate_conglomerates(WeakExpression expr) {
       return solve_state.eliminate_conglomerates(expr);
