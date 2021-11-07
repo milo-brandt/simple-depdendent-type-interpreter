@@ -1,4 +1,4 @@
-#include "../User/interactive_environment.hpp"
+#include "../Top/interactive_environment.hpp"
 #include <catch.hpp>
 
 //NOTE: Most tests of the whole integrated system are in full_case_impl.cpp and are auto-generated.

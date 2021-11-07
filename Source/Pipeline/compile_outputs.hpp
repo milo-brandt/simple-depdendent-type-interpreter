@@ -5,7 +5,7 @@
 #include "../Solver/evaluator.hpp"
 #include "../ExpressionParser/expression_generator.hpp"
 #include "../Solver/manager.hpp"
-#include "../User/debug_format.hpp"
+#include "../Top/debug_format.hpp"
 
 namespace pipeline::compile {
   struct SourceInfo {

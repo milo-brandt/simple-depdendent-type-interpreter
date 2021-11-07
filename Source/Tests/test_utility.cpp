@@ -2,6 +2,7 @@
 #include "../Utility/vector_utility.hpp"
 
 interactive::Environment setup_enviroment(new_expression::Arena& arena) {
+
   interactive::Environment environment(arena);
   auto& context = environment.context();
   auto add_u64 = environment.declare("add", "U64 -> U64 -> U64");
