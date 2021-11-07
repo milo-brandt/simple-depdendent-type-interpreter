@@ -1,3 +1,20 @@
+Optimization is a ~problem~ in this new setup - the unique-ing of arena.apply pretty consistently eats
+~1/4 of the program's runtime, and clear_orphans takes a serious amount of time too (a lot of which is
+just telling listeners that stuff was erased). Perhaps there's some way to avoid spending so many
+resources on "one-off" expressions that aren't getting reused. The performance isn't terrible - even
+compared to prior versions - but it's not great either.
+* The best way might be to support both canonicalized expressions (the current system) *and* expressions
+  stored merely as trees - storing a hash (based on the shape only) of all expressions and only canonicalizing
+  expressions when we want to compare two trees with equal hashes. Then, these costs are only imposed in cases
+  where there's an actual benefit (i.e. not merely for storing an expression). This is likely a serious undertaking
+  as it would replace all comparisons.
+
+
+Adding explicit ways for replacement functions to interact with the stack might be worthwhile too.
+
+
+----
+
 Need better type utilities
 
 Add test to ensure that axioms can't be defined by rules
