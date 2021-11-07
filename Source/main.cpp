@@ -68,7 +68,14 @@ struct ModuleLoadInfo {
   std::unordered_set<std::string> modules_loading;
   std::vector<std::string> module_loading_stack;
   std::unordered_map<std::string, ModuleInfo> module_info;
-  static constexpr auto part_info = mdb::parts::simple<3>;
+  std::vector<mdb::function<void()> > close_actions;
+  static constexpr auto part_info = mdb::parts::simple<4>;
+  void close() {
+    for(auto it  = close_actions.rbegin(); it != close_actions.rend(); ++it) {
+      (*it)();
+    }
+    close_actions.clear();
+  }
   bool locate_and_prepare_module(std::string module_name, pipeline::compile::StandardCompilerContext& context, pipeline::compile::ModuleInfo const& module_primitives);
   bool prepare_module(std::string module_name, std::string source, pipeline::compile::StandardCompilerContext& context, pipeline::compile::ModuleInfo const& module_primitives) {
     if(module_info.contains(module_name)) return true;
@@ -206,6 +213,15 @@ struct ModuleLoadInfo {
         }
         auto initialize = (void(*)(pipeline::compile::StandardCompilerContext*, new_expression::TypedValue*, new_expression::TypedValue*))sym;
         initialize(&context, ordered_exports.data(), ordered_exports.data() + ordered_exports.size());
+
+        close_actions.push_back([lib, &context] {
+          auto sym = dlsym(lib, "cleanup");
+          if(sym) {
+            auto cleanup = (void(*)(pipeline::compile::StandardCompilerContext*))sym;
+            cleanup(&context);
+          }
+          //dlclose(lib); still apparently not safe to close the library since its functions might be needed to destroy Data entries
+        });
         //Note: passed span will be kept alive while module is alive
         //dlclose(lib);
       }
@@ -731,6 +747,7 @@ int main(int argc, char** argv) {
         }
       }
       destroy_from_arena(arena, module_info, load_info);
+      load_info.close();
       //destroy_from_arena(arena, mul_u64, sub_u64, exp_u64, len, substr, module_entry_ctor, module_ctor, module_type);
     }
     arena.clear_orphaned_expressions();
