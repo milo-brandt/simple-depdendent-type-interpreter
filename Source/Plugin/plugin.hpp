@@ -64,6 +64,12 @@ namespace plugin {
         return callback(args[capture_index]);
       };
     };
+    template<class R> requires std::is_same_v<R, new_expression::OwnedExpression>
+    auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, ExpressionHandler) {
+      return [capture_index](new_expression::Arena& arena, std::span<new_expression::WeakExpression> const& args, auto&& callback) {
+        return callback(arena.copy(args[capture_index]));
+      };
+    };
 
     template<class R, class T>
     auto add_constraints_and_get_arg_puller(std::size_t capture_index, std::vector<new_expression::PatternStep>& steps, new_expression::SharedDataTypePointer<T> ptr)

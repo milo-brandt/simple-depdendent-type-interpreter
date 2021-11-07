@@ -1,0 +1,16 @@
+block {
+  axiom CVector : Type -> Type;
+  declare empty_c_vec : (T : Type) -> CVector T;
+  declare c_vec_cons : (T : Type) -> T -> CVector T -> CVector T;
+  declare c_vector_to_vector : (T : Type) -> CVector T -> Vector T;
+
+  full_module "c_vector.so"
+  [
+    module_entry _ "" empty_vec,
+    module_entry _ "" cons_vec,
+    module_entry _ "CVector" CVector,
+    module_entry _ "empty_c_vec" empty_c_vec,
+    module_entry _ "c_vec_cons" c_vec_cons,
+    module_entry _ "c_vector_to_vector" c_vector_to_vector
+  ]
+}
