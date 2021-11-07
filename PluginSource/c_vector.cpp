@@ -93,16 +93,20 @@ public:
     arena.drop(std::move(type_family));
   }
 };
+struct Witness{};
 
 extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, new_expression::TypedValue* import_start, new_expression::TypedValue* import_end) {
   auto const& [
     native_empty_vec,
     native_cons_vec,
+    witness,
     c_vector,
     empty_vec,
     cons_vec,
-    c_vector_to_vector
-  ] = mdb::map_span<6>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
+    c_vector_to_vector,
+    c_vec_len,
+    c_vec_at
+  ] = mdb::map_span<9>(import_start, import_end, [&](auto const& v) -> new_expression::WeakExpression { return v.value; });
 
   auto vec = VecData::register_on(context->arena, context->arena.copy(c_vector));
 
@@ -111,7 +115,11 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
     context->u64,
     plugin::ignore,
     plugin::expression_handler,
-    vec
+    vec,
+    plugin::ExactHandler<Witness>{
+      context->arena,
+      witness
+    }
   );
   auto& arena = context->arena;
 
@@ -151,5 +159,11 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
       );
     }
     return ret;
+  });
+  rule_builder(c_vec_len, [](plugin::Ignore, VecStore const& vec) {
+    return (std::uint64_t)(vec.end - vec.begin);
+  });
+  rule_builder(c_vec_at, [](plugin::Ignore, VecStore const& vec, std::uint64_t index, Witness) -> new_expression::WeakExpression {
+    return vec.begin[index];
   });
 }

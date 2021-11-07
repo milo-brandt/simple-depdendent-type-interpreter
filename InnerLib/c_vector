@@ -1,16 +1,25 @@
+import * from arithmetic;
+import * from witness;
+
 block {
   axiom CVector : Type -> Type;
   declare empty_c_vec : (T : Type) -> CVector T;
   declare c_vec_cons : (T : Type) -> T -> CVector T -> CVector T;
   declare c_vector_to_vector : (T : Type) -> CVector T -> Vector T;
 
+  declare c_vec_len : (T : Type) -> CVector T -> U64;
+  declare c_vec_at : (T : Type) -> (v : CVector T) -> (idx : U64) -> Witness (lt idx (c_vec_len _ v)) -> T;
+
   full_module "c_vector.so"
   [
     module_entry _ "" empty_vec,
     module_entry _ "" cons_vec,
+    module_entry _ "" witness,
     module_entry _ "CVector" CVector,
     module_entry _ "empty_c_vec" empty_c_vec,
     module_entry _ "c_vec_cons" c_vec_cons,
-    module_entry _ "c_vector_to_vector" c_vector_to_vector
+    module_entry _ "c_vector_to_vector" c_vector_to_vector,
+    module_entry _ "c_vec_len" c_vec_len,
+    module_entry _ "c_vec_at" c_vec_at
   ]
 }

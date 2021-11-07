@@ -9,6 +9,14 @@ compared to prior versions - but it's not great either.
   where there's an actual benefit (i.e. not merely for storing an expression). This is likely a serious undertaking
   as it would replace all comparisons.
 
+A "closed expression" match statement could be worthwhile for passing things like proofs of correctness (to allow
+compiling some piece of code). Would have to check to ensure that there are neither args nor indeterminate expressions
+in the relevant argument.
+
+Might also be worth adding a way for a replacement to take over the reducer, make "reduce" requests and handle the
+stacks as it wants; this might be an effective way to avoid storing intermediate results (e.g. for implementing
+C++ interpreters of native monads)
+
 
 Adding explicit ways for replacement functions to interact with the stack might be worthwhile too.
 
