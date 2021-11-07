@@ -166,4 +166,8 @@ extern "C" void initialize(pipeline::compile::StandardCompilerContext* context, 
   rule_builder(c_vec_at, [](plugin::Ignore, VecStore const& vec, std::uint64_t index, Witness) -> new_expression::WeakExpression {
     return vec.begin[index];
   });
+  context->plugin_data.insert(std::make_pair("vector_info", new new_expression::SharedDataTypePointer<VecData>(std::move(vec))));
+}
+extern "C" void cleanup(pipeline::compile::StandardCompilerContext* context) {
+  delete (new_expression::SharedDataTypePointer<VecData>*)context->plugin_data.at("vector_info");
 }

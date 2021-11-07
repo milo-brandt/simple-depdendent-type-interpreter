@@ -21,7 +21,8 @@ namespace pipeline::compile {
     new_expression::OwnedExpression vec_type;
     new_expression::OwnedExpression empty_vec;
     new_expression::OwnedExpression cons_vec;
-    static constexpr auto part_info = mdb::parts::simple<8>;
+    std::unordered_map<std::string, void*> plugin_data;
+    static constexpr auto part_info = mdb::parts::simple<9>;
     StandardCompilerContext(new_expression::Arena& arena);
     ~StandardCompilerContext();
 
