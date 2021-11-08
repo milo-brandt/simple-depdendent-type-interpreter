@@ -2,8 +2,6 @@
 #include <sstream>
 
 mdb::Result<std::pair<pipeline::compile::EvaluateInfo, ModuleLoadInfo>, std::string> run_source(new_expression::Arena& arena, pipeline::compile::StandardCompilerContext& context, std::string_view source) {
-  auto module_info = context.create_module_primitives();
-  ModuleLoadInfo load_info;
 
   auto parsed_module_result = bind(
     pipeline::compile::lex({context.arena, source}),
@@ -13,6 +11,8 @@ mdb::Result<std::pair<pipeline::compile::EvaluateInfo, ModuleLoadInfo>, std::str
   if(parsed_module_result.holds_error()) {
     return parsed_module_result.get_error();
   }
+  auto module_info = context.create_module_primitives();
+  ModuleLoadInfo load_info;
   auto& parsed_module = parsed_module_result.get_value();
   std::unordered_map<std::string, new_expression::TypedValue> names_to_values;
   new_expression::RAIIDestroyer destroyer{arena, names_to_values};
