@@ -109,6 +109,15 @@ namespace pipeline::compile {
     };
   }
   ModuleInfo StandardCompilerContext::create_module_primitives() {
+    if(names_to_values.contains("ModuleEntry")) {
+      //reuse previous entries.
+      return {
+        .module_type = arena.copy(names_to_values.at("Module").value),
+        .full_module_ctor = arena.copy(names_to_values.at("full_module").value),
+        .module_entry_type = arena.copy(names_to_values.at("ModuleEntry").value),
+        .module_entry_ctor = arena.copy(names_to_values.at("module_entry").value)
+      };
+    }
     auto result = execute(
       {
         .arena = arena,
@@ -130,13 +139,13 @@ namespace pipeline::compile {
 
     if(result.exports.size() != 4) std::terminate();
     auto add_name = [&](std::string name, new_expression::WeakExpression expr) {
-      names_to_values.insert(std::make_pair(
+      names_to_values.insert_or_assign(
         std::move(name),
         new_expression::TypedValue{
           .value = arena.copy(expr),
           .type = arena.copy(context.type_collector.get_type_of(expr))
         }
-      ));
+      );
     };
     add_name("ModuleEntry", result.exports[0]);
     add_name("module_entry", result.exports[1]);
