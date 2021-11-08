@@ -1,3 +1,6 @@
+#ifndef RUN_SOURCE_HPP
+#define RUN_SOURCE_HPP
+
 #include "../ExpressionParser/module_header.hpp"
 #include "../Pipeline/standard_compiler_context.hpp"
 
@@ -19,3 +22,5 @@ struct ModuleLoadInfo {
   void close();
   bool resolve_imports(expression_parser::ModuleHeader const&, std::unordered_map<std::string, new_expression::TypedValue>&, pipeline::compile::StandardCompilerContext& context, pipeline::compile::ModuleInfo const& module_primitives);
 };
+
+#endif

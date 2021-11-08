@@ -1,0 +1,9 @@
+# TEST BEGIN
+# TEST NAME A test can contain two must compile statements.
+# TEST MUST_COMPILE
+
+2
+
+# TEST MUST_COMPILE
+
+3

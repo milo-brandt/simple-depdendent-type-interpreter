@@ -9,6 +9,7 @@
 #include "NewExpression/arena_utility.hpp"
 #include "Pipeline/standard_compiler_context.hpp"
 #include "Pipeline/compile_stages.hpp"
+#include "Top/run_source.hpp"
 #include <dlfcn.h>
 
 void debug_print_expr(new_expression::Arena& arena, new_expression::WeakExpression expr) {
@@ -140,51 +141,10 @@ int main(int argc, char** argv) {
     std::string_view source = line;
     new_expression::Arena arena;
     {
-      pipeline::compile::StandardCompilerContext context(arena);
-      auto module_info = context.create_module_primitives();
-      ModuleLoadInfo load_info;
-
-      {
-        auto parsed_module_result = bind(
-          pipeline::compile::lex({context.arena, line}),
-          [&](auto lexed) {
-            return parse_module(std::move(lexed));
-          });
-        if(parsed_module_result.holds_error()) {
-          std::cout << parsed_module_result.get_error() << "\n";
-          goto CLEANUP;
-        }
-        auto& parsed_module = parsed_module_result.get_value();
-        std::unordered_map<std::string, new_expression::TypedValue> names_to_values;
-        new_expression::RAIIDestroyer destroyer{arena, names_to_values};
-        for(auto const& entry : context.names_to_values) {
-          names_to_values.insert(std::make_pair(entry.first, copy_on_arena(context.arena, entry.second)));
-        }
-        load_info.resolve_imports(parsed_module.first, names_to_values, context, module_info);
-        auto compilation_result = map(
-          resolve(std::move(parsed_module.second), {
-            .names_to_values = names_to_values,
-            .u64 = context.u64.get(),
-            .str = context.str.get(),
-            .empty_vec = new_expression::TypedValue{
-              .value = context.arena.copy(context.empty_vec),
-              .type = context.arena.copy(context.context.type_collector.get_type_of(context.empty_vec))
-            },
-            .cons_vec = new_expression::TypedValue{
-              .value = context.arena.copy(context.cons_vec),
-              .type = context.arena.copy(context.context.type_collector.get_type_of(context.cons_vec))
-            }
-          }),
-          [&](auto resolved) {
-            return evaluate(std::move(resolved), {
-              .context = context.context
-            });
-          }
-        );
-        if(compilation_result.holds_error()) {
-          std::cout << compilation_result.get_error() << "\n";
-          goto CLEANUP;
-        }
+      pipeline::compile::StandardCompilerContext context{arena};
+      auto result = run_source(arena, context, source);
+      if(auto* value = result.get_if_value()) {
+        auto& [compilation_result, load_info] = *value;
 
         new_expression::WeakKeyMap<std::string> externals_to_names(arena);
         externals_to_names.set(context.context.primitives.type, "Type");
@@ -194,12 +154,12 @@ int main(int argc, char** argv) {
         externals_to_names.set(context.vec_type, "Vector");
         externals_to_names.set(context.empty_vec, "empty_vec");
         externals_to_names.set(context.cons_vec, "cons_vec");
-        externals_to_names.set(module_info.module_type, "Module");
-        externals_to_names.set(module_info.full_module_ctor, "full_module");
-        externals_to_names.set(module_info.module_entry_type, "ModuleEntry");
-        externals_to_names.set(module_info.module_entry_ctor, "module_entry");
+        //externals_to_names.set(module_info.module_type, "Module");
+        //externals_to_names.set(module_info.full_module_ctor, "full_module");
+        //externals_to_names.set(module_info.module_entry_type, "ModuleEntry");
+        //externals_to_names.set(module_info.module_entry_ctor, "module_entry");
 
-        if(auto* module_value = compilation_result.get_if_value()) {
+        if(auto* module_value = &compilation_result) {
           /*for(auto const& import : module_value->first.imports) {
             std::cout << "Import: " << import.module_name;
             if(import.request_all) std::cout << " (all)";
@@ -242,7 +202,7 @@ int main(int argc, char** argv) {
           value->result.type = ctx.reduce(std::move(value->result.type));
           std::cout << user::raw_format(arena, value->result.value, namer) << "\n";
           std::cout << user::raw_format(arena, value->result.type, namer) << "\n";
-          if(value->is_okay() && value->result.type == module_info.module_type) {
+          /*if(value->is_okay() && value->result.type == module_info.module_type) {
             std::cout << "Module!\n";
             new_expression::WeakExpression module_head = unfold(arena, value->result.value).args[1];
             std::vector<std::pair<std::string, new_expression::WeakExpression> > entries;
@@ -311,45 +271,11 @@ int main(int argc, char** argv) {
               std::cout << " " << i;
             }
             std::cout << "\n";
-          }
-          /*auto exports = mdb::make_vector<new_expression::OwnedExpression>(
-            arena.copy(value->result.value)
-          );
-          std::cout << debug_format(expr_module::store({
-            .arena = arena,
-            .rule_collector = context.rule_collector,
-            .type_collector = context.type_collector,
-            .get_import_index_of = [&](new_expression::WeakExpression expr) -> std::optional<std::uint32_t> {
-              if(expr == environment.context().primitives.type) {
-                return 0;
-              } else if(expr == environment.context().primitives.arrow) {
-                return 1;
-              } else if(expr == environment.context().primitives.constant) {
-                return 2;
-              } else if(expr == environment.context().primitives.id) {
-                return 3;
-              } else {
-                return std::nullopt;
-              }
-            },
-            .get_import_size = []() -> std::uint32_t { return 4; }
-          }, {
-            .exports = std::move(exports)
-          })) << "\n";*/
-
-
-
-          destroy_from_arena(arena, *value);
-
-
-        } else {
-          std::cout << compilation_result.get_error() << "\n";
+          }*/
+          load_info.close();
+          destroy_from_arena(arena, compilation_result, load_info);
         }
       }
-    CLEANUP:
-      destroy_from_arena(arena, module_info, load_info);
-      load_info.close();
-      //destroy_from_arena(arena, mul_u64, sub_u64, exp_u64, len, substr, module_entry_ctor, module_ctor, module_type);
     }
     arena.clear_orphaned_expressions();
     if(!arena.empty()) {

@@ -25,6 +25,6 @@ block {
 
 # TEST DEFINITION
 
-auto unfolded = unfold(environment.arena(), expr.value);
+auto unfolded = unfold(arena, expr.value);
 REQUIRE(unfolded.args.size() == 3);
 REQUIRE(unfolded.args[1] == unfolded.args[2]);

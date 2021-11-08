@@ -4,7 +4,8 @@
 
 #include <catch.hpp>
 #include <sstream>
-#include "test_utility.hpp"
+#include "../Top/run_source.hpp"
+#include "../NewExpression/arena_utility.hpp"
 
 {%- macro test_case(test) %}
 {%- if test.preamble %}
@@ -16,38 +17,44 @@ TEST_CASE("{{ test.name }}", "[full_case]{% if test.tags %}{% for tag in test.ta
   INFO("Test case from file: {{ test.filename }}");
   new_expression::Arena arena;
   {
-    auto environment = setup_enviroment(arena);
-    new_expression::EvaluationContext reduction_context{environment.arena(), environment.context().rule_collector};
+    pipeline::compile::StandardCompilerContext context(arena);
+    new_expression::SimpleEvaluationContext reduction_context{arena, context.context.rule_collector};
     {%- for definition in test.definitions %}
     {%- if definition.kind == "SET" %}
-    auto {{definition.var}}_full = environment.full_compile(R"#--#({{ definition.source }})#--#");
+    auto {{definition.var}}_full = run_source(arena, context, R"#--#({{ definition.source }})#--#");
     if({{definition.var}}_full.holds_error()) {
       INFO({{definition.var}}_full.get_error());
       FAIL("Failed while compiling variable {{definition.var}}");
     }
-    if(!{{definition.var}}_full.get_value().is_okay()) {
+    if(!{{definition.var}}_full.get_value().first.is_okay()) {
       std::stringstream error_message;
-      {{definition.var}}_full.get_value().report_errors_to(error_message, environment.externals_to_names());
+      {{definition.var}}_full.get_value().first.report_errors_to(error_message, {arena});
       INFO(error_message.str())
       FAIL("Failed while compiling variable {{definition.var}}");
     }
     new_expression::TypedValue {{definition.var}} {
-      .value = reduction_context.reduce(arena.copy({{definition.var}}_full.get_value().result.value)),
-      .type = reduction_context.reduce(arena.copy({{definition.var}}_full.get_value().result.type))
+      .value = reduction_context.reduce(arena.copy({{definition.var}}_full.get_value().first.result.value)),
+      .type = reduction_context.reduce(arena.copy({{definition.var}}_full.get_value().first.result.type))
     };
     destroy_from_arena(arena, {{definition.var}}_full.get_value());
     {%- elif definition.kind == "FULL_SET" %}
-    auto {{definition.var}} = environment.full_compile(R"#--#({{ definition.source }})#--#");
+    auto {{definition.var}} = map(
+      run_source(arena, context, R"#--#({{ definition.source }})#--#"),
+      [&](std::pair<pipeline::compile::EvaluateInfo, ModuleLoadInfo>&& result) {
+        destroy_from_arena(arena, result.second);
+        return std::move(result.first);
+      }
+    );
     {%- elif definition.kind == "MUST_COMPILE" %}
     {
-      auto must_compile_result = environment.full_compile(R"#--#({{ definition.source }})#--#");
+      auto must_compile_result = run_source(arena, context, R"#--#({{ definition.source }})#--#");
       if(must_compile_result.holds_error()) {
         INFO(must_compile_result.get_error());
         FAIL("Failed while compiling MUST_COMPILE case.");
       }
-      if(!must_compile_result.get_value().is_okay()) {
+      if(!must_compile_result.get_value().first.is_okay()) {
         std::stringstream error_message;
-        must_compile_result.get_value().report_errors_to(error_message, environment.externals_to_names());
+        must_compile_result.get_value().first.report_errors_to(error_message, {arena});
         INFO(error_message.str())
         FAIL("Failed while compiling MUST_COMPILE case.");
       }
